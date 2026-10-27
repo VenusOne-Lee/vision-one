@@ -188,3 +188,20 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(TakePlan.load(for: take)?.targetSeconds, 59)
     }
 }
+
+final class PurposePromptTests: XCTestCase {
+    func testBriefFillsVariablesAndLayersPreset() {
+        let preset = PromptPreset(name: "Mine", prompts: [.title: "Title for {product}, five words.", .houseStyle: "Dry and short."])
+        let brief = Purpose.launch.brief(preset: preset, variables: PromptVariables(product: "Vision One"))
+        XCTAssertEqual(brief.parts["title"], "Title for Vision One, five words.")
+        XCTAssertEqual(brief.houseStyle, "Dry and short.")
+        XCTAssertTrue(brief.parts["hook"]!.contains("Vision One"))
+        XCTAssertFalse(brief.parts.values.contains { $0.contains("{") })
+    }
+
+    func testBriefWithoutListingUsesPlainWords() {
+        let brief = Purpose.launch.brief(preset: nil)
+        XCTAssertTrue(brief.parts["outro"]!.hasPrefix("End on where to try it: the link."))
+        XCTAssertNil(brief.houseStyle)
+    }
+}

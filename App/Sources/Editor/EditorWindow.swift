@@ -72,6 +72,9 @@ struct EditorView: View {
                     .foregroundStyle(Theme.textMuted)
                     .help("Length of the take → length after your cuts")
                 EditorExportStatus(exports: exports)
+                Button("Agents") { AgentsWindowController.shared.show(for: model.take) }
+                    .buttonStyle(PillButtonStyle(kind: .secondary))
+                    .help("Pick what it's for, ask for a length, find clips, and write a title and posts")
                 // Exports exactly what's on screen, even if saving failed.
                 ExportMenu(take: model.take,
                            keep: model.edits.keptSpans.map { $0.start..<$0.end },

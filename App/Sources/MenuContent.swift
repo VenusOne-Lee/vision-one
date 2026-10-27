@@ -62,6 +62,19 @@ struct MenuContent: View {
                 ExportRow(take: take, exports: exports)
             }
 
+            HStack {
+                Button("Before you record…") { ProducerWindowController.shared.show() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
+                    .disabled(recorder.phase.isLive)
+                Spacer()
+                Button("AI settings") { AISettingsWindowController.shared.show() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
+            }
+
             Divider().overlay(Theme.line)
 
             HStack {

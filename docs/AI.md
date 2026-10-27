@@ -54,8 +54,16 @@ Keep each decision question self-contained: small rungs get them in batches.
 
 ## Pick what it's for, and the Energy dial
 
-`Purpose` is the "What are you making?" answer: launch, demo, short, tutorial, bugReport, update, talkingHead. Each sets a starting `Energy`, a target length and default prompts per part (hook, body, outro, title, post, chapters, clip, thumbnail). The look for each lives in the brand kit's `TemplateLook`, matched by the same id. Prompt presets and `{product}`-style variables are resolved by the prompts feature and handed to agents as an `AgentBrief`.
+`Purpose` is the "What are you making?" answer: launch, demo, short, tutorial, bugReport, update, talkingHead. Each sets a starting `Energy`, a target length and default prompts per part (hook, body, outro, title, post, chapters, clip, thumbnail). The look for each lives in the brand kit's `TemplateLook`, matched by the same id. `Purpose.brief(preset:variables:)` runs each part through the prompt presets' `PromptResolver` (your preset over these defaults, house style around it, `{product}`-style variables filled, plain words when the listing has none) and hands agents an `AgentBrief`.
 
 `Energy` (Calm, Lively, Viral) gives one `EnergyProfile` that zooms, sound effects, captions and the Editor all read: zooms per minute, punch-ins, sound effects per minute, caption style, pause trimming (`CleanupSettings(energy:)`) and the Editor's keep threshold.
 
 The take's choice is saved as `plan.json` (`TakePlan`).
+
+## In the app
+
+- **Menu bar → AI settings**: the ladder in the order it's tried (drag to change), a switch per rung, Sign in with ChatGPT, keys (kept in the Keychain), a local server, and "On this Mac only".
+- **Menu bar → Before you record…**: pick what it's for, the Producer's pre-flight notes, and talking points.
+- **Editor → Agents**: purpose, prompt preset and Energy for this take, the Editor's ask bar ("make it 60s"), Find clips, and Write title and posts. Editor cuts appear dashed in the transcript and timeline, like auto-clean's.
+- **Approval panel**: floats over everything (and is hidden from recordings) whenever a job or post would leave the Mac. Send once, Allow for this session, or Don't send.
+- Code: `App/Sources/AI/` (`AIServices` builds the ladder from settings and keys; other features call `AIServices.shared.ladder()`).
