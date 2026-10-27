@@ -91,6 +91,16 @@ struct EditorView: View {
 
     private var toolbar: some View {
         HStack(spacing: Theme.Space.sm) {
+            // Back to every take; the editor and Library share one window.
+            Button {
+                EditorWindowController.shared.showLibrary()
+            } label: {
+                Label("Library", systemImage: "chevron.left")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
+            }
+            .buttonStyle(.plain)
+            .help("Back to all your recordings (⇧⌘L)")
             PanelToggle(systemImage: "sidebar.left", label: "Takes", isOn: $showTakes)
                 .keyboardShortcut("1", modifiers: .command)
             Text(model.take.name)
@@ -388,8 +398,8 @@ struct EditorNotice: View {
     }
 }
 
-/// Owns the editor window. A menu bar app has no window of its own, so
-/// this makes one on demand and brings the app forward.
+/// Owns the main window: the Library when no take is open, the editor
+/// when one is. Made on demand, kept when closed, and its frame is saved.
 @MainActor
 final class EditorWindowController: NSObject, NSWindowDelegate {
     static let shared = EditorWindowController()
@@ -404,9 +414,29 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         open(take)
     }
 
+    /// Brings the window forward as it was, or on the Library once it
+    /// has been closed (closing ends the open take).
+    func show() {
+        if let window, window.isVisible || window.isMiniaturized {
+            NSApp.activate()
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            showLibrary()
+        }
+    }
+
+    /// The Library: a Record button and every take, newest first.
+    func showLibrary() {
+        closeTake()
+        let view = LibraryView { [weak self] take in
+            self?.open(take)
+        }
+        present(NSHostingController(rootView: view), subtitle: "")
+    }
+
     func open(_ take: Take) {
-        model?.close()
-        clips?.close()
+        closeTake()
         let model = EditorModel(take: take)
         let clips = ClipsModel(take: take, editor: model)
         let thumbnail = ThumbnailModel(take: take, editor: model, clips: clips)
@@ -415,6 +445,10 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         let view = EditorView(model: model, clips: clips, thumbnail: thumbnail) { [weak self] next in
             self?.open(next)
         }
+        present(NSHostingController(rootView: view), subtitle: take.name)
+    }
+
+    private func present(_ content: NSViewController, subtitle: String) {
         if window == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1280, height: 780),
@@ -424,15 +458,28 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
             )
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: .aqua)
-            window.setFrameAutosaveName("VisionOneEditor")
+            window.title = "Vision One"
             window.delegate = self
             window.center()
+            // After center(), so a saved frame wins over the default.
+            window.setFrameAutosaveName("VisionOneEditor")
             self.window = window
         }
-        window?.title = take.name
-        window?.contentViewController = NSHostingController(rootView: view)
+        window?.subtitle = subtitle
+        // Swapping the content can resize the window to the new view's
+        // ideal size; keep the frame the user chose.
+        let frame = window?.frame
+        window?.contentViewController = content
+        if let frame { window?.setFrame(frame, display: false) }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func closeTake() {
+        model?.close()
+        clips?.close()
+        model = nil
+        clips = nil
     }
 
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
@@ -440,10 +487,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        model?.close()
-        clips?.close()
-        model = nil
-        clips = nil
+        closeTake()
     }
 }
 

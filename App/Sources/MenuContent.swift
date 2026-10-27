@@ -27,6 +27,7 @@ struct MenuContent: View {
                     .font(.system(size: 13, weight: .semibold))
                 UpdateBadge(updater: updater)
                 Spacer(minLength: 0)
+                FooterLink("Open Vision One") { EditorWindowController.shared.show() }
             }
             .padding(.horizontal, Theme.Panel.inset)
             .padding(.top, 12)
