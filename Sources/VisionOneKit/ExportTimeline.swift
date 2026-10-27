@@ -66,6 +66,12 @@ public struct ExportTimeline: Equatable, Sendable {
         }
     }
 
+    /// The editor's accepted cuts, as export renders them.
+    public init(edits: EditList, frameRate: Double) {
+        self.init(keep: edits.keptSpans.map { $0.start..<$0.end },
+                  sourceDuration: edits.sourceDuration, frameRate: frameRate)
+    }
+
     /// Where a moment of the recording ends up in the export, or nil if
     /// it was cut.
     public func outputTime(forSource t: Double) -> Double? {

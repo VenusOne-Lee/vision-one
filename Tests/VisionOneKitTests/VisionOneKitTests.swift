@@ -41,6 +41,7 @@ final class TakeLibraryTests: XCTestCase {
         XCTAssertEqual(take.screenURL.lastPathComponent, "screen.mov")
         XCTAssertEqual(take.eventsURL.lastPathComponent, "events.json")
         XCTAssertEqual(take.cameraURL.lastPathComponent, "camera.mov")
+        XCTAssertEqual(take.transcriptURL.lastPathComponent, "transcript.json")
     }
 
     func testDoesNotReuseAFolder() throws {

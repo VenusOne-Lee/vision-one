@@ -127,8 +127,7 @@ struct ErrorAlert: View {
     }
 }
 
-/// Exports the last take. The editor will call ExportController with the
-/// kept spans; until then this exports the whole take.
+/// Exports the last take, with the cuts saved in its edits.json.
 struct ExportRow: View {
     let take: Take
     @ObservedObject var exports: ExportController

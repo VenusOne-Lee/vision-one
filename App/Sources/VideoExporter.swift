@@ -35,7 +35,8 @@ struct VideoExporter {
     static let joinFade = 0.012
 
     let take: Take
-    /// Kept spans in seconds from the take's first frame; nil keeps it all.
+    /// Kept spans in seconds from the take's first frame; nil uses the
+    /// take's edits.json.
     var keep: [Range<Double>]?
     let preset: ExportPreset
     var overlays: [ExportOverlay] = []
@@ -50,7 +51,16 @@ struct VideoExporter {
         let naturalSize = try await sourceVideo.load(.naturalSize)
         let frameRate = try await sourceVideo.load(.nominalFrameRate)
 
-        let timeline = ExportTimeline(keep: keep, sourceDuration: assetDuration.seconds, frameRate: Double(frameRate))
+        // Without explicit spans, export what the editor kept (edits.json;
+        // no file means no cuts).
+        let timeline: ExportTimeline
+        if let keep {
+            timeline = ExportTimeline(keep: keep, sourceDuration: assetDuration.seconds, frameRate: Double(frameRate))
+        } else {
+            var edits = try EditList.load(from: take.editsURL, sourceDuration: assetDuration.seconds)
+            edits.sourceDuration = min(edits.sourceDuration, assetDuration.seconds)
+            timeline = ExportTimeline(edits: edits, frameRate: Double(frameRate))
+        }
         let source = ExportSource(width: Int(naturalSize.width), height: Int(naturalSize.height), frameRate: Double(frameRate))
         var settings: ExportSettings
         do {

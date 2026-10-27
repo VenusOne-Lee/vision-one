@@ -9,8 +9,8 @@ final class ExportController: ObservableObject {
     @Published private(set) var phase: ExportPhase = .idle
     private var task: Task<Void, Never>?
 
-    /// Exports `take`. `keep` is the edit list's kept spans in source
-    /// seconds; nil exports the whole take. `overlays` draw on every frame
+    /// Exports `take`. `keep` overrides the kept spans in source seconds;
+    /// nil exports what the editor kept in edits.json. `overlays` draw on every frame
     /// (burned-in captions, later the camera bubble).
     func export(_ take: Take, preset: ExportPreset, keep: [Range<Double>]? = nil, overlays: [ExportOverlay] = []) {
         guard !phase.isBusy else { return }

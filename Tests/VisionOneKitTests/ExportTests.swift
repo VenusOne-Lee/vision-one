@@ -32,6 +32,15 @@ final class ExportTimelineTests: XCTestCase {
         XCTAssertNil(timeline.sourceTime(forOutput: 4.5))
     }
 
+    func testUsesOnlyAcceptedCuts() {
+        var edits = EditList(sourceDuration: 10)
+        _ = edits.add(Cut(span: TimeSpan(start: 2, end: 4), state: .accepted))
+        _ = edits.add(Cut(span: TimeSpan(start: 6, end: 7), state: .proposed))
+        let timeline = ExportTimeline(edits: edits, frameRate: 30)
+        XCTAssertEqual(timeline.segments.map(\.source), [0..<2, 4..<10])
+        XCTAssertEqual(timeline.duration, edits.outputDuration, accuracy: 1e-9)
+    }
+
     func testEverythingCutIsEmpty() {
         let timeline = ExportTimeline(keep: [], sourceDuration: 10, frameRate: 30)
         XCTAssertTrue(timeline.segments.isEmpty)

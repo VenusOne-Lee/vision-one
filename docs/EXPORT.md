@@ -4,7 +4,7 @@ Export turns a take and its edits into one MP4 that plays everywhere (H.264 vide
 
 ## Pipeline
 
-1. **Plan.** `ExportTimeline` (VisionOneKit) takes the edit list's kept spans, snaps their edges to whole frames and lays them end to end. `ExportPlanner` picks size, frame rate and bitrates for the preset.
+1. **Plan.** `ExportTimeline` (VisionOneKit) takes the kept spans from the take's `edits.json` (accepted cuts only), snaps their edges to whole frames and lays them end to end. `ExportPlanner` picks size, frame rate and bitrates for the preset.
 2. **Splice.** `VideoExporter` inserts each kept span of the screen, system sound and mic tracks into one `AVMutableComposition`. An `AVAudioMix` fades the sound out and in over 12 ms at every cut so cuts don't click.
 3. **Draw.** `FrameCompositor`, a custom `AVVideoCompositing`, scales each frame on the GPU with Core Image, then lets each `ExportOverlay` draw on top: burned-in captions now, the camera bubble and click zooms later.
 4. **Encode.** `AVAssetReader` pulls the mixed frames and sound and `AVAssetWriter` encodes them at the planned bitrate. The file is written as a hidden `.partial.mp4` and renamed when done, so a failed export never leaves half a file.
@@ -28,7 +28,6 @@ Exports sit in the take folder, named after the take: `Vision One 2026-10-27 at 
 
 ## Not yet
 
-- Wiring the editor's `edits.json` (the menu exports the whole take until the editor lands)
 - Camera bubble overlay (needs `camera.mov`)
 - Vertical and square formats with reframing (v0.2)
 - Captions file next to the video (captions thread)
