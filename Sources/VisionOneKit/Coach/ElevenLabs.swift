@@ -304,35 +304,3 @@ public struct ElevenLabsClient: Sendable {
         return String(format: "%d:%02d", s / 60, s % 60)
     }
 }
-
-/// A multipart/form-data body, for uploads.
-public struct MultipartForm: Sendable {
-    public let boundary: String
-    private(set) var body = Data()
-
-    public init(boundary: String = "VisionOne-\(UUID().uuidString)") {
-        self.boundary = boundary
-    }
-
-    public mutating func addField(name: String, value: String) {
-        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8))
-    }
-
-    public mutating func addFile(name: String, fileName: String, mimeType: String, data: Data) {
-        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"; filename=\"\(fileName)\"\r\nContent-Type: \(mimeType)\r\n\r\n".utf8))
-        body.append(data)
-        body.append(Data("\r\n".utf8))
-    }
-
-    public var data: Data { body + Data("--\(boundary)--\r\n".utf8) }
-
-    public func request(_ url: URL, headers: [String: String]) -> URLRequest {
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 300
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
-        request.httpBody = data
-        return request
-    }
-}
