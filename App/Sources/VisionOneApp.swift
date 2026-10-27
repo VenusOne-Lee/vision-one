@@ -39,6 +39,12 @@ struct AppCommands: Commands {
     @ObservedObject var recorder: ScreenRecorder
 
     var body: some Commands {
+        // File › New is a new task. The main window's ⌘B and ⌥⌘B live
+        // here too, so they show in the menus and never fire twice.
+        CommandGroup(replacing: .newItem) {
+            Button("New Task") { EditorWindowController.shared.showNewTask() }
+                .keyboardShortcut(ShortcutMap.newTask)
+        }
         CommandGroup(after: .newItem) {
             Button(recorder.phase.isLive ? "Stop Recording  \(ShortcutMap.record.display)"
                                          : "Start Recording  \(ShortcutMap.record.display)") {
@@ -62,6 +68,11 @@ struct AppCommands: Commands {
             Button("Access…") { SettingsWindowController.shared.show(.access) }
         }
         CommandGroup(after: .toolbar) {
+            Button("Toggle Sidebar") { EditorWindowController.shared.toggleSidebar() }
+                .keyboardShortcut(ShortcutMap.toggleSidebar)
+            Button("Toggle Panel") { EditorWindowController.shared.togglePanel() }
+                .keyboardShortcut(ShortcutMap.togglePanel)
+            Divider()
             Button("Bigger Text") { TextSize.step(1) }
                 .keyboardShortcut(ShortcutMap.textBigger)
             Button("Smaller Text") { TextSize.step(-1) }
@@ -69,6 +80,11 @@ struct AppCommands: Commands {
             Button("Actual Text Size") {
                 UserDefaults.standard.set(TextSize.medium.rawValue, forKey: TextSize.storageKey)
             }
+            Divider()
+        }
+        // Brings the main window back, even once it's been closed.
+        CommandGroup(before: .windowList) {
+            Button("Vision One") { EditorWindowController.shared.show() }
             Divider()
         }
         CommandGroup(replacing: .help) {
