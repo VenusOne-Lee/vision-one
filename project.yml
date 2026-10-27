@@ -62,4 +62,6 @@ targets:
         PRODUCT_NAME: Vision One
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
+        # App/Resources/Assets.xcassets; source SVGs in docs/icon.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SPARKLE_PUBLIC_KEY: ""

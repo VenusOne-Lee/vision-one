@@ -440,22 +440,6 @@ struct EditorView: View {
     }
 }
 
-/// A tab in the side pane: a black pill when selected, muted when not.
-private struct TabPillStyle: ButtonStyle {
-    let isOn: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 12, weight: .semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .foregroundStyle(isOn ? Theme.paper : Theme.textMuted)
-            .background(Capsule().fill(isOn ? Theme.text : .clear))
-            .contentShape(Capsule())
-            .opacity(configuration.isPressed ? 0.7 : 1)
-    }
-}
-
 /// A quiet square icon button for the toolbar and transport.
 struct ToolbarIcon: View {
     let systemImage: String
