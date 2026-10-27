@@ -41,7 +41,7 @@ struct EditorView: View {
         .frame(minWidth: 520, minHeight: 480)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light) // light only, always
+        .themed()
         .onReceive(exports.$phase) { _ in refreshExported() }
     }
 
@@ -361,7 +361,7 @@ private struct ShortcutsCard: View {
         }
         .padding(16)
         .background(Theme.paper)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 }
 
@@ -393,8 +393,7 @@ struct EditorNotice: View {
 final class EditorWindowController: NSObject, NSWindowDelegate {
     static let shared = EditorWindowController()
     private var window: NSWindow?
-    private var model: EditorModel?
-    private var clips: ClipsModel?
+    private var model: HarnessModel { HarnessModel.shared }
 
     /// Opens the newest take. With none, there's nothing to open: the
     /// menu only offers Review once a take exists.
@@ -403,78 +402,91 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         open(take)
     }
 
-    /// Brings the window forward as it was, or on the Library once it
-    /// has been closed (closing ends the open take).
+    /// Brings the window forward as it was, or on New task once it has
+    /// been closed (closing ends the open task).
     func show() {
         if let window, window.isVisible || window.isMiniaturized {
             NSApp.activate()
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
         } else {
-            showLibrary()
+            model.page = .newTask
+            present()
         }
     }
 
-    /// The Library: a Record button and every take, newest first.
+    /// The window on New task with the cursor in the composer: where
+    /// launch, the end of setup and ⌘N land.
+    func showNewTask() {
+        model.mode = .tasks
+        model.page = .newTask
+        model.focusComposer += 1
+        present()
+    }
+
+    /// ⌘B: folds the projects sidebar, when this window is in front on
+    /// Tasks. HarnessView reads the same key with @AppStorage.
+    func toggleSidebar() {
+        guard window?.isKeyWindow == true, model.mode == .tasks else { return }
+        let key = "harness.showSidebar"
+        let shown = UserDefaults.standard.object(forKey: key) as? Bool ?? true
+        UserDefaults.standard.set(!shown, forKey: key)
+    }
+
+    /// ⌥⌘B: folds the panel beside the thread, when this window is in front.
+    func togglePanel() {
+        guard window?.isKeyWindow == true, model.mode == .tasks else { return }
+        model.updateLayout { $0.isHidden.toggle() }
+    }
+
+    /// Every take, to search and pick from.
     func showLibrary() {
-        closeTake()
-        let view = LibraryView { [weak self] take in
-            self?.open(take)
-        }
-        present(NSHostingController(rootView: view), subtitle: "")
+        model.mode = .tasks
+        model.page = .library
+        present()
     }
 
-    func open(_ take: Take) {
-        closeTake()
-        let model = EditorModel(take: take)
-        let clips = ClipsModel(take: take, editor: model)
-        let thumbnail = ThumbnailModel(take: take, editor: model, clips: clips)
-        self.model = model
-        self.clips = clips
-        let view = EditorView(model: model, clips: clips, thumbnail: thumbnail)
-        present(NSHostingController(rootView: view), subtitle: take.name)
+    /// The take's task, with `panel` in front if given.
+    func open(_ take: Take, panel: PanelKind? = nil) {
+        model.refreshTakes()
+        model.open(take, panel: panel)
+        present()
     }
 
-    private func present(_ content: NSViewController, subtitle: String) {
+    /// The take in the editor full mode.
+    func edit(_ take: Take) {
+        open(take)
+        model.mode = .editor
+    }
+
+    private func present() {
         if window == nil {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 1280, height: 780),
+                contentRect: NSRect(x: 0, y: 0, width: 1320, height: 820),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
             )
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.title = "Vision One"
             window.delegate = self
+            window.contentViewController = NSHostingController(rootView: HarnessView(model: model))
             window.center()
             // After center(), so a saved frame wins over the default.
             window.setFrameAutosaveName("VisionOneEditor")
             self.window = window
         }
-        window?.subtitle = subtitle
-        // Swapping the content can resize the window to the new view's
-        // ideal size; keep the frame the user chose.
-        let frame = window?.frame
-        window?.contentViewController = content
-        if let frame { window?.setFrame(frame, display: false) }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }
 
-    private func closeTake() {
-        model?.close()
-        clips?.close()
-        model = nil
-        clips = nil
-    }
-
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
-        model?.undoManager
+        model.undoManager
     }
 
     func windowWillClose(_ notification: Notification) {
-        closeTake()
+        model.mode = .tasks
+        model.page = .newTask
     }
 }
 

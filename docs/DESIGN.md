@@ -104,7 +104,7 @@ Preview page: https://claude.ai/artifact/8yebDKZHmVUwZ8ukpAof5N (source vision-o
 ## Colors
 
 **Strategy:** Restrained. Ink and paper do almost everything. Tally orange (Version One's hot orange) has one job: recording is on. Builder ring colours are identity, never UI state.
-**Light or dark:** light only. Lee's standing rule, and the use scene (builders demoing light web apps in daytime) agrees. No dark mode.
+**Light or dark:** light by default. Paper (ink on white) is the default look and needs no setup. Lee approved one dark preset, Studio, on 27 Oct 2026, chosen in Settings › Appearance. Orange, red and dashed-versus-solid mean the same in every look.
 Selection blue marks selected words and focus. Error red is darker than tally so they never read as the same thing. There is no success green: a finished export is shown by the ring turning solid in the builder's own colour.
 
 ## Typography
@@ -130,7 +130,7 @@ Pills for buttons, one circle for record, 8px for fields and alerts, 12px for pa
 ## Components
 
 - **Grammar (v2):** dashed = proposed by the AI or not yet done; solid = accepted or done; orange = live. Applies to rings, AI changes, format shapes and takes.
-- Home launcher: "What are you making?" template cards beside the record pane.
+- New task page: "What should we make?" with a few starting chips and the composer; with no takes yet, one Start recording button. The Library is a plain list of takes.
 - Changes list: each AI change is a row with a switch; dashed until accepted; "Accept all" turns rows solid. Sits in a Changes / Transcript tab pair.
 - Ask bar: one text field at the foot of the editor plus a pen button for drawing feedback on a frame.
 - Format shapes: export formats drawn at their true ratio; suggested ones dashed.
@@ -156,13 +156,15 @@ Design system page: https://claude.ai/artifact/NnmfdaiRzynzza5MayyV2M (tokens, t
 - **Components** (`App/Sources/DesignSystem/`): `PillButtonStyle` (`.primary`, `.secondary`, `.quiet`, `.destructive`; small, regular, large), `IconButton`, `SegmentedTabs`, `.toggleStyle(.ink)`, `.textFieldStyle(.ink)`, `ListRow`, `.panelStyle()`, `CollapsibleSection`, `SheetScaffold`, `EmptyState`, `Notice`, `Tag`, `StateChip`, `.statusOutline(_:)`, `Mono`, `LiveDot`, `BuilderRing`.
 - **Ease first:** one primary (black) button per view, a sensible default already chosen, Return confirms and Esc cancels every sheet, and no empty screen without its next step.
 - **Accessibility:** every icon-only control has a VoiceOver label and a tooltip (`IconButton` makes both from one title); custom controls draw a 2px selection-blue focus ring; Increase Contrast turns muted text to ink and lines to `line-strong`; Reduce Motion stops the ring turning and the REC dot blinking; hit targets are at least 24pt.
+- **Looks:** Settings › Appearance (`AppearanceSettingsView`) picks one of six presets, Paper (default), Warm, Cool, Bold (buttons in the ring colour), High contrast and Studio (dark), then lets the person change the ring colour, buttons, paper tone, corners (Sharp, Soft, Round), density (Roomy, Compact), transcript font, text size and panel side. Choices live in `~/Library/Application Support/Vision One/theme.json` (VisionOneKit `Appearance`, shareable as a file). `ThemePalette.resolve` turns them into colours, and `swift test` checks every preset with every ring colour, with and without Increase Contrast (4.5:1 text, 7:1 in high contrast, 3:1 marks). Ring colours near orange, red, green or grey keep ink buttons. Colours are read live, so every hosting root ends in `.themed()`; AppKit views that cache colours observe `ThemeStore.didChange`. Use `Theme.button` and `Theme.onButton` for a primary fill, never `Theme.text`.
+- **Harness parts** (from the signed-off spec; the harness itself, with its Composer, PanelHost and TaskRow, is in `App/Sources/Harness`): `RecordButton`, `TaskRing`, `ProjectRow`, `StepList(steps:)`, `ThreadCell` (user, agent, take, log), `StatusLine`, `QueuedInput`, `ApprovalChoices`, `SlashMenu`, `AgentCard`, `ProposalRow`, `SuggestionChip`, `ResizableDivider` and `DiffRow`. `BuilderRing` gains `.running` (dashed ink, turning, never orange) and `.needsYou` (dashed with a dot).
 - **Shortcuts:** `Sources/VisionOneKit/Design/ShortcutMap.swift` is the one list. Bind with `.keyboardShortcut(ShortcutMap.export)` and name it in tooltips with `.help("Export", shortcut: ShortcutMap.export)`. A test fails on two shortcuts sharing keys or on taking a standard macOS shortcut. Help → Keyboard Shortcuts (⌘/) lists them all.
 - **App icon:** `App/Resources/Assets.xcassets/AppIcon.appiconset`, from `docs/icon/b-record-dot.svg`: the builder's ring, dashed turning solid, around the record button's orange dot.
 
 ## Do's and Don'ts
 
 - Do: use orange only while recording; show status with the ring's shape; set every number in tabular mono; keep cut words visible; hide Vision One windows from captures.
-- Don't: add dark mode or a green success colour; use orange for buttons, links or badges; nest cards or add glows; set the transcript in a sans; animate anything except the ring and the tally light.
+- Don't: add another dark look or a green success colour; use orange for buttons, links or badges; nest cards or add glows; set the transcript in a sans; animate anything except the ring and the tally light.
 
 ## Motion
 
@@ -190,3 +192,4 @@ Design system page: https://claude.ai/artifact/NnmfdaiRzynzza5MayyV2M (tokens, t
 | 2026-10-27 | Bundled static font instances | Bricolage's variable default is 96pt ExtraBold; static opsz 12 text and opsz 96 display instances are predictable |
 | 2026-10-27 | App icon: ring around the record dot (option B; A and C in docs/icon) | The app had none; the icon is the record button itself, so its orange dot keeps meaning "record" |
 | 2026-10-27 | User appearance settings (theme.json) | Lee: customise the app's own look; orange and light-only stay fixed so status and the no-dark rule hold |
+| 2026-10-27 | Six preset looks, Studio dark approved | Lee: "customised as well, colours, look and all, maybe some preset looks"; Lee approved Studio, so light is the default rather than the only look. Meaning (orange, red, dashed) never changes |

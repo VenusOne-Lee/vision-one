@@ -234,9 +234,11 @@ final class ReadyToShareWindowController: NSObject, NSWindowDelegate {
 
     /// What ScreenRecorder.stop() calls once the take is saved.
     func afterStop(_ take: Take) {
+        // The take's task, with the Post panel in front, or straight
+        // into the editor.
         switch AfterStop.current {
-        case .ready: open(take)
-        case .editor: EditorWindowController.shared.open(take)
+        case .ready: EditorWindowController.shared.open(take, panel: .post)
+        case .editor: EditorWindowController.shared.edit(take)
         }
     }
 
@@ -253,7 +255,6 @@ final class ReadyToShareWindowController: NSObject, NSWindowDelegate {
                 defer: false
             )
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.title = "Ready to share"
             window.delegate = self
             window.center()
@@ -262,7 +263,7 @@ final class ReadyToShareWindowController: NSObject, NSWindowDelegate {
         }
         window?.subtitle = take.name
         let frame = window?.frame
-        window?.contentViewController = NSHostingController(rootView: view)
+        window?.contentViewController = NSHostingController(rootView: view.themed())
         if let frame { window?.setFrame(frame, display: false) }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)

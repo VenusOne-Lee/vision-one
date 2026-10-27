@@ -3,6 +3,8 @@ import Foundation
 /// Which agent runs a job.
 public enum AgentKind: String, Codable, CaseIterable, Sendable {
     case producer, editor, clipper, sharer
+    /// Clicks through an app while Vision One records (Autopilot).
+    case autopilot
 
     public var title: String {
         switch self {
@@ -10,6 +12,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable {
         case .editor: return "Editor"
         case .clipper: return "Clipper"
         case .sharer: return "Sharer"
+        case .autopilot: return "Autopilot"
         }
     }
 }
@@ -73,6 +76,13 @@ public struct AgentJob: Codable, Equatable, Identifiable, Sendable {
         public var characters: Int
         public var estimatedRand: Double?
         public var fromPlan: Bool
+        /// The outside agent asking over MCP ("Claude Code"); nil for a
+        /// send from Vision One's own agents. Its card answers that agent,
+        /// and a "no" note goes back to it.
+        public var askedBy: String?
+        /// For an outside agent: whether "allow until quit" is offered
+        /// (shares always ask).
+        public var canRemember: Bool?
 
         public init(_ request: OutboundRequest) {
             id = request.id
@@ -84,6 +94,8 @@ public struct AgentJob: Codable, Equatable, Identifiable, Sendable {
             characters = request.characters
             estimatedRand = request.estimatedRand
             fromPlan = request.fromPlan
+            askedBy = nil
+            canRemember = nil
         }
     }
 
@@ -94,6 +106,9 @@ public struct AgentJob: Codable, Equatable, Identifiable, Sendable {
     public var takeFolder: URL?
     /// What the user typed ("make it 60s"), if they asked.
     public var ask: String?
+    /// The agent that asked through MCP ("Claude Code"); nil when the
+    /// user started it in Vision One.
+    public var requestedBy: String?
     public var state: State
     public var steps: [Step]
     /// One short line on what it did: "Cut 21 s across 3 sentences".

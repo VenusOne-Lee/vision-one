@@ -38,7 +38,6 @@ final class AreaSelector {
         panel.hasShadow = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = NSHostingView(rootView: view)
-        panel.appearance = NSAppearance(named: .aqua)
         panel.setFrame(screen.frame, display: true)
         self.panel = panel
 
@@ -230,7 +229,7 @@ private struct AreaSelectView: View {
             }
         }
         .ignoresSafeArea()
-        .environment(\.colorScheme, .light) // light only, always
+        .themed()
     }
 
     /// Eight white handles with an ink ring: corners and side middles.

@@ -103,7 +103,6 @@ final class Teleprompter {
         panel.isMovableByWindowBackground = true
         panel.hidesOnDeactivate = false
         panel.minSize = CGSize(width: 320, height: 110)
-        panel.appearance = NSAppearance(named: .aqua)
         panel.contentView = PrompterHostingView(rootView: TeleprompterView(model: model))
         // Opens where it was left, if that's still on a screen.
         panel.setFrameAutosaveName("Teleprompter")
@@ -194,7 +193,7 @@ private struct TeleprompterView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.lg).fill(Theme.text.opacity(0.9)))
-        .environment(\.colorScheme, .light)
+        .themed()
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Teleprompter. Not in the recording.")
     }

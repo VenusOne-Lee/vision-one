@@ -50,4 +50,40 @@ Vision One pulls the creator's inbox (notes and events) into `viewers.json` in t
 
 ## Hosting
 
-The bundle is the same for every host; only the upload differs. Options: a static folder the creator puts anywhere, the creator's own free Cloudflare account (storage, a small Worker for the API and a database for notes and events), or a hosted Vision One service. The choice is Lee's and is tracked in the share page thread.
+Lee picked (27 Oct 2026): a static folder by default, and the creator's own free Cloudflare account for links with notes, reactions and insights. Vision One hosts nothing and runs no servers.
+
+**Without setup**, Publish ("Make page folder") builds the bundle and shows it in Finder. It works on any static host, or opened from disk. The page is read-only: watch, transcript, chapters, ask.
+
+**With Cloudflare connected**, Publish uploads the same bundle and the page gets a link like `https://vision-one-share.<name>.workers.dev/v/<slug>/`.
+
+`ConnectCloudflareSheet` asks for one API token (Workers Scripts Edit, Workers R2 Storage Edit, D1 Edit, Account Settings Read). `CloudflareShareSetup` then:
+
+1. finds the account;
+2. makes the R2 bucket `vision-one-share` (reused if it's there);
+3. makes the D1 database `vision-one-share` and runs `schema.sql`;
+4. uploads `worker.js` with the bucket, the database and a random `CREATOR_KEY` bound;
+5. turns on the account's workers.dev address (making one if it has none);
+6. checks `/api/health`, retrying while a new address switches on.
+
+The token and the creator key stay in the Keychain. `CloudflareShareAccount` (no secrets) is saved in Application Support. Running setup again updates the Worker.
+
+Free tier, as published in 2026: 10 GB of R2 storage with no download fees, 100,000 Worker requests a day, 5 GB of D1. Cloudflare asks for a card to switch on R2 even on the free tier. Uploads go through the Worker, so a page's video can be up to 95 MB; the publisher picks the best export under that.
+
+### The Worker (`Sources/VisionOneKit/Share/Page/Cloudflare/worker.js`)
+
+| Route | Who | What |
+| --- | --- | --- |
+| `GET /v/:slug/` and `/v/:slug/:file` | viewers | The bundle from R2, with Range requests for video and a strict CSP on the page |
+| `POST /api/events` | viewers | Up to 50 events per post. Unknown kinds, bad visit ids and non-listed emoji are dropped. Capped per page per day |
+| `POST /api/notes` | viewers | Text up to 1,000 characters, optional name up to 60. 200 per page per day |
+| `GET /api/reactions` | viewers | The last 300 reactions |
+| `GET /api/health` | creator | Checks the key |
+| `PUT /api/pages/:slug/:file` | creator | Uploads one bundle file (only the five bundle names) |
+| `DELETE /api/pages/:slug` | creator | Takes the page and its notes and events down |
+| `GET /api/inbox?page&since&after` | creator | Notes from `since`, events after id `after` |
+
+Creator routes need `Authorization: Bearer <CREATOR_KEY>`, compared by hash. No IP addresses are stored and no cookies are set. `share/cloudflare/wrangler.toml` deploys the same Worker by hand with `npx wrangler deploy`.
+
+## In the app
+
+`SharePageSection` sits in the Post panel: the six looks, Customise (accent, background, transcript font, corners, transcript place, what viewers can do, your button), one Publish button and a menu for Cloudflare, Take down and Show folder. With a published Cloudflare page, `ViewersPanel` shows views, average watched, the curve, the coach card, reactions, questions and notes. New notes are filed on the take's Desk task as Plan first asks, so "Yes" runs the Editor on them.

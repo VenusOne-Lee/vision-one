@@ -71,6 +71,7 @@ struct ShortcutsView: View {
         }
         .frame(minWidth: 380, idealWidth: 420, minHeight: 420)
         .background(Theme.paper)
+        .themed()
     }
 
     private func spoken(_ spec: ShortcutSpec) -> String {
@@ -115,7 +116,6 @@ final class ShortcutsWindowController {
                                   styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             window.title = "Keyboard Shortcuts"
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.sharingType = .none
             window.setFrameAutosaveName("VisionOneShortcuts")
             window.contentViewController = NSHostingController(rootView: ShortcutsView())

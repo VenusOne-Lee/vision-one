@@ -24,8 +24,84 @@ public struct DeskProject: Codable, Equatable, Identifiable, Sendable {
         self.createdAt = createdAt
     }
 
+    enum CodingKeys: String, CodingKey {
+        case id, name, notes, sources, presetName, createdAt
+    }
+
+    /// Lenient, so a desk.json from an older build (no notes, sources or
+    /// preset yet) still opens instead of losing every project.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(id: try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID(),
+                  name: try c.decodeIfPresent(String.self, forKey: .name) ?? "My videos",
+                  notes: try c.decodeIfPresent(String.self, forKey: .notes) ?? "",
+                  sources: try c.decodeIfPresent([ScriptSourceRef].self, forKey: .sources) ?? [],
+                  presetName: try c.decodeIfPresent(String.self, forKey: .presetName),
+                  createdAt: try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date())
+    }
+
     /// The letter on the project's tile.
     public var initial: String { name.first.map { String($0).uppercased() } ?? "?" }
+}
+
+extension DeskProject {
+    /// What Project settings saves: a blank name keeps the old one, notes
+    /// lose blank lines at either end, a blank preset means the app's default,
+    /// and sources are cleaned and de-duplicated.
+    public mutating func applySettings(_ settings: DeskProject) {
+        let cleanName = settings.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanName.isEmpty { name = cleanName }
+        notes = settings.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preset = settings.presetName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        presetName = preset.isEmpty ? nil : preset
+        var kept: [ScriptSourceRef] = []
+        for ref in settings.sources {
+            guard let clean = Self.sourceRef(ref.kind, from: ref.id) else { continue }
+            if kept.contains(where: { $0.kind == clean.kind && $0.id.lowercased() == clean.id.lowercased() }) { continue }
+            kept.append(ScriptSourceRef(clean.kind, clean.id, enabled: ref.enabled))
+        }
+        sources = kept
+    }
+
+    /// A source from what was typed in Project settings, or nil when it
+    /// can't be one. GitHub takes "owner/repo" or a github.com link;
+    /// Linear takes a team key ("ENG") or a linear.app team link.
+    public static func sourceRef(_ kind: ScriptSourceRef.Kind, from text: String) -> ScriptSourceRef? {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        for scheme in ["https://", "http://"] where value.lowercased().hasPrefix(scheme) {
+            value = String(value.dropFirst(scheme.count))
+        }
+        if value.lowercased().hasPrefix("www.") { value = String(value.dropFirst(4)) }
+        let parts = value.split(separator: "/").map(String.init)
+        switch kind {
+        case .github:
+            var path = parts
+            if path.first?.lowercased() == "github.com" { path.removeFirst() }
+            guard path.count >= 2 else { return nil }
+            var repo = path[1]
+            if repo.lowercased().hasSuffix(".git") { repo = String(repo.dropLast(4)) }
+            let owner = path[0]
+            guard isRepoName(owner), isRepoName(repo) else { return nil }
+            // A bare "a/b/c" isn't a repo; a github.com link may go deeper.
+            if parts.first?.lowercased() != "github.com", path.count != 2 { return nil }
+            return ScriptSourceRef(.github, "\(owner)/\(repo)")
+        case .linear:
+            var key = value
+            if parts.first?.lowercased() == "linear.app" {
+                // linear.app/<workspace>/team/<KEY>/…
+                guard let i = parts.firstIndex(where: { $0.lowercased() == "team" }), i + 1 < parts.count else { return nil }
+                key = parts[i + 1]
+            }
+            key = key.uppercased()
+            guard !key.isEmpty, key.count <= 12, key.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else { return nil }
+            return ScriptSourceRef(.linear, key)
+        }
+    }
+
+    private static func isRepoName(_ text: String) -> Bool {
+        !text.isEmpty && text.count <= 100
+            && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == ".") }
+    }
 }
 
 /// "Just do it" runs the agents straight away; "Plan first" shows the
@@ -99,6 +175,16 @@ public struct ApprovalCard: Codable, Equatable, Identifiable, Sendable {
     /// The three choices for something leaving the Mac.
     public static func job(_ jobID: UUID, approval: AgentJob.Approval, agent: AgentKind,
                            project: String) -> ApprovalCard {
+        if let asker = approval.askedBy {
+            // An outside agent over MCP: "Record your screen for Claude Code?"
+            var options = [ApprovalOption(approval.isPost ? "Yes, open the post" : "Yes, allow once", .allowOnce)]
+            if approval.canRemember ?? false {
+                options.append(ApprovalOption("Yes, and allow \(asker) until Vision One quits", .allowAlways))
+            }
+            options.append(ApprovalOption("No, and tell \(asker) what to do instead", .deny))
+            return ApprovalCard(subject: .job(jobID), question: approval.summary,
+                                detail: approval.preview.isEmpty ? nil : approval.preview, options: options)
+        }
         let cost: String
         if approval.fromPlan { cost = "from your ChatGPT plan, R0" }
         else if let rand = approval.estimatedRand { cost = String(format: "about R%.2f", rand) }
@@ -203,6 +289,9 @@ public struct DeskTask: Codable, Equatable, Identifiable, Sendable {
     public var jobIDs: [UUID]
     /// Set by Archive; hidden from the sidebar.
     public var archived: Bool
+    /// The agent that started it over MCP ("Claude Code"), for the
+    /// "from Claude Code" tag; nil when the user started it.
+    public var requestedBy: String?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -304,6 +393,7 @@ public struct DeskSnapshot: Equatable, Sendable {
         switch status(of: task) {
         case .needsYou:
             if let job = jobs.last(where: { $0.state == .needsApproval }), let approval = job.approval {
+                if let asker = approval.askedBy { return "Needs you · \(asker) is asking" }
                 return "Needs you · " + (approval.isPost ? "post to \(approval.destination)" : "send to \(approval.providerName)")
             }
             return task.openApprovals.first?.subject == ApprovalCard.Subject.plan ? "Needs you · approve the plan" : "Needs you"
@@ -339,6 +429,7 @@ extension AgentKind {
         case .editor: return "editing"
         case .clipper: return "making clips"
         case .sharer: return "writing the post"
+        case .autopilot: return "recording a demo"
         }
     }
 }

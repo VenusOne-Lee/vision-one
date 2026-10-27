@@ -152,7 +152,7 @@ public struct AgentRunner: Sendable {
             case .sharer:
                 done.append(await share(take, brief: brief,
                                         launch: plan.purposeID == "launch" || plan.purposeID == "update"))
-            case .producer:
+            case .producer, .autopilot:
                 break
             }
             // A "no" on one job stops the rest: the user said not now.
@@ -163,8 +163,9 @@ public struct AgentRunner: Sendable {
 
     // MARK: Running
 
-    private func run(_ job: AgentJob,
+    private func run(_ planned: AgentJob,
                      _ work: @escaping @Sendable (UUID) async throws -> (String, [AgentJob.Change])) async -> AgentJob {
+        let job = Self.fromOrigin(planned)
         await board.add(job)
         await onJobAdded?(job)
         await AgentJobContext.$jobID.withValue(job.id) {
@@ -178,6 +179,17 @@ public struct AgentRunner: Sendable {
             }
         }
         return await board.job(job.id) ?? job
+    }
+
+    /// A job started by an agent over MCP takes the id that agent is
+    /// watching for, and says who asked.
+    static func fromOrigin(_ job: AgentJob) -> AgentJob {
+        guard let origin = MCPJobContext.origin else { return job }
+        var copy = AgentJob(id: origin.jobID, agent: job.agent, title: job.title, take: job.take, ask: job.ask,
+                            steps: job.steps.map(\.title), createdAt: job.createdAt)
+        copy.editsFile = job.editsFile
+        copy.requestedBy = origin.requestedBy
+        return copy
     }
 
     /// "launch video" from the take's plan, else the folder's date name.

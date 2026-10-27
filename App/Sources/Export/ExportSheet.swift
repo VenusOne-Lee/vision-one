@@ -88,7 +88,7 @@ struct ExportSheet: View {
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
         .tint(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
         .onAppear {
             // Opened again while this take exports: show what's running.
             if let batch { picked = Set(batch.presets) }

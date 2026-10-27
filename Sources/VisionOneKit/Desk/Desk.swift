@@ -70,6 +70,13 @@ public actor Desk {
     public func task(_ id: UUID) -> DeskTask? { tasks.first { $0.id == id } }
     public func project(_ id: UUID) -> DeskProject? { projects.first { $0.id == id } }
 
+    /// The task a job is filed under, if any (archived tasks don't count,
+    /// since their cards aren't in view). Decides whether an approval can
+    /// wait on the task's card alone (`ApprovalSurface`).
+    public func taskID(forJob jobID: UUID) -> UUID? {
+        tasks.first { !$0.archived && $0.jobIDs.contains(jobID) }?.id
+    }
+
     /// The current snapshot now, then after every change.
     public func updates() -> AsyncStream<DeskSnapshot> {
         let id = UUID()
@@ -160,7 +167,7 @@ public actor Desk {
             case .editor: return AskRouter.edit(nil)
             case .clipper: return AskRouter.clips(3)
             case .sharer: return AskRouter.share(launch: plan.purposeID == "launch" || plan.purposeID == "update")
-            case .producer: return nil
+            case .producer, .autopilot: return nil
             }
         }
         start(DeskPlan(steps: steps), in: task.id)
@@ -196,6 +203,11 @@ public actor Desk {
             if !task.jobIDs.contains(jobID) { task.jobIDs.append(jobID) }
         }
         syncCells()
+    }
+
+    /// Tags a task started by an agent over MCP.
+    public func markRequested(_ taskID: UUID, by agent: String) {
+        update(taskID) { $0.requestedBy = agent }
     }
 
     // MARK: Asking
@@ -249,8 +261,15 @@ public actor Desk {
             }
         case let .job(jobID):
             let decision: OutboundDecision = effect == .deny ? .deny : (effect == .allowAlways ? .allowForSession : .allowOnce)
-            await board.resolveApproval(jobID: jobID, decision: decision)
-            if effect == .deny, let note, !note.isEmpty { submit(note, to: taskID) }
+            // An outside agent's request (MCP): the note goes back to that
+            // agent in its tool reply, not to Vision One's own agents.
+            let fromAgent = jobs.first { $0.id == jobID }?.approval?.askedBy != nil
+            if fromAgent {
+                await board.resolveApproval(jobID: jobID, decision: decision, note: effect == .deny ? note : nil)
+            } else {
+                await board.resolveApproval(jobID: jobID, decision: decision)
+                if effect == .deny, let note, !note.isEmpty { submit(note, to: taskID) }
+            }
         }
     }
 

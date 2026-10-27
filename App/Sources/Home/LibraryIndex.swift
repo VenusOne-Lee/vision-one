@@ -60,34 +60,19 @@ actor LibraryIndex {
     }
 }
 
-/// First frames, and frames along the take for hover scrubbing, made once
-/// per launch and kept in memory so scrolling and coming back to the
-/// Library stay instant.
+/// First frames, made once per launch and kept in memory so scrolling and
+/// coming back to the Library stay instant.
 @MainActor
 final class LibraryPreviews {
     static let shared = LibraryPreviews()
 
-    /// How many frames a hover can land on across a card.
-    static let scrubSteps = 12
-
     private var firstFrames: [URL: CGImage] = [:]
-    private var scrubFrames: [URL: [Int: CGImage]] = [:]
 
     func firstFrame(for take: Take) async -> CGImage? {
         if let cached = firstFrames[take.folder] { return cached }
         let image = await Self.frame(of: take, at: .zero)
         // A take still being written has no frame yet: try again next time.
         if let image { firstFrames[take.folder] = image }
-        return image
-    }
-
-    /// The frame `step` twelfths of the way through the take.
-    func scrubFrame(for take: Take, step: Int, duration: Double) async -> CGImage? {
-        if let cached = scrubFrames[take.folder]?[step] { return cached }
-        let fraction = Double(step) / Double(Self.scrubSteps - 1)
-        let time = CMTime(seconds: max(0, duration - 0.1) * fraction, preferredTimescale: 600)
-        guard let image = await Self.frame(of: take, at: time) else { return nil }
-        scrubFrames[take.folder, default: [:]][step] = image
         return image
     }
 
