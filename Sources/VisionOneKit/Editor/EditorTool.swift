@@ -11,6 +11,9 @@ public enum EditorTool: String, CaseIterable, Identifiable, Sendable {
     case zoom
     /// Drag a box on the video: it's blurred from the playhead.
     case blur
+    /// Draw on the video: circle to zoom, scribble to blur, a line to
+    /// point the camera at something.
+    case draw
 
     public var id: String { rawValue }
 
@@ -20,6 +23,7 @@ public enum EditorTool: String, CaseIterable, Identifiable, Sendable {
         case .cut: return "Cut"
         case .zoom: return "Zoom"
         case .blur: return "Blur"
+        case .draw: return "Draw"
         }
     }
 
@@ -30,6 +34,7 @@ public enum EditorTool: String, CaseIterable, Identifiable, Sendable {
         case .cut: return "c"
         case .zoom: return "z"
         case .blur: return "b"
+        case .draw: return "d"
         }
     }
 
@@ -39,6 +44,7 @@ public enum EditorTool: String, CaseIterable, Identifiable, Sendable {
         case .cut: return "Drag across the timeline to cut that stretch"
         case .zoom: return "Drag a box on the video to zoom there from the playhead"
         case .blur: return "Drag a box on the video to blur it from the playhead"
+        case .draw: return "Circle something to zoom on it, scribble over it to blur it"
         }
     }
 

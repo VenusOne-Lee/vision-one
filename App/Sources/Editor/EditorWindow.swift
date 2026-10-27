@@ -330,7 +330,7 @@ extension TransportBar where Accessory == EmptyView {
 /// The keys, for the ⋯ menu.
 private struct ShortcutsCard: View {
     private let rows: [(String, String)] = [
-        ("Space", "Play or pause"),
+        ("Space", "Play or pause; hold it to talk"),
         ("J  K  L", "Back 5 s, stop, play (in the transcript)"),
         ("←  →", "One frame (timeline selected)"),
         ("⇧←  ⇧→", "One second (timeline selected)"),
@@ -338,7 +338,7 @@ private struct ShortcutsCard: View {
         ("⌫", "Cut the selected words or stretch"),
         ("⌘+  ⌘−", "Zoom the timeline"),
         ("⌘Z  ⇧⌘Z", "Undo and redo"),
-        ("V  C  Z  B", "Select, Cut, Zoom and Blur tools"),
+        ("V  C  Z  B  D", "Select, Cut, Zoom, Blur and Draw tools"),
         ("⌘2", "Side pane"),
     ]
 

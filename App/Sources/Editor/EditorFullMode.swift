@@ -29,6 +29,11 @@ struct EditorFullMode<Rail: View>: View {
     @State private var zoom = 1.0
     @State private var resizeStart: Double?
     @State private var keys = EditorKeyMonitor()
+    @StateObject private var talk = TalkController()
+    /// Space is down; a hold past `holdToTalk` starts listening.
+    @State private var spaceDown = false
+
+    static var holdToTalk: Duration { .milliseconds(350) }
 
     init(model: EditorModel, clips: ClipsModel? = nil, thumbnail: ThumbnailModel? = nil,
          onBack: @escaping () -> Void, @ViewBuilder rail: @escaping () -> Rail) {
@@ -87,11 +92,16 @@ struct EditorFullMode<Rail: View>: View {
             await clips?.load()
         }
         .onAppear {
-            keys.start { key in
+            keys.start(onKey: { key in
                 guard let picked = EditorTool.forKey(key) else { return false }
                 toolRaw = picked.rawValue
                 return true
-            }
+            }, onSpace: space)
+        }
+        .onChange(of: model.requestedTool) { _, requested in
+            guard let requested else { return }
+            toolRaw = requested.rawValue
+            model.requestedTool = nil
         }
         .onDisappear {
             keys.stop()
@@ -114,6 +124,12 @@ struct EditorFullMode<Rail: View>: View {
                 video
                     .padding([.horizontal, .top], 12)
                 TransportBar(model: model, zoom: $zoom) {
+                    Text("Hold Space to talk · D to draw")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textMuted)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .help("Hold Space while it plays and say what you want, like “cut this bit” or “zoom in here”. With the pen (D), circle to zoom and scribble to blur.")
                     Button("Show tracks") { showTracks.toggle() }
                         .buttonStyle(TabPillStyle(isOn: showTracks))
                         .accessibilityAddTraits(showTracks ? .isSelected : [])
@@ -152,8 +168,11 @@ struct EditorFullMode<Rail: View>: View {
             .overlay {
                 if tool == .zoom || tool == .blur {
                     ToolBoxLayer(model: model, tool: tool)
+                } else if tool == .draw {
+                    DrawLayer(model: model)
                 }
             }
+            .overlay { SteerOverlay(model: model, talk: talk).allowsHitTesting(true) }
             .overlay {
                 if showAside, aside == .clips, let clips {
                     ClipWindowHost(clips: clips)
@@ -163,6 +182,28 @@ struct EditorFullMode<Rail: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .frame(minHeight: 160)
             .layoutPriority(1)
+    }
+
+    /// Space: a tap plays or pauses, a hold listens until it's let go.
+    private func space(_ event: EditorKeyMonitor.SpaceEvent) {
+        switch event {
+        case .down:
+            spaceDown = true
+            Task {
+                try? await Task.sleep(for: Self.holdToTalk)
+                if spaceDown, model.phase == .ready { talk.start(on: model) }
+            }
+        case .up:
+            spaceDown = false
+            if talk.isListening {
+                talk.finish(on: model)
+            } else if case .failed = talk.state {
+                talk.dismissError()
+                model.togglePlay()
+            } else {
+                model.togglePlay()
+            }
+        }
     }
 
     // MARK: Aside
@@ -180,6 +221,7 @@ struct EditorFullMode<Rail: View>: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             Divider().overlay(Theme.line)
+            if !model.steerLog.isEmpty { SteerLogStrip(model: model) }
             switch aside {
             case .transcript: TranscriptPane(model: model)
             case .changes: ChangesPanel(model: model, effects: model.effects)
@@ -265,6 +307,7 @@ extension EditorTool {
         case .cut: return "scissors"
         case .zoom: return "plus.magnifyingglass"
         case .blur: return "square.grid.3x3.fill"
+        case .draw: return "pencil.tip"
         }
     }
 }
@@ -319,7 +362,7 @@ struct ToolBoxLayer: View {
                         switch tool {
                         case .zoom: model.effects.addZoom(span: span, viewport: rect)
                         case .blur: model.effects.addBlur(span: span, rect: rect)
-                        case .select, .cut: break
+                        case .select, .cut, .draw: break
                         }
                     }
             )
@@ -431,5 +474,44 @@ struct TranscriptPane: View {
             }
         }
         .background(Theme.paper)
+    }
+}
+
+/// The last few things said or drawn, newest first, above the aside.
+private struct SteerLogStrip: View {
+    @ObservedObject var model: EditorModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(model.steerLog.suffix(3).reversed()) { entry in
+                HStack(spacing: Theme.Space.sm) {
+                    Text(Timecode.short(from: entry.at))
+                        .font(.system(size: 11, design: .monospaced).monospacedDigit())
+                        .foregroundStyle(Theme.textMuted)
+                    Text("\(entry.said) → \(entry.result)")
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    if entry.proposal != nil {
+                        Button("Keep") { model.keep(entry) }
+                            .buttonStyle(PillButtonStyle(kind: .secondary))
+                            .controlSize(.small)
+                            .fixedSize()
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                    .strokeBorder(Theme.text, style: StrokeStyle(lineWidth: 1,
+                                                                 dash: entry.proposal == nil ? [] : Theme.Stroke.dash)))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    model.seek(toSource: model.edits.sourceTime(forOutput: entry.at))
+                }
+            }
+        }
+        .padding(10)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
 }
