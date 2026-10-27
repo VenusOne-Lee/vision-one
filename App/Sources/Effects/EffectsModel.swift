@@ -214,7 +214,8 @@ final class EffectsModel: ObservableObject {
 
     // MARK: Undo and saving
 
-    private func apply(zooms nextZooms: ZoomList? = nil, blurs nextBlurs: BlurList? = nil, actionName: String) {
+    /// Internal so the editor's Changes list can switch a whole group.
+    func apply(zooms nextZooms: ZoomList? = nil, blurs nextBlurs: BlurList? = nil, actionName: String) {
         let previousZooms = zooms
         let previousBlurs = blurs
         undoManager.registerUndo(withTarget: self) { model in
