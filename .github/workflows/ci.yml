@@ -25,3 +25,14 @@ jobs:
           xcodebuild -project VisionOne.xcodeproj -scheme VisionOne \
             -configuration Debug -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO build
+
+  release-rehearsal-guard:
+    # The release rehearsal signs with the real keys, so it must never be
+    # able to publish. This fails any change that would let it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check the rehearsal can't publish
+        run: scripts/release/check-rehearsal-workflow.sh
