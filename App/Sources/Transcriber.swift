@@ -5,12 +5,30 @@ import VisionOneKit
 /// Writes transcript.json for each take, on the Mac, after recording
 /// stops. Takes are done one at a time in the order they were recorded,
 /// and any take left without a transcript (the app quit mid-way) is
-/// picked up on the next launch. See docs/TRANSCRIPT.md.
+/// picked up on the next launch. A take that can never be transcribed
+/// (it has no sound) gets transcript-failed.json so launches skip it.
+/// See docs/TRANSCRIPT.md.
 @MainActor
 final class Transcriber: ObservableObject {
     static let shared = Transcriber()
 
-    @Published private(set) var phase: TranscriptionPhase = .idle
+    /// What's happening right now: idle, getting the model or transcribing.
+    @Published private var activity: TranscriptionPhase = .idle
+    /// Each failed take and why, so one take's failure isn't lost when
+    /// the next take starts.
+    @Published private(set) var failures = TranscriptionFailures()
+    /// Where each failed take lives, for Retry.
+    private var failedTakes: [String: Take] = [:]
+
+    /// The menu line: the work in progress, otherwise the newest failure
+    /// still waiting for a retry.
+    var phase: TranscriptionPhase {
+        if activity.isWorking { return activity }
+        if let latest = failures.latest {
+            return .failed(takeName: latest.takeName, message: latest.message)
+        }
+        return .idle
+    }
 
     private let engine = ParakeetEngine()
     private var queue: [Take] = []
@@ -22,21 +40,22 @@ final class Transcriber: ObservableObject {
         runQueue()
     }
 
-    /// Queues every take that has a recording but no transcript yet.
+    /// Queues every take that has a recording but no transcript yet,
+    /// skipping takes marked as never transcribable.
     func catchUp(in library: TakeLibrary) {
-        let fm = FileManager.default
-        let folders = (try? fm.contentsOfDirectory(at: library.folder, includingPropertiesForKeys: [.creationDateKey],
-                                                   options: [.skipsHiddenFiles])) ?? []
-        let missing = folders.map(Take.init(folder:)).filter {
-            fm.fileExists(atPath: $0.screenURL.path) && !fm.fileExists(atPath: $0.transcriptURL.path)
-        }
-        for take in missing.sorted(by: { $0.name < $1.name }) { transcribe(take) }
+        for take in library.untranscribedTakes() { transcribe(take) }
     }
 
+    /// Tries the most recent failure again, even one marked as never
+    /// transcribable: the marker is removed first.
     func retry() {
-        guard case let .failed(name, _) = phase else { return }
-        phase = .idle
-        transcribe(Take(folder: TakeLibrary.standard.folder.appendingPathComponent(name, isDirectory: true)))
+        guard let latest = failures.latest else { return }
+        let take = failedTakes[latest.takeName]
+            ?? Take(folder: TakeLibrary.standard.folder.appendingPathComponent(latest.takeName, isDirectory: true))
+        try? FileManager.default.removeItem(at: take.transcriptFailedURL)
+        failures.clear(take.name)
+        failedTakes[take.name] = nil
+        transcribe(take)
     }
 
     private func runQueue() {
@@ -51,42 +70,70 @@ final class Transcriber: ObservableObject {
     }
 
     private func run(_ take: Take) async {
+        failures.clear(take.name)
+        failedTakes[take.name] = nil
+        activity = .transcribing(takeName: take.name)
         do {
+            // Read the sound first, so a take without any fails straight
+            // away instead of waiting on a 0.5 GB model download.
+            let audio = try await TakeAudio.read(take)
             if !(await engine.isLoaded) {
-                phase = .downloadingModel(progress: nil)
+                activity = .downloadingModel(progress: nil)
                 try await engine.load { fraction in
-                    Task { @MainActor in
-                        if case .downloadingModel = Transcriber.shared.phase {
-                            Transcriber.shared.phase = .downloadingModel(progress: fraction)
-                        }
-                    }
+                    Task { @MainActor in Transcriber.shared.showDownload(fraction) }
                 }
+                activity = .transcribing(takeName: take.name)
             }
-            phase = .transcribing(takeName: take.name)
-            let audio = try await TakeAudio.read(from: take.screenURL)
             let pieces = try await engine.transcribe(audio.samples)
             let transcript = TranscriptBuilder.build(
                 pieces: pieces, language: "en", engine: ParakeetEngine.name,
-                audioTrack: audio.track, duration: audio.duration)
+                audioTrack: audio.source.rawValue, duration: audio.duration)
             try transcript.write(to: take.transcriptURL)
-            // Propose cuts for fillers and long pauses. A failure here
-            // leaves the transcript usable, so it isn't shown as an error.
+            // Propose cuts for fillers and long pauses, measured against
+            // the video's length. A failure here leaves the transcript
+            // usable, so it isn't shown as an error.
             let loudness = LoudnessEnvelope.measure(samples: audio.samples, sampleRate: TakeAudio.sampleRate)
-            try? AutoClean.run(on: take, transcript: transcript, loudness: loudness)
-            phase = .idle
+            try? AutoClean.run(on: take, transcript: transcript, sourceDuration: audio.videoDuration,
+                               loudness: loudness)
+            activity = .idle
         } catch {
-            phase = .failed(takeName: take.name, message: Self.describe(error))
+            let message = Self.describe(error)
+            if (error as? TakeAudio.ReadError) == .noAudio {
+                // Recording again is the only fix, so don't try it again on
+                // every launch. Retry in the menu still works.
+                try? TranscriptFailure(reason: .noAudio, message: message).write(to: take.transcriptFailedURL)
+            }
+            failedTakes[take.name] = take
+            failures.record(message, for: take.name)
+            activity = .idle
         }
+    }
+
+    private func showDownload(_ fraction: Double) {
+        if case .downloadingModel = activity { activity = .downloadingModel(progress: fraction) }
     }
 
     /// Errors say how to fix, per the design system.
     private static func describe(_ error: Error) -> String {
         if let error = error as? TakeAudio.ReadError { return error.localizedDescription }
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain {
-            return "The speech model needs the internet once to download. Connect and try again."
+        if let error = error as? TranscriptError { return error.localizedDescription }
+        // FluidAudio's model download errors. Plain network errors
+        // (URLError) come through unwrapped and are caught below.
+        if let error = error as? DownloadError {
+            switch error {
+            case .rateLimited:
+                return TranscriptionErrorText.busy
+            case let .downloadFailed(_, underlying):
+                return TranscriptionErrorText.message(forUnderlying: underlying) ?? TranscriptionErrorText.downloadFailed
+            default:
+                return TranscriptionErrorText.downloadFailed
+            }
         }
-        return "Something went wrong (\(error.localizedDescription)). Try again."
+        if let error = error as? AsrModelsError, case .downloadFailed = error {
+            return TranscriptionErrorText.downloadFailed
+        }
+        if let message = TranscriptionErrorText.message(forUnderlying: error) { return message }
+        return TranscriptionErrorText.generic(error)
     }
 }
 
@@ -129,14 +176,18 @@ actor ParakeetEngine {
 }
 
 /// Reads a take's voice as 16 kHz mono floats, the format speech models
-/// want. Uses the mic track; a take recorded without the mic falls back
-/// to system sound.
+/// want. Uses the mic track; when the take has no mic track, or the mic
+/// gave under a second of sound, system sound is used instead.
 enum TakeAudio {
     static let sampleRate = 16_000.0
 
     struct Audio {
         let samples: [Float]
-        let track: String
+        let source: TakeAudioSource
+        /// Seconds of sound the track actually gave, not counting gaps.
+        let decodedSeconds: Double
+        /// Length of screen.mov, or nil when it couldn't be read.
+        var videoDuration: Double?
         var duration: Double { Double(samples.count) / TakeAudio.sampleRate }
     }
 
@@ -152,13 +203,52 @@ enum TakeAudio {
         }
     }
 
-    static func read(from url: URL) async throws -> Audio {
-        let asset = AVURLAsset(url: url)
-        // TakeWriter adds system sound first, then the mic.
-        let tracks = try await asset.loadTracks(withMediaType: .audio)
-        guard let track = tracks.count >= 2 ? tracks[1] : tracks.first else { throw ReadError.noAudio }
-        let trackName = tracks.count >= 2 ? "mic" : "system"
+    static func read(_ take: Take) async throws -> Audio {
+        let asset = AVURLAsset(url: take.screenURL)
+        let tracks: [AVAssetTrack]
+        do {
+            tracks = try await asset.loadTracks(withMediaType: .audio)
+        } catch {
+            throw ReadError.unreadable
+        }
+        guard !tracks.isEmpty else { throw ReadError.noAudio }
 
+        // audio-tracks.json says which track is which; takes from before
+        // it existed are told apart by channel count.
+        var channelCounts: [Int] = []
+        for track in tracks { channelCounts.append(await channelCount(of: track)) }
+        let recorded = try? TakeAudioTracks.read(from: take.audioTracksURL)
+        let sources = TakeAudioTracks.sources(recorded: recorded, channelCounts: channelCounts)
+        let micIndex = sources.firstIndex(of: .mic)
+        let systemIndex = sources.firstIndex(of: .system)
+
+        var audio: Audio
+        if let micIndex {
+            audio = try await readTrack(tracks[micIndex], of: asset, source: .mic)
+            // The mic barely recorded; system sound may hold the voice.
+            if let systemIndex, audio.decodedSeconds < TakeAudioTracks.minimumMicSeconds,
+               let system = try? await readTrack(tracks[systemIndex], of: asset, source: .system),
+               TakeAudioTracks.prefersSystem(micSeconds: audio.decodedSeconds, systemSeconds: system.decodedSeconds) {
+                audio = system
+            }
+        } else {
+            audio = try await readTrack(tracks[systemIndex ?? 0], of: asset, source: .system)
+        }
+        if let duration = try? await asset.load(.duration), duration.isNumeric {
+            audio.videoDuration = duration.seconds
+        }
+        return audio
+    }
+
+    /// TakeWriter encodes the mic as mono and system sound as stereo.
+    private static func channelCount(of track: AVAssetTrack) async -> Int {
+        guard let formats = try? await track.load(.formatDescriptions),
+              let format = formats.first,
+              let description = CMAudioFormatDescriptionGetStreamBasicDescription(format) else { return 0 }
+        return Int(description.pointee.mChannelsPerFrame)
+    }
+
+    private static func readTrack(_ track: AVAssetTrack, of asset: AVAsset, source: TakeAudioSource) async throws -> Audio {
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
             AVFormatIDKey: kAudioFormatLinearPCM,
@@ -189,6 +279,6 @@ enum TakeAudio {
             timeline.append(floats, at: buffer.presentationTimeStamp.seconds)
         }
         guard reader.status == .completed else { throw reader.error ?? ReadError.unreadable }
-        return Audio(samples: timeline.samples, track: trackName)
+        return Audio(samples: timeline.samples, source: source, decodedSeconds: timeline.decodedDuration)
     }
 }

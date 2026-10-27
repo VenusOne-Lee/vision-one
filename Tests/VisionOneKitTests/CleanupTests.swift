@@ -285,4 +285,35 @@ final class AutoCleanTests: XCTestCase {
         XCTAssertEqual(after.cuts.count, 3)
         XCTAssertEqual(after.cuts.first { $0.id == filler.id }?.state, .rejected)
     }
+
+    func testMeasuresAgainstTheVideoNotTheAudio() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let take = Take(folder: folder)
+        // The mic stopped at 4 s but screen.mov runs to 10 s.
+        let transcript = Transcript(language: "en", engine: "test", duration: 4, segments: [
+            TranscriptSegment(words: words([("Hello.", 0.1, 0.5), ("Um,", 2.0, 2.2), ("hi.", 2.3, 2.6)])),
+        ])
+
+        let cuts = try AutoClean.run(on: take, transcript: transcript, sourceDuration: 10)
+        let list = try EditList.read(from: take.editsURL)
+        XCTAssertEqual(list.sourceDuration, 10)
+        let tail = try XCTUnwrap(cuts.last { $0.reason == Cut.Reason.deadAir })
+        XCTAssertEqual(tail.start, 2.85, accuracy: 0.001)
+        XCTAssertEqual(tail.end, 10, accuracy: 0.001)
+    }
+
+    func testFallsBackToTheTranscriptLength() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let take = Take(folder: folder)
+        let transcript = Transcript(language: "en", engine: "test", duration: 4, segments: [
+            TranscriptSegment(words: words([("Hello.", 0.1, 0.5)])),
+        ])
+
+        try AutoClean.run(on: take, transcript: transcript, sourceDuration: .nan)
+        XCTAssertEqual(try EditList.read(from: take.editsURL).sourceDuration, 4)
+    }
 }

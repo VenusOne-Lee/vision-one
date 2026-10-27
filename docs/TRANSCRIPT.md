@@ -52,12 +52,21 @@ Every take gets a `transcript.json` next to `screen.mov`. It is made on the Mac,
 ## How it's made
 
 1. Recording stops and `screen.mov` is saved.
-2. `Transcriber` (in `App/Sources/Transcriber.swift`) reads the mic track as 16 kHz mono with `AVAssetReader`. Each buffer goes where its timestamp says (`SampleTimeline`), so a mic that starts late or drops out turns into silence and every word time still matches the video. A take recorded without the mic falls back to system sound.
+2. `Transcriber` (in `App/Sources/Transcriber.swift`) reads the mic track as 16 kHz mono with `AVAssetReader`, before the model is loaded, so a take with no sound fails at once without a download. Each buffer goes where its timestamp says (`SampleTimeline`), so a mic that starts late or drops out turns into silence and every word time still matches the video.
+   - **Which track.** `TakeWriter` writes `audio-tracks.json` next to `screen.mov` (`{"version": 1, "tracks": ["system", "mic"]}`, in track order, only the tracks it added). When that file is missing or lists a different number of tracks than the movie has, the channel count decides: the mic is always written mono and system sound stereo.
+   - **Fallback.** A take without a mic track uses system sound. So does a take whose mic gave under 1 s of sound (`TakeAudioTracks.minimumMicSeconds`) when system sound gave more.
 3. **Parakeet TDT 0.6B v2** runs through [FluidAudio](https://github.com/FluidInference/FluidAudio) (Apache 2.0) on the Neural Engine. It's English only, gives a time for every sub-word token, and does about an hour of audio in 20 to 30 seconds on an M-series Mac. The model (about 0.5 GB) downloads from Hugging Face the first time and is cached after that.
 4. `TranscriptBuilder` (in VisionOneKit) joins the tokens into words, keeps punctuation on the word before it, tidies any overlapping or out-of-order times, and splits sentences into segments.
-5. `transcript.json` is written atomically. Takes queue one at a time, and any take still missing a transcript is picked up on the next launch.
+5. `transcript.json` is written atomically. Takes queue one at a time, and any take still missing a transcript is picked up on the next launch (`TakeLibrary.untranscribedTakes()`).
+6. Cleanup proposals go into `edits.json`, measured against the length of `screen.mov`, not the audio (see [CLEANUP.md](CLEANUP.md)).
 
-The menu shows one muted line while this happens ("Getting the speech model… 43%", then "Writing the transcript…"). It's never orange, because orange only means a live recording.
+The menu shows one muted line while this happens ("Writing the transcript…", "Getting the speech model… 43%"). It's never orange, because orange only means a live recording.
+
+### When it fails
+
+- Failures are kept per take (`TranscriptionFailures`), so a failure isn't lost when the next take starts. The menu shows the newest one, and Retry retries it.
+- Every message says how to fix: no sound ("Turn on the mic and record again"), offline on the first model download, Hugging Face busy, a full disk, or a transcript from a newer Vision One.
+- A take with no sound can never be transcribed, so it gets `transcript-failed.json` (`TranscriptFailure`: `reason`, `message`, `createdAt`) and launches skip it. Retry in the menu deletes the file and tries again. Other failures, such as a recording that is still saving, are tried again on the next launch.
 
 ### Not yet
 

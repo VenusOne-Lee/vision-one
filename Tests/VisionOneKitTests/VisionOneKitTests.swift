@@ -60,6 +60,42 @@ final class TakeLibraryTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: second.folder.path, isDirectory: &isDirectory))
         XCTAssertTrue(isDirectory.boolValue)
     }
+
+    func testUntranscribedTakesSkipFinishedAndFailedOnes() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? fm.removeItem(at: root) }
+        let library = TakeLibrary(folder: root)
+        func make(_ name: String, files: [String]) throws -> Take {
+            let take = Take(folder: root.appendingPathComponent(name, isDirectory: true))
+            try fm.createDirectory(at: take.folder, withIntermediateDirectories: true)
+            for file in files { try Data().write(to: take.folder.appendingPathComponent(file)) }
+            return take
+        }
+        let newer = try make("Vision One 2026-10-27 at 11.00.00", files: ["screen.mov"])
+        let older = try make("Vision One 2026-10-27 at 10.00.00", files: ["screen.mov"])
+        _ = try make("Vision One 2026-10-27 at 10.30.00", files: ["screen.mov", "transcript.json"])
+        let silent = try make("Vision One 2026-10-27 at 10.45.00", files: ["screen.mov"])
+        try TranscriptFailure(reason: .noAudio, message: "m").write(to: silent.transcriptFailedURL)
+        _ = try make("Vision One 2026-10-27 at 10.50.00", files: [])
+
+        XCTAssertEqual(library.untranscribedTakes().map(\.name), [older.name, newer.name])
+
+        try fm.removeItem(at: silent.transcriptFailedURL)
+        XCTAssertEqual(library.untranscribedTakes().map(\.name), [older.name, silent.name, newer.name])
+    }
+
+    func testFailureMarkerRoundTrips() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let failure = TranscriptFailure(reason: .noAudio, message: "No sound.",
+                                        createdAt: Date(timeIntervalSince1970: 1_793_098_392))
+        try failure.write(to: url)
+        XCTAssertEqual(try TranscriptFailure.read(from: url), failure)
+        let take = Take(folder: URL(fileURLWithPath: "/tmp/Vision One x", isDirectory: true))
+        XCTAssertEqual(take.transcriptFailedURL.lastPathComponent, "transcript-failed.json")
+        XCTAssertEqual(take.audioTracksURL.lastPathComponent, "audio-tracks.json")
+    }
 }
 
 final class EventLogTests: XCTestCase {

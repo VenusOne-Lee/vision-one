@@ -12,6 +12,18 @@ extension TakeLibrary {
             .filter { fileManager.fileExists(atPath: $0.screenURL.path) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedDescending }
     }
+
+    /// Takes that still need a transcript, oldest first: they have a
+    /// recording but no transcript.json, and were not marked as never
+    /// transcribable (transcript-failed.json, such as a take with no sound).
+    public func untranscribedTakes(fileManager: FileManager = .default) -> [Take] {
+        takes(fileManager: fileManager)
+            .filter {
+                !fileManager.fileExists(atPath: $0.transcriptURL.path)
+                    && !fileManager.fileExists(atPath: $0.transcriptFailedURL.path)
+            }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
 }
 
 extension Take {
