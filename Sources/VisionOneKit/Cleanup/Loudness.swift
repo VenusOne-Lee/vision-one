@@ -1,18 +1,5 @@
 import Foundation
 
-/// A span of time in seconds on the screen.mov clock.
-public struct AudioSpan: Equatable, Sendable {
-    public var start: Double
-    public var end: Double
-
-    public init(start: Double, end: Double) {
-        self.start = start
-        self.end = end
-    }
-
-    public var duration: Double { end - start }
-}
-
 /// How loud the mic was, in dBFS, every `hop` seconds. Pause edges are
 /// checked against this because word timestamps drift into silence.
 public struct LoudnessEnvelope: Equatable, Sendable {
@@ -57,23 +44,23 @@ public struct LoudnessEnvelope: Equatable, Sendable {
 
     /// Runs of quiet at least `minDuration` long. Loud blips shorter than
     /// `bridge` (a click, a breath) don't split a run.
-    public func silentSpans(threshold: Float? = nil, minDuration: Double, bridge: Double = 0.06) -> [AudioSpan] {
+    public func silentSpans(threshold: Float? = nil, minDuration: Double, bridge: Double = 0.06) -> [TimeSpan] {
         let limit = threshold ?? adaptiveThreshold
-        var runs: [AudioSpan] = []
+        var runs: [TimeSpan] = []
         var runStart: Int?
         for (i, level) in levels.enumerated() {
             if level < limit {
                 if runStart == nil { runStart = i }
             } else if let s = runStart {
-                runs.append(AudioSpan(start: Double(s) * hop, end: Double(i) * hop))
+                runs.append(TimeSpan(start: Double(s) * hop, end: Double(i) * hop))
                 runStart = nil
             }
         }
         if let s = runStart {
-            runs.append(AudioSpan(start: Double(s) * hop, end: Double(levels.count) * hop))
+            runs.append(TimeSpan(start: Double(s) * hop, end: Double(levels.count) * hop))
         }
 
-        var merged: [AudioSpan] = []
+        var merged: [TimeSpan] = []
         for run in runs {
             if let last = merged.last, run.start - last.end <= bridge + 1e-9 {
                 merged[merged.count - 1].end = run.end

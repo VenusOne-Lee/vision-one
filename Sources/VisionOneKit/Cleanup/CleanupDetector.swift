@@ -35,6 +35,20 @@ public struct CutProposal: Equatable, Sendable {
     }
 
     public var duration: Double { end - start }
+
+    /// The cut to put in the edit list, drawn dashed until accepted.
+    public var cut: Cut {
+        Cut(span: TimeSpan(start: start, end: end), reason: reason.rawValue, state: .proposed)
+    }
+}
+
+extension EditList {
+    /// Adds cleanup proposals, skipping any that overlap a cut already in
+    /// the list, including ones the user rejected. Returns what was added.
+    @discardableResult
+    public mutating func propose(_ proposals: [CutProposal]) -> [Cut] {
+        propose(proposals.map(\.cut))
+    }
 }
 
 public struct CleanupSettings: Equatable, Sendable {
@@ -197,35 +211,31 @@ public struct CleanupDetector: Sendable {
         var cuts: [CutProposal] = []
 
         // Dead air before the first word and after the last.
-        let lead = AudioSpan(start: 0, end: first.start - settings.keptEdge)
-        if lead.duration >= settings.minCut {
-            cuts.append(CutProposal(start: lead.start, end: lead.end, reason: .deadAir))
+        let leadEnd = first.start - settings.keptEdge
+        if leadEnd >= settings.minCut {
+            cuts.append(CutProposal(start: 0, end: leadEnd, reason: .deadAir))
         }
-        if let duration {
-            let tail = AudioSpan(start: last.end + settings.keptEdge, end: duration)
-            if tail.duration >= settings.minCut {
-                cuts.append(CutProposal(start: tail.start, end: tail.end, reason: .deadAir))
-            }
+        if let duration, duration - (last.end + settings.keptEdge) >= settings.minCut {
+            cuts.append(CutProposal(start: last.end + settings.keptEdge, end: duration, reason: .deadAir))
         }
 
         for (a, b) in zip(words, words.dropFirst()) {
-            var gap = AudioSpan(start: a.end, end: b.start)
+            var gap = TimeSpan(start: a.end, end: b.start)
             guard gap.duration >= settings.minPause else { continue }
             if let silent {
                 // Trust the audio over the word times: cut only the
                 // longest quiet run inside the gap.
-                let quiet = silent.compactMap { s -> AudioSpan? in
-                    let span = AudioSpan(start: max(s.start, gap.start), end: min(s.end, gap.end))
-                    return span.duration > 0 ? span : nil
+                let quiet = silent.compactMap { s -> TimeSpan? in
+                    let start = max(s.start, gap.start), end = min(s.end, gap.end)
+                    return end > start ? TimeSpan(start: start, end: end) : nil
                 }
                 guard let longest = quiet.max(by: { $0.duration < $1.duration }),
                       longest.duration >= settings.minPause else { continue }
                 gap = longest
             }
             let half = settings.keptPause / 2
-            let cut = AudioSpan(start: gap.start + half, end: gap.end - half)
-            if cut.duration >= settings.minCut {
-                cuts.append(CutProposal(start: cut.start, end: cut.end, reason: .pause))
+            if gap.duration - settings.keptPause >= settings.minCut {
+                cuts.append(CutProposal(start: gap.start + half, end: gap.end - half, reason: .pause))
             }
         }
         return cuts.sorted { $0.start < $1.start }

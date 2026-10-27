@@ -37,6 +37,7 @@ final class FillerLexiconTests: XCTestCase {
         XCTAssertEqual(CutProposal.Reason.repeated.rawValue, "repeat")
         XCTAssertEqual(CutProposal.Reason.pause.rawValue, "pause")
         XCTAssertEqual(CutProposal.Reason.deadAir.rawValue, "deadAir")
+        XCTAssertEqual(CutProposal.Reason.repeated.rawValue, Cut.Reason.repeat)
     }
 }
 
@@ -194,6 +195,19 @@ final class CleanupProposalsTests: XCTestCase {
         XCTAssertEqual(merged.count, 2)
         assertCut(merged[0], 1, 3, .filler, [4])
         assertCut(merged[1], 5, 6, .pause)
+    }
+
+    func testProposesIntoTheEditListWithoutRepeatingRejections() {
+        var list = EditList(sourceDuration: 10)
+        list.add(Cut(span: TimeSpan(start: 1, end: 2), reason: Cut.Reason.pause, state: .rejected))
+        let added = list.propose([
+            CutProposal(start: 1.2, end: 1.8, reason: .pause),
+            CutProposal(start: 4, end: 4.5, reason: .filler, wordIDs: [7]),
+        ])
+        XCTAssertEqual(added.count, 1)
+        XCTAssertEqual(added.first?.reason, Cut.Reason.filler)
+        XCTAssertEqual(added.first?.state, .proposed)
+        XCTAssertEqual(list.removedSpans, [], "proposals don't change the video until accepted")
     }
 
     func testWholeTake() {

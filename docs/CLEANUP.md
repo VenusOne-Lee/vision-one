@@ -21,6 +21,6 @@ Never proposed, because they carry meaning in South African English: "now now", 
 2. A filler cut runs from the start of the filler to 50 ms before the next word, so "I was, um, going" closes up to "I was, going".
 3. Word timestamps drift into silence, so when the mic loudness is available (`LoudnessEnvelope`, 10 ms RMS levels in dBFS) a pause is only cut inside the longest quiet run in the gap. The quiet threshold sits 12 dB above the take's noise floor. A gap where someone is talking but the transcript missed it is left alone.
 4. Cuts that overlap or sit less than 50 ms apart are merged, so "Ja, um," is one proposal.
-5. The app writes the proposals into `edits.json` as cuts with state `proposed`, skipping any you rejected before.
+5. `EditList.propose(_:)` adds the proposals to `edits.json` as cuts with state `proposed`, skipping any that overlap a cut already there, including ones you rejected, so running it again never brings them back.
 
 All thresholds are in `CleanupSettings`, and the word list is data in `FillerLexicon.standard`, so more languages can be added without code.
