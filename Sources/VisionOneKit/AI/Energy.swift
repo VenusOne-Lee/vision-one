@@ -29,13 +29,13 @@ public enum Energy: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .calm:
             return EnergyProfile(zoomsPerMinute: 1, punchIns: false, soundEffectsPerMinute: 0,
-                                 captionStyle: "clean", maxPause: 1.0, keptPause: 0.5, keepThreshold: 0.2)
+                                 captionStyle: .subtitle, maxPause: 1.0, keptPause: 0.5, keepThreshold: 0.2)
         case .lively:
             return EnergyProfile(zoomsPerMinute: 3, punchIns: false, soundEffectsPerMinute: 1.5,
-                                 captionStyle: "bold", maxPause: 0.7, keptPause: 0.35, keepThreshold: 0.3)
+                                 captionStyle: .wordByWord, maxPause: 0.7, keptPause: 0.35, keepThreshold: 0.3)
         case .viral:
             return EnergyProfile(zoomsPerMinute: 6, punchIns: true, soundEffectsPerMinute: 4,
-                                 captionStyle: "keywords", maxPause: 0.45, keptPause: 0.2, keepThreshold: 0.45)
+                                 captionStyle: .keyword, maxPause: 0.45, keptPause: 0.2, keepThreshold: 0.45)
         }
     }
 }
@@ -49,8 +49,8 @@ public struct EnergyProfile: Equatable, Sendable {
     public var punchIns: Bool
     /// Sound effects, always ducked under the voice.
     public var soundEffectsPerMinute: Double
-    /// Caption style id: "clean", "bold", "keywords" (keywords in ring colour).
-    public var captionStyle: String
+    /// Starting caption style (keywords are drawn in the ring colour).
+    public var captionStyle: CaptionStyle
     /// Pauses at least this long get shortened.
     public var maxPause: Double
     /// What a long pause is shortened to.
