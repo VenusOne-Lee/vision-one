@@ -50,8 +50,16 @@ final class AIServices: ObservableObject {
 
     let secrets = KeychainSecretStore()
     let chatGPT: ChatGPTSession
-    /// One gate for the whole app, so "Allow for this session" holds until quit.
-    let gate = OutboundGate(approver: PanelApprover())
+    /// Every agent job, for the Agent Desk's task list (saved to jobs.json).
+    let jobs: AgentJobBoard
+    /// One gate for the whole app, so "Allow for this session" holds until
+    /// quit. A job's approvals wait on its task; until the Agent Desk shows
+    /// those cards, the floating panel asks for them too.
+    let gate: OutboundGate
+    /// Start the agents on their own once a take is transcribed.
+    @Published var autoAgents: Bool {
+        didSet { UserDefaults.standard.set(autoAgents, forKey: "ai.autoAgents") }
+    }
 
     @Published var settings: AISettings {
         didSet { saveSettings() }
@@ -69,6 +77,10 @@ final class AIServices: ObservableObject {
 
     private init() {
         chatGPT = ChatGPTSession(store: secrets)
+        let board = AgentJobBoard(storeURL: AgentJobBoard.standardURL)
+        jobs = board
+        gate = OutboundGate(approver: board.approver(fallback: PanelApprover(), panelForJobs: true))
+        autoAgents = UserDefaults.standard.object(forKey: "ai.autoAgents") as? Bool ?? true
         if let data = UserDefaults.standard.data(forKey: "ai.settings"),
            let saved = try? JSONDecoder().decode(AISettings.self, from: data) {
             settings = saved
@@ -117,6 +129,40 @@ final class AIServices: ObservableObject {
 
     func ladder() -> AILadder {
         AILadder(providers: providers(), gate: gate, settings: settings)
+    }
+
+    func runner() -> AgentRunner {
+        AgentRunner(board: jobs, ladder: ladder())
+    }
+
+    /// The take's plan, or the purpose picked in "Before you record…".
+    func plan(for take: Take) -> TakePlan {
+        TakePlan.load(for: take)
+            ?? TakePlan(purpose: UserDefaults.standard.string(forKey: "ai.nextPurpose").flatMap(Purpose.named) ?? .demo)
+    }
+
+    /// The brief with the chosen prompt preset layered in.
+    func brief(for plan: TakePlan) -> AgentBrief {
+        let name = UserDefaults.standard.string(forKey: "ai.preset") ?? ""
+        return plan.purpose.brief(preset: PresetLibrary.standard.all().first { $0.name == name })
+    }
+
+    /// Called when a take's transcript is written: the Editor (and, by the
+    /// Energy dial, the Sharer and Clipper) start on their own. What they
+    /// make waits as dashed proposals with Keep and Undo.
+    func transcriptReady(for take: Take) {
+        guard autoAgents, Self.isRecent(take) else { return }
+        let takePlan = plan(for: take)
+        try? takePlan.write(for: take)
+        let runner = runner()
+        let brief = brief(for: takePlan)
+        Task { await runner.afterRecording(take, plan: takePlan, brief: brief) }
+    }
+
+    /// Old takes transcribed on launch don't wake the agents.
+    private static func isRecent(_ take: Take) -> Bool {
+        let created = (try? take.folder.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? Date()
+        return Date().timeIntervalSince(created) < 24 * 3600
     }
 
     /// Re-checks which rungs are ready, for Settings and the agents panel.

@@ -51,6 +51,11 @@ struct AISettingsView: View {
                 .font(.system(size: 12))
                 .toggleStyle(.checkbox)
 
+            Toggle("Start the agents after each recording (Calm tidies, Lively also writes posts, Viral also finds clips)",
+                   isOn: $ai.autoAgents)
+                .font(.system(size: 12))
+                .toggleStyle(.checkbox)
+
             if case let .failed(message) = signIn.phase {
                 EditorNotice(title: "Sign in with ChatGPT", message: message, isError: true)
             }

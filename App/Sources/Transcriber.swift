@@ -98,6 +98,7 @@ final class Transcriber: ObservableObject {
             try? AutoClean.run(on: take, transcript: transcript, sourceDuration: audio.videoDuration,
                                loudness: loudness)
             activity = .idle
+            AIServices.shared.transcriptReady(for: take)
         } catch {
             let message = Self.describe(error)
             if (error as? TakeAudio.ReadError) == .noAudio {
