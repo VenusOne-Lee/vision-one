@@ -2,27 +2,27 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
-/// One task's thread: the take, then each ask with the agent's plan,
-/// live status, approvals and receipts, and the composer at the bottom.
+/// One task's thread from the Desk: takes, asks, plans, replies,
+/// receipts and approvals, the live status line and the queue, with the
+/// composer at the bottom.
 struct TaskThreadView: View {
     @ObservedObject var model: HarnessModel
-    let take: Take
-
-    private var cells: [ThreadCell] {
-        TaskThread.cells(for: take, jobs: model.jobs(for: take), queued: model.queued[take.name] ?? [])
-    }
+    let task: DeskTask
 
     var body: some View {
-        let cells = self.cells
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Theme.Space.md) {
-                        ForEach(cells) { cell in
-                            ThreadCellView(cell: cell, model: model, take: take)
+                        ForEach(task.cells) { cell in
+                            ThreadCellView(cell: cell, task: task, model: model)
                                 .id(cell.id)
                         }
-                        if cells.count == 1 { firstSteps }
+                        if task.cells.count <= 2, task.take != nil { firstSteps }
+                        StatusCell(snapshot: model.snapshot, task: task) { model.stopRunning() }
+                        if !task.queued.isEmpty {
+                            QueuedCell(asks: task.queued) { model.editQueued(at: $0, to: nil) }
+                        }
                         Color.clear.frame(height: 1).id("end")
                     }
                     .frame(maxWidth: 720, alignment: .leading)
@@ -30,7 +30,7 @@ struct TaskThreadView: View {
                     .padding(.vertical, Theme.Space.lg)
                     .frame(maxWidth: .infinity)
                 }
-                .onChange(of: cells.map(\.id)) { _, _ in
+                .onChange(of: task.cells.count) { _, _ in
                     withAnimation(Theme.Motion.enter) { proxy.scrollTo("end", anchor: .bottom) }
                 }
                 .onAppear { proxy.scrollTo("end", anchor: .bottom) }
@@ -105,14 +105,9 @@ struct NewTaskView: View {
                 .foregroundStyle(Theme.text)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
-            FlowChips(chips: ["/record a launch demo", "Clips from my last video", "/copy a video's style",
+            FlowChips(chips: ["/record", "Clips from my last video", "/style",
                               "Write this week's update"]) { chip in
                 start(chip)
-            }
-            if !model.nextTakeAsks.isEmpty {
-                Notice(.info, lead: "Saved for your next recording",
-                       detail: model.nextTakeAsks.joined(separator: " · "))
-                    .frame(maxWidth: 560)
             }
             Composer(model: model, placeholder: "Describe a video, or press record")
                 .frame(maxWidth: 640)
@@ -124,7 +119,7 @@ struct NewTaskView: View {
     }
 
     private var projectSuffix: String {
-        guard model.project != ProjectBook.defaultID, let project = model.book.project(model.project) else { return "" }
+        guard let project = model.currentProject else { return "" }
         return " in \(project.name)"
     }
 
@@ -135,8 +130,7 @@ struct NewTaskView: View {
             model.open(newest)
             model.send("/clips 3")
         case "Write this week's update":
-            model.draft = "/record this week's update: "
-            model.focusComposer += 1
+            model.send("/script what's new this week")
         default:
             model.send(chip)
         }

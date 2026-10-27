@@ -75,7 +75,7 @@ struct Composer: View {
     private func acceptHighlighted() -> KeyPress.Result {
         guard let completion else { return .ignored }
         switch completion {
-        case let .commands(list): pick(list[min(highlighted, list.count - 1)].name)
+        case let .commands(list): pick("/" + list[min(highlighted, list.count - 1)].name)
         case let .takes(list): pick(list[min(highlighted, list.count - 1)].token)
         }
         return .handled
@@ -99,26 +99,25 @@ struct Composer: View {
 
     private var autonomyMenu: some View {
         Menu {
-            Button {
-                ai.autoAgents = true
-            } label: {
-                MenuCheck("Just do it", isOn: ai.autoAgents)
-            }
-            Button {
-                ai.autoAgents = false
-            } label: {
-                MenuCheck("Wait for me", isOn: !ai.autoAgents)
+            ForEach(AskMode.allCases, id: \.self) { mode in
+                Button {
+                    model.askMode = mode
+                } label: {
+                    MenuCheck(mode.title, isOn: model.askMode == mode)
+                }
             }
             Divider()
-            Text("Just do it: after you stop, the agents start on their own and leave dashed proposals to keep or undo.")
+            Text("Just do it: the agents start and leave dashed proposals to keep or undo.")
+            Text("Plan first: you see the plan and say yes before anything runs.")
         } label: {
-            ComposerPill(title: ai.autoAgents ? "Just do it" : "Wait for me", systemImage: "bolt")
+            ComposerPill(title: model.askMode.title,
+                         systemImage: model.askMode == .justDoIt ? "bolt" : "list.bullet")
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Whether the agents start on their own after you record")
+        .help("Just do it, or see a plan first")
     }
 
     private var whereMenu: some View {
@@ -216,8 +215,8 @@ struct CompletionList: View {
         VStack(alignment: .leading, spacing: 0) {
             switch completion {
             case let .commands(list):
-                ForEach(Array(list.enumerated()), id: \.element) { index, command in
-                    row(title: command.name, detail: command.summary, isOn: index == highlighted) { pick(command.name) }
+                ForEach(Array(list.enumerated()), id: \.element.name) { index, command in
+                    row(title: "/" + command.name, detail: command.summary, isOn: index == highlighted) { pick("/" + command.name) }
                 }
             case let .takes(list):
                 ForEach(Array(list.enumerated()), id: \.element.take.name) { index, candidate in

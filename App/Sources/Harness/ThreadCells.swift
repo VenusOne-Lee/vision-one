@@ -2,40 +2,89 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
-/// One block in a task's thread.
+/// One entry in a task's thread, from the Desk.
 struct ThreadCellView: View {
-    let cell: ThreadCell
+    let cell: TaskCell
+    let task: DeskTask
     @ObservedObject var model: HarnessModel
-    let take: Take
 
     var body: some View {
-        switch cell {
-        case let .take(take):
+        switch cell.kind {
+        case let .ask(text, mode):
+            AskBubble(text: text, at: cell.at, planFirst: mode == .planFirst)
+        case let .take(folder):
+            let take = Take(folder: folder)
             TakeThreadCard(take: take, title: model.title(of: take)) {
                 model.mode = .editor
             }
-        case let .ask(_, text, at):
-            AskBubble(text: text, at: at)
-        case let .plan(_, agent, steps):
-            PlanCell(agent: agent, steps: steps)
-        case let .status(jobID, line, since):
-            StatusCell(line: line, since: since) { model.stop(jobID) }
-        case let .approval(jobID, agent, approval):
-            ApprovalCard(agent: agent.title,
-                         question: TaskApprovalText.question(agent: agent, approval: approval),
-                         quote: approval.preview.isEmpty ? TaskApprovalText.detail(approval) : approval.preview,
-                         options: TaskApprovalText.options(agent: agent, approval: approval),
-                         feedbackOption: 2,
-                         onAnswer: { model.answer(jobID, $0, agent: agent) })
-        case let .receipt(jobID, agent, text, canKeep, canUndo, undone):
-            ReceiptCell(agent: agent, text: text, canKeep: canKeep, canUndo: canUndo, undone: undone,
+        case let .reply(agent, text):
+            AgentReply(agent: agent, text: text)
+        case let .log(text):
+            Text(text)
+                .textStyle(.caption)
+                .foregroundStyle(Theme.textFaint)
+        case let .plan(plan):
+            PlanCell(plan: plan, jobs: model.snapshot.jobs(for: task))
+        case let .receipt(jobID, agent, text):
+            let job = model.snapshot.jobs.first { $0.id == jobID }
+            let review = job?.state == .needsReview
+            ReceiptCell(agent: agent, text: text, canKeep: review,
+                        canUndo: review && !(job?.changes.isEmpty ?? true),
+                        undone: job?.state == .undone,
                         keep: { model.settle(jobID, keep: true) },
                         undo: { model.settle(jobID, keep: false) },
                         review: { model.updateLayout { $0.show(.changes) } })
-        case let .failed(_, agent, message):
+        case let .approval(card):
+            if card.isOpen {
+                ApprovalCard(agent: agent(for: card).title,
+                             question: card.question,
+                             quote: card.detail,
+                             options: card.options.map(\.label),
+                             feedbackOption: card.options.firstIndex { $0.effect == .deny },
+                             onAnswer: { model.answer(card, $0) })
+            } else {
+                AnsweredCard(card: card)
+            }
+        case let .failed(agent, message):
             Notice(.error, lead: "\(agent.title) didn't finish", detail: message)
-        case let .queued(asks):
-            QueuedCell(asks: asks) { model.dropQueued($0, on: take) }
+        }
+    }
+
+    private func agent(for card: ApprovalCardModel) -> AgentKind {
+        if case let .job(id) = card.subject, let job = model.snapshot.jobs.first(where: { $0.id == id }) {
+            return job.agent
+        }
+        return .producer
+    }
+}
+
+/// An approval once answered: the question and what you said, quietly.
+struct AnsweredCard: View {
+    let card: ApprovalCardModel
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.sm) {
+            Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.textMuted)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.question).textStyle(.caption).foregroundStyle(Theme.textMuted)
+                if let answer = card.answer, card.options.indices.contains(answer) {
+                    Text(card.options[answer].label + (card.note.map { ": \($0)" } ?? ""))
+                        .textStyle(.body)
+                }
+            }
+        }
+    }
+}
+
+/// An agent's short reply, on the left.
+struct AgentReply: View {
+    let agent: AgentKind
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(agent.title).textStyle(.label).foregroundStyle(Theme.textFaint)
+            Text(text).textStyle(.body).textSelection(.enabled)
         }
     }
 }
@@ -81,6 +130,7 @@ struct TakeThreadCard: View {
 struct AskBubble: View {
     let text: String
     let at: Date
+    var planFirst = false
 
     var body: some View {
         HStack {
@@ -93,84 +143,81 @@ struct AskBubble: View {
                 .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg)
                     .strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
-                .help(at.formatted(date: .abbreviated, time: .shortened))
+                .help(at.formatted(date: .abbreviated, time: .shortened) + (planFirst ? " · Plan first" : ""))
         }
     }
 }
 
-/// The agent's checklist: ticked when done, a spinner on the step it's
-/// on, dashed circles for what's still to come.
+/// The Producer's plan: one line per agent step, ticked when its job is
+/// done, a spinner on the one running, dashed circles for what's to come.
 struct PlanCell: View {
-    let agent: AgentKind
-    let steps: [AgentJob.Step]
+    let plan: DeskPlan
+    let jobs: [AgentJob]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("\(agent.title)'s plan").textStyle(.label).foregroundStyle(Theme.textFaint)
-            ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
+            Text(plan.inCopy ? "Plan · in a copy, the main cut stays as it is" : "Plan")
+                .textStyle(.label).foregroundStyle(Theme.textFaint)
+            ForEach(Array(plan.steps.enumerated()), id: \.offset) { _, step in
+                let state = self.state(of: step)
                 HStack(spacing: Theme.Space.sm) {
-                    mark(step.state)
+                    mark(state)
                         .frame(width: 14, height: 14)
                     Text(step.title)
                         .textStyle(.body)
-                        .foregroundStyle(step.state == .pending || step.state == .skipped ? Theme.textMuted : Theme.text)
-                        .strikethrough(step.state == .skipped)
+                        .foregroundStyle(state == nil ? Theme.textMuted : Theme.text)
+                    Text(step.agent.title)
+                        .textStyle(.caption)
+                        .foregroundStyle(Theme.textFaint)
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityValue(label(step.state))
             }
         }
     }
 
-    @ViewBuilder
-    private func mark(_ state: AgentJob.Step.State) -> some View {
-        switch state {
-        case .done:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.text)
-        case .running:
-            ProgressView().controlSize(.mini)
-        case .pending:
-            Circle().strokeBorder(Theme.textMuted, style: StrokeStyle(lineWidth: Theme.Stroke.hairline,
-                                                                      dash: Theme.Stroke.dashSmall))
-        case .skipped:
-            Image(systemName: "minus.circle").foregroundStyle(Theme.textMuted)
-        case .failed:
-            Image(systemName: "xmark.circle").foregroundStyle(Theme.error)
-        }
+    private func state(of step: DeskPlan.Step) -> AgentJob.State? {
+        step.jobID.flatMap { id in jobs.first { $0.id == id }?.state }
     }
 
-    private func label(_ state: AgentJob.Step.State) -> String {
+    @ViewBuilder
+    private func mark(_ state: AgentJob.State?) -> some View {
         switch state {
-        case .done: return "Done"
-        case .running: return "Working on it"
-        case .pending: return "Not started"
-        case .skipped: return "Skipped"
-        case .failed: return "Didn't work"
+        case .none, .queued?:
+            Circle().strokeBorder(Theme.textMuted, style: StrokeStyle(lineWidth: Theme.Stroke.hairline,
+                                                                      dash: Theme.Stroke.dashSmall))
+        case .running?, .needsApproval?:
+            ProgressView().controlSize(.mini)
+        case .needsReview?:
+            Circle().strokeBorder(Theme.text, style: StrokeStyle(lineWidth: Theme.Stroke.ring, dash: Theme.Stroke.dashSmall))
+        case .done?:
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.text)
+        case .undone?, .cancelled?:
+            Image(systemName: "minus.circle").foregroundStyle(Theme.textMuted)
+        case .failed?:
+            Image(systemName: "xmark.circle").foregroundStyle(Theme.error)
         }
     }
 }
 
-/// "Clipper · Finding moments (12s · Esc to stop)".
+/// "Clipper is making clips (12 s · Esc to stop)", ticking each second.
 struct StatusCell: View {
-    let line: String
-    let since: Date
+    let snapshot: DeskSnapshot
+    let task: DeskTask
     let stop: () -> Void
 
     var body: some View {
-        HStack(spacing: Theme.Space.sm) {
-            ProgressView().controlSize(.small)
-            TimelineView(.periodic(from: since, by: 1)) { context in
-                (Text(line).foregroundStyle(Theme.text)
-                    + Text("  (\(TaskThread.elapsed(since: since, now: context.date)) · Esc to stop)")
-                    .foregroundStyle(Theme.textMuted))
-                    .textStyle(.body)
-                    .monospacedDigit()
+        TimelineView(.periodic(from: Date(), by: 1)) { context in
+            if let line = snapshot.activity(of: task, now: context.date) {
+                HStack(spacing: Theme.Space.sm) {
+                    ProgressView().controlSize(.small)
+                    Text(line).textStyle(.body).monospacedDigit()
+                    Spacer(minLength: 0)
+                    Button("Stop", action: stop)
+                        .buttonStyle(PillButtonStyle(kind: .quiet, size: .small))
+                }
+                .accessibilityElement(children: .combine)
             }
-            Spacer(minLength: 0)
-            Button("Stop", action: stop)
-                .buttonStyle(PillButtonStyle(kind: .quiet, size: .small))
         }
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -232,17 +279,17 @@ struct ReceiptCell: View {
 /// Asks waiting for the agent that's working to finish.
 struct QueuedCell: View {
     let asks: [String]
-    let drop: (String) -> Void
+    let drop: (Int) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Queued · sent when the agent is free").textStyle(.label).foregroundStyle(Theme.textFaint)
-            ForEach(Array(asks.enumerated()), id: \.offset) { _, ask in
+            ForEach(Array(asks.enumerated()), id: \.offset) { index, ask in
                 HStack(spacing: Theme.Space.sm) {
                     Image(systemName: "clock").font(.system(size: 11)).foregroundStyle(Theme.textMuted)
                     Text(ask).textStyle(.body).foregroundStyle(Theme.textMuted).lineLimit(2)
                     Spacer(minLength: 0)
-                    IconButton("Remove from queue", systemImage: "xmark") { drop(ask) }
+                    IconButton("Remove from queue", systemImage: "xmark") { drop(index) }
                 }
             }
         }

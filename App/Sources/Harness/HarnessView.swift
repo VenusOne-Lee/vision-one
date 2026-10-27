@@ -67,7 +67,7 @@ struct HarnessView: View {
                     Text("Recording").textStyle(.label).foregroundStyle(Theme.text)
                 }
             }
-            if model.mode == .tasks, model.page.take != nil {
+            if model.mode == .tasks, model.workspace != nil {
                 IconButton(model.layout.isHidden ? "Show panel" : "Hide panel", systemImage: "sidebar.right",
                            shortcut: "⌥⌘B", isOn: !model.layout.isHidden) {
                     model.updateLayout { $0.isHidden.toggle() }
@@ -82,7 +82,7 @@ struct HarnessView: View {
     /// "My videos › RankRide launch demo"
     private var breadcrumb: some View {
         HStack(spacing: 6) {
-            Text(model.book.project(model.project)?.name ?? ProjectBook.defaultName)
+            Text(model.currentProject?.name ?? "My videos")
                 .textStyle(.label)
                 .foregroundStyle(Theme.textMuted)
                 .lineLimit(1)
@@ -102,14 +102,14 @@ struct HarnessView: View {
         switch model.page {
         case .newTask: return "New task"
         case .library: return "Library"
-        case let .task(take): return model.title(of: take)
+        case .task: return model.task?.title ?? "Task"
         }
     }
 
     /// Editor and Sound need a take: with none open, they open the newest.
     private var modeBinding: Binding<HarnessMode> {
         Binding(get: { model.mode }, set: { next in
-            if next != .tasks, model.page.take == nil {
+            if next != .tasks, model.workspace == nil {
                 guard let newest = model.takes.first else { return }
                 model.open(newest)
             }
@@ -160,19 +160,21 @@ struct HarnessView: View {
             NewTaskView(model: model)
         case .library:
             LibraryView { model.open($0) }
-        case let .task(take):
-            if let workspace = model.workspace, workspace.take == take {
+        case .task:
+            if let task = model.task {
                 HStack(spacing: 0) {
-                    TaskThreadView(model: model, take: take)
+                    TaskThreadView(model: model, task: task)
                         .frame(minWidth: 340, maxWidth: .infinity)
-                    if !model.layout.isHidden {
+                    // The panel needs a take; a task that's still a plan
+                    // or a script is just its thread.
+                    if let workspace = model.workspace, !model.layout.isHidden {
                         DragDivider(axis: .vertical, value: panelWidth, range: PanelLayout.minWidth...PanelLayout.maxWidth,
                                     inverted: true)
                         PanelHost(model: model, workspace: workspace) { fullPanel = $0 }
                             .frame(width: model.layout.width)
+                            .task(id: workspace.take.name) { await workspace.load() }
                     }
                 }
-                .task(id: take.name) { await workspace.load() }
             }
         }
     }

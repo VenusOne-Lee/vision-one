@@ -8,11 +8,11 @@ enum HarnessPage: Equatable {
     case newTask
     /// Every take, to search and pick from.
     case library
-    /// One take's thread and its panels.
-    case task(Take)
+    /// One task's thread and its panels.
+    case task(UUID)
 
-    var take: Take? {
-        if case let .task(take) = self { return take }
+    var taskID: UUID? {
+        if case let .task(id) = self { return id }
         return nil
     }
 }
@@ -61,51 +61,49 @@ final class TaskWorkspace: ObservableObject {
     }
 }
 
-/// The Codex-style frame's state: projects and their tasks, the agents'
-/// jobs, what's open, the panel layout for each task and the asks
-/// waiting for an agent to finish.
+/// The window's side of the Desk: what's open, the mode, the open take's
+/// models and the panel layout for each task. Projects, tasks, threads,
+/// queues and approvals all live in the Desk (AIServices.shared.desk),
+/// which the menu bar and the MCP server share.
 @MainActor
 final class HarnessModel: ObservableObject {
     static let shared = HarnessModel()
 
-    @Published private(set) var book: ProjectBook
+    @Published private(set) var snapshot = DeskSnapshot()
     @Published private(set) var takes: [Take] = []
     @Published private(set) var titles: [String: String] = [:]
-    @Published private(set) var jobs: [AgentJob] = []
     @Published var page: HarnessPage = .newTask {
         didSet { pageChanged(from: oldValue) }
     }
     @Published var mode: HarnessMode = .tasks
-    /// The project "New task" adds to.
-    @Published var project: UUID = ProjectBook.defaultID
+    /// The project New task adds to; nil until the Desk has one.
+    @Published var project: UUID?
     @Published private(set) var workspace: TaskWorkspace?
     @Published private(set) var panels: PanelLayoutBook
-    /// Asks typed while an agent was busy, by take folder name.
-    @Published private(set) var queued: [String: [String]] = [:]
-    /// Asks typed on New task, for the next recording.
-    @Published private(set) var nextTakeAsks: [String] = []
     @Published var problem: String?
-    /// What's typed in the composer, kept per window so approval cards
-    /// can start a reply ("No, and tell Sharer…").
+    /// What's typed in the composer.
     @Published var draft = ""
     /// Bumped to put the cursor in the composer.
     @Published var focusComposer = 0
+    /// Just do it or Plan first, for the next ask. Follows the open task.
+    @Published var askMode: AskMode = .justDoIt
 
-    private var watching: Task<Void, Never>?
-    private var knownTakes: Set<String> = []
-    /// Tasks whose ask was just handed to an agent, until the job ends,
-    /// so the queue doesn't send a second one before the first shows up.
-    private var starting: Set<String> = []
+    private var desk: Desk { AIServices.shared.desk }
+    private var watching: [Task<Void, Never>] = []
 
     private init() {
-        book = ProjectBook.load()
         panels = PanelLayoutBook.decode(UserDefaults.standard.data(forKey: "harness.panels"))
         refreshTakes()
-        knownTakes = Set(takes.map(\.name))
-        watchJobs()
+        watchDesk()
     }
 
-    // MARK: Takes and tasks
+    // MARK: Reading
+
+    var task: DeskTask? { page.taskID.flatMap { snapshot.task($0) } }
+
+    var currentProject: DeskProject? {
+        project.flatMap { snapshot.project($0) } ?? snapshot.projects.first
+    }
 
     func refreshTakes() {
         let latest = TakeLibrary.standard.takes()
@@ -113,96 +111,82 @@ final class HarnessModel: ObservableObject {
         for take in latest { names[take.name] = take.displayTitle() }
         if latest != takes { takes = latest }
         if names != titles { titles = names }
-        adoptNewTakes()
-        flushQueued()
     }
 
     func title(of take: Take) -> String { titles[take.name] ?? take.shortLabel() }
-
-    func jobs(for take: Take) -> [AgentJob] { jobs.filter { $0.takeFolder?.lastPathComponent == take.name } }
-
-    func tasks(in project: UUID) -> [TaskSummary] {
-        TaskSummary.sorted(book.takes(in: project, from: takes).map { take in
-            TaskSummary(take: take, title: title(of: take), jobs: jobs(for: take), recordedAt: take.recordedAt())
-        })
-    }
-
-    var needsYouCount: Int { Set(jobs.filter { $0.state.needsYou }.compactMap(\.takeFolder)).count }
 
     var mentionCandidates: [MentionCandidate] {
         takes.map { MentionCandidate(take: $0, title: title(of: $0)) }
     }
 
-    func open(_ take: Take, panel: PanelKind? = nil) {
-        if page.take != take { page = .task(take) }
+    // MARK: Opening
+
+    func open(_ taskID: UUID, panel: PanelKind? = nil) {
+        if page.taskID != taskID { page = .task(taskID) }
         if let panel { updateLayout { $0.show(panel) } }
     }
 
-    func rename(_ take: Take, to name: String) {
-        try? take.setTitle(name)
-        refreshTakes()
-    }
-
-    /// Takes recorded since launch land in the project New task was on.
-    private func adoptNewTakes() {
-        let fresh = takes.filter { !knownTakes.contains($0.name) }
-        guard !fresh.isEmpty else { return }
-        knownTakes.formUnion(fresh.map(\.name))
-        if project != ProjectBook.defaultID {
-            for take in fresh { book.move(take, to: project) }
-            saveBook()
+    /// A take's task, made if the take has none yet (one recorded before
+    /// tasks existed, or picked from the Library).
+    func open(_ take: Take, panel: PanelKind? = nil) {
+        if let existing = snapshot.tasks.first(where: { $0.takeFolders.contains(take.folder) }) {
+            open(existing.id, panel: panel)
+            return
         }
-        if let newest = fresh.first, !nextTakeAsks.isEmpty {
-            queued[newest.name, default: []].append(contentsOf: nextTakeAsks)
-            nextTakeAsks = []
+        let desk = self.desk
+        let project = self.project
+        Task {
+            let task = await desk.taskForRecording(take, in: project)
+            self.snapshot = await desk.snapshot
+            self.open(task.id, panel: panel)
         }
     }
 
-    // MARK: Projects
+    // MARK: Projects and tasks
 
     func addProject() {
-        let added = book.add(named: "New project")
-        saveBook()
-        project = added.id
-        page = .newTask
+        let desk = self.desk
+        Task {
+            let made = await desk.newProject("New project")
+            self.project = made.id
+            self.page = .newTask
+        }
     }
 
     func renameProject(_ id: UUID, to name: String) {
-        book.rename(id, to: name)
-        saveBook()
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        let desk = self.desk
+        Task { await desk.updateProject(id) { $0.name = clean } }
     }
 
-    func deleteProject(_ id: UUID) {
-        book.delete(id)
-        if project == id { project = ProjectBook.defaultID }
-        saveBook()
+    func renameTask(_ id: UUID, to name: String) {
+        let desk = self.desk
+        Task { await desk.rename(id, to: name) }
     }
 
-    func move(_ take: Take, to id: UUID) {
-        book.move(take, to: id)
-        saveBook()
+    func move(_ taskID: UUID, to projectID: UUID) {
+        let desk = self.desk
+        Task { await desk.move(taskID, to: projectID) }
     }
 
-    func reorderProjects(from source: IndexSet, to destination: Int) {
-        book.reorder(from: source, to: destination)
-        saveBook()
-    }
-
-    private func saveBook() {
-        do { try book.save() } catch { problem = "Couldn't save your projects: \(error.localizedDescription)" }
+    func archive(_ taskID: UUID) {
+        if page.taskID == taskID { page = .newTask }
+        let desk = self.desk
+        Task { await desk.archive(taskID) }
     }
 
     // MARK: Panels
 
     var layout: PanelLayout {
-        page.take.map { panels.layout(for: $0.name) } ?? panels.last
+        page.taskID.map { panels.layout(for: $0.uuidString) } ?? panels.last
     }
 
     func updateLayout(_ change: (inout PanelLayout) -> Void) {
         var next = layout
         change(&next)
-        if let take = page.take {
-            panels.set(next, for: take.name)
+        if let id = page.taskID {
+            panels.set(next, for: id.uuidString)
         } else {
             panels.last = next
         }
@@ -211,181 +195,166 @@ final class HarnessModel: ObservableObject {
 
     // MARK: Asking
 
-    /// Reads the composer: / commands, @takes, or plain words for the
-    /// Editor. Agents busy on the task? The ask waits in the queue.
+    /// The composer's Send. @take points the ask at that take's task;
+    /// on New task it starts a task. Commands the window handles itself
+    /// (/record, /edit, /captions…) open here.
     func send(_ raw: String) {
         let input = ComposerInput.parse(raw, candidates: mentionCandidates)
-        guard !input.isEmpty else { return }
-        let take = input.mentions.first ?? page.take
-        if let take, page.take != take { page = .task(take) }
+        let text = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if case let .open(name) = AskRouter.route(text) {
+            if let take = input.mentions.first { open(take) }
+            openCommand(name, rest: text)
+            return
+        }
+        let desk = self.desk
+        if let take = input.mentions.first {
+            Task {
+                let task = await desk.taskForRecording(take, in: self.project)
+                await desk.submit(text, to: task.id, mode: self.askMode)
+                self.open(task.id)
+            }
+        } else if let id = page.taskID {
+            let mode = askMode
+            Task { await desk.submit(text, to: id, mode: mode) }
+        } else {
+            // New task: with no take it's a plan or a script; the Producer
+            // starts on it and the recording joins the task later.
+            let mode = askMode
+            let project = self.project
+            Task {
+                let task = await desk.newTask(in: project, ask: text, mode: mode)
+                self.open(task.id)
+            }
+        }
+    }
 
-        switch input.command {
-        case .record:
-            if !input.text.isEmpty { nextTakeAsks.append(input.text) }
+    private func openCommand(_ name: String, rest: String) {
+        switch name {
+        case "record":
             Task { await ScreenRecorder.shared.toggle() }
-        case .edit, .sound:
-            if page.take == nil, let newest = takes.first { open(newest) }
-            if page.take != nil { mode = input.command == .edit ? .editor : .sound }
-        case .review:
+        case "edit":
+            if workspace != nil { mode = .editor }
+        case "sound":
+            if workspace != nil { mode = .sound }
+        case "review":
             mode = .tasks
             updateLayout { $0.show(.changes) }
-        case .copy:
-            CopyStyleWindowController.shared.show()
-        case .captions:
-            if let take {
+        case "captions":
+            if let take = workspace?.take {
                 var settings = take.loadCaptionSettings()
                 settings.isOn = true
                 try? take.saveCaptionSettings(settings)
-                updateLayout { $0.show(.captions) }
             }
-        case .music:
-            // The music picker lives in the Sound panel.
+            updateLayout { $0.show(.captions) }
+        case "music":
             updateLayout { $0.show(.sound) }
-        case .style:
-            updateLayout { $0.show(.formats) }
-        case .clips, .share, .cut, nil:
-            guard let take else {
-                // Nothing recorded yet: keep it for the next take.
-                nextTakeAsks.append(raw.trimmingCharacters(in: .whitespaces))
-                return
-            }
-            enqueueOrRun(raw, on: take)
+        case "style":
+            CopyStyleWindowController.shared.show()
+        default:
+            problem = "There's no /\(name) command. Type / to see them all."
         }
     }
 
-    private func enqueueOrRun(_ raw: String, on take: Take) {
-        let busy = TaskThread.isBusy(jobs(for: take)) || starting.contains(take.name)
-        let ready = FileManager.default.fileExists(atPath: take.transcriptURL.path)
-        if busy || !ready {
-            queued[take.name, default: []].append(raw)
-        } else {
-            run(raw, on: take)
-        }
-    }
-
-    /// Sends the oldest waiting ask of each task whose agents are free and
-    /// whose transcript is in.
-    private func flushQueued() {
-        for (name, asks) in queued where !asks.isEmpty {
-            guard let take = takes.first(where: { $0.name == name }),
-                  !TaskThread.isBusy(jobs(for: take)), !starting.contains(name),
-                  FileManager.default.fileExists(atPath: take.transcriptURL.path) else { continue }
-            var rest = asks
-            let next = rest.removeFirst()
-            queued[name] = rest.isEmpty ? nil : rest
-            run(next, on: take)
-        }
-    }
-
-    func dropQueued(_ ask: String, on take: Take) {
-        queued[take.name]?.removeAll { $0 == ask }
-        if queued[take.name]?.isEmpty == true { queued[take.name] = nil }
-    }
-
-    private func run(_ raw: String, on take: Take) {
-        let input = ComposerInput.parse(raw, candidates: mentionCandidates)
-        let ai = AIServices.shared
-        let plan = ai.plan(for: take)
-        let brief = ai.brief(for: plan)
-        let runner = ai.runner()
-        let text = input.text
-        starting.insert(take.name)
-        Task {
-            defer {
-                starting.remove(take.name)
-                flushQueued()
-            }
-            switch input.command {
-            case .clips:
-                let count = text.firstMatch(of: #/\d+/#).flatMap { Int($0.output) }.map { min(10, max(1, $0)) } ?? 3
-                _ = await runner.clips(take, brief: brief, count: count)
-            case .share:
-                let lowered = text.lowercased()
-                _ = await runner.share(take, brief: brief, launch: lowered.contains("version one") || lowered.contains("launch"))
-            default:
-                _ = await runner.edit(take, brief: brief, goal: EditorAgent.Goal.parse(text.isEmpty ? raw : text),
-                                  energy: plan.energy, title: text.isEmpty ? nil : Self.short(text))
-            }
-        }
-    }
-
-    static func short(_ text: String) -> String {
-        let one = text.prefix(1).uppercased() + text.dropFirst()
-        return one.count > 48 ? String(one.prefix(47)) + "…" : one
+    /// ↑ in the composer, or × on a queued ask.
+    func editQueued(at index: Int, to text: String?) {
+        guard let id = page.taskID else { return }
+        let desk = self.desk
+        Task { await desk.editQueued(id, at: index, to: text) }
     }
 
     // MARK: Approvals, keep and undo
+
+    /// A numbered answer on a card, with the note after a no.
+    func answer(_ card: ApprovalCardModel, _ answer: ApprovalAnswer) {
+        guard let taskID = page.taskID else { return }
+        let effect: ApprovalOption.Effect
+        let note: String?
+        switch answer {
+        case .yes: effect = .allowOnce; note = nil
+        case .yesAlways: effect = .allowAlways; note = nil
+        case let .no(feedback): effect = .deny; note = feedback.isEmpty ? nil : feedback
+        }
+        let choice = card.options.firstIndex { $0.effect == effect } ?? card.preselected
+        let desk = self.desk
+        Task { await desk.answer(card.id, in: taskID, choice: choice, note: note) }
+    }
 
     /// Keep makes the job's dashed proposals solid; Undo takes them out.
     /// With the take open, the cuts go through its editor first, so ⌘Z
     /// brings them back and the editor never writes stale cuts over them.
     func settle(_ jobID: UUID, keep: Bool) {
-        guard let job = jobs.first(where: { $0.id == jobID }) else { return }
-        if let workspace, workspace.take.name == job.takeFolder?.lastPathComponent {
+        guard let job = snapshot.jobs.first(where: { $0.id == jobID }) else { return }
+        let here = workspace.flatMap { $0.take.folder.lastPathComponent == job.takeFolder?.lastPathComponent ? $0 : nil }
+        if let here {
             let cuts = job.changes.compactMap { change -> UUID? in
                 if case let .cut(id) = change { return id }
                 return nil
             }
-            workspace.editor.settleAgentCuts(cuts, keep: keep, agent: job.agent.title)
+            here.editor.settleAgentCuts(cuts, keep: keep, agent: job.agent.title)
         }
-        let board = AIServices.shared.jobs
+        let desk = self.desk
         Task {
             do {
-                if keep { try await board.keep(jobID) } else { try await board.undo(jobID) }
+                if keep { try await desk.keep(jobID) } else { try await desk.undo(jobID) }
             } catch {
-                problem = "Couldn't \(keep ? "keep" : "undo") it: \(error.localizedDescription)"
+                self.problem = "Couldn't \(keep ? "keep" : "undo") it: \(error.localizedDescription)"
             }
-            if let workspace, workspace.take.name == job.takeFolder?.lastPathComponent { await workspace.clips.load() }
+            if let here { await here.clips.load() }
         }
     }
 
-    /// An answer on a task's approval card. "No" with a note sends the
-    /// note back to the same agent as a new ask; without one, the cursor
-    /// goes to the composer.
-    func answer(_ jobID: UUID, _ answer: ApprovalAnswer, agent: AgentKind) {
-        let board = AIServices.shared.jobs
-        Task { await board.resolveApproval(jobID: jobID, decision: answer.decision) }
-        guard !answer.isYes else { return }
-        if let note = answer.feedback, let take = page.take {
-            let prefix = agent == .clipper ? "/clips " : (agent == .sharer ? "/share " : "")
-            enqueueOrRun(prefix + note, on: take)
-        } else {
-            focusComposer += 1
-        }
-    }
-
-    func stop(_ jobID: UUID) {
-        let board = AIServices.shared.jobs
-        Task { await board.cancel(jobID) }
-    }
-
-    /// Stops whatever is running on the open task (Esc in the thread).
+    /// Esc: stops what's running on the open task and drops its queue.
     func stopRunning() {
-        guard let take = page.take else { return }
-        for job in jobs(for: take) where job.state == .queued || job.state == .running { stop(job.id) }
+        guard let id = page.taskID,
+              let task, snapshot.status(of: task) == .working else { return }
+        let desk = self.desk
+        Task { await desk.stop(id) }
     }
 
     // MARK: Private
 
-    private func watchJobs() {
-        let board = AIServices.shared.jobs
-        watching = Task { [weak self] in
-            for await jobs in await board.updates() {
+    private func watchDesk() {
+        let desk = self.desk
+        watching.append(Task { [weak self] in
+            for await snapshot in await desk.updates() {
                 guard let self else { return }
-                self.jobs = jobs
-                self.flushQueued()
+                self.snapshot = snapshot
+                if self.project == nil { self.project = snapshot.projects.first?.id }
+                self.syncWorkspace()
             }
-        }
+        })
+        watching.append(Task { [weak self] in
+            for await id in await desk.openRequests() {
+                guard let self else { return }
+                self.mode = .tasks
+                self.open(id)
+                EditorWindowController.shared.show()
+            }
+        })
     }
 
     private func pageChanged(from old: HarnessPage) {
-        guard old.take != page.take else { return }
+        if page.taskID == nil { mode = .tasks }
+        if let task {
+            project = task.projectID
+            askMode = task.mode
+        }
+        syncWorkspace()
+    }
+
+    /// The open task's latest take gets an editor; nothing else does.
+    private func syncWorkspace() {
+        let take = task?.take
+        guard workspace?.take != take else { return }
         workspace?.close()
-        workspace = page.take.map(TaskWorkspace.init(take:))
-        if page.take == nil { mode = .tasks }
-        if let take = page.take { project = book.projectID(for: take) }
+        workspace = take.map(TaskWorkspace.init(take:))
+        if workspace == nil, mode != .tasks { mode = .tasks }
     }
 
     /// For the window's ⌘Z.
     var undoManager: UndoManager? { workspace?.editor.undoManager }
 }
+
+/// The Desk's approval card, named apart from the share thread's
+/// ApprovalCard view that draws it.
+typealias ApprovalCardModel = VisionOneKit.ApprovalCard

@@ -1,62 +1,5 @@
 import Foundation
 
-/// The / commands in the composer. Each one is a shortcut for something
-/// you could also say in words.
-public enum HarnessCommand: String, CaseIterable, Sendable {
-    case record, cut, captions, clips, music, sound, edit, style, copy, review, share
-
-    public var name: String { "/" + rawValue }
-
-    /// One line in the / menu.
-    public var summary: String {
-        switch self {
-        case .record: return "Record your screen"
-        case .cut: return "Cut fillers, pauses and weak bits"
-        case .captions: return "Add captions"
-        case .clips: return "Find short clips"
-        case .music: return "Add music under the voice"
-        case .sound: return "Open the Sound mode"
-        case .edit: return "Open the Editor mode"
-        case .style: return "Apply a saved style"
-        case .copy: return "Copy a video's style from a link"
-        case .review: return "Show what needs your yes or no"
-        case .share: return "Write the title, chapters and posts"
-        }
-    }
-
-    /// What the field shows after the command is picked.
-    public var hint: String {
-        switch self {
-        case .record: return "what you're recording, if you like"
-        case .cut: return "a length, like 60s"
-        case .captions: return "a style, if you like"
-        case .clips: return "how many, like 3"
-        case .music: return "a mood, like calm"
-        case .sound, .edit, .review: return ""
-        case .style: return "a style's name"
-        case .copy: return "a video link"
-        case .share: return "where, like Version One"
-        }
-    }
-
-    /// Who does it, for the status line and the "No, and tell …" option.
-    public var agent: AgentKind? {
-        switch self {
-        case .cut, .captions, .music, .style: return .editor
-        case .clips: return .clipper
-        case .share: return .sharer
-        case .record, .copy: return .producer
-        case .sound, .edit, .review: return nil
-        }
-    }
-
-    /// Commands whose name starts with what was typed after the slash.
-    public static func matching(_ prefix: String) -> [HarnessCommand] {
-        let p = prefix.lowercased()
-        return allCases.filter { $0.rawValue.hasPrefix(p) }
-    }
-}
-
 /// A take the composer can @mention.
 public struct MentionCandidate: Equatable, Sendable {
     public var take: Take
@@ -78,41 +21,30 @@ public struct MentionCandidate: Equatable, Sendable {
     }
 }
 
-/// What the builder typed, read into a command, the words, and the takes
-/// they @mentioned.
+/// What the builder typed, with the takes they @mentioned taken out, so
+/// the Desk gets the words and the window knows which take it's about.
 public struct ComposerInput: Equatable, Sendable {
-    public var command: HarnessCommand?
-    /// Everything that isn't the command or a mention.
+    /// Everything that isn't a mention, slash command included.
     public var text: String
     public var mentions: [Take]
 
-    public init(command: HarnessCommand? = nil, text: String, mentions: [Take] = []) {
-        self.command = command
+    public init(text: String, mentions: [Take] = []) {
         self.text = text
         self.mentions = mentions
     }
 
-    public var isEmpty: Bool { command == nil && text.isEmpty && mentions.isEmpty }
-
     /// "/clips 3 @launch-demo make them punchy".
     public static func parse(_ raw: String, candidates: [MentionCandidate]) -> ComposerInput {
-        var tokens = raw.split(whereSeparator: \.isWhitespace).map(String.init)
-        var command: HarnessCommand?
-        if let first = tokens.first, first.hasPrefix("/"),
-           let match = HarnessCommand(rawValue: String(first.dropFirst()).lowercased()) {
-            command = match
-            tokens.removeFirst()
-        }
         var mentions: [Take] = []
         var words: [String] = []
-        for token in tokens {
+        for token in raw.split(whereSeparator: \.isWhitespace).map(String.init) {
             if token.hasPrefix("@"), token.count > 1, let take = resolve(token, in: candidates) {
                 if !mentions.contains(take) { mentions.append(take) }
             } else {
                 words.append(token)
             }
         }
-        return ComposerInput(command: command, text: words.joined(separator: " "), mentions: mentions)
+        return ComposerInput(text: words.joined(separator: " "), mentions: mentions)
     }
 
     /// An exact token wins; else the take's folder name; else the one
@@ -128,7 +60,7 @@ public struct ComposerInput: Equatable, Sendable {
 
 /// What the pop-up above the composer offers for the word being typed.
 public enum ComposerCompletion: Equatable, Sendable {
-    case commands([HarnessCommand])
+    case commands([SlashCommand])
     case takes([MentionCandidate])
 
     /// Looks at the last word: "/cl" offers /clips, "@rank" offers takes.
@@ -137,7 +69,7 @@ public enum ComposerCompletion: Equatable, Sendable {
         guard let last = raw.last, !last.isWhitespace else { return nil }
         let word = String(raw.split(whereSeparator: \.isWhitespace).last ?? "")
         if word.hasPrefix("/"), raw.drop(while: \.isWhitespace) == word {
-            let found = HarnessCommand.matching(String(word.dropFirst()))
+            let found = SlashCommand.matching(word)
             return found.isEmpty ? nil : .commands(found)
         }
         if word.hasPrefix("@") {

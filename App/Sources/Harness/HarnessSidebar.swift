@@ -36,10 +36,10 @@ struct HarnessSidebar: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(model.book.projects) { project in
+                    ForEach(model.snapshot.projects) { project in
                         projectHeader(project)
                         if !collapsed.contains(project.id) {
-                            let tasks = model.tasks(in: project.id)
+                            let tasks = model.snapshot.tasks(in: project)
                             if tasks.isEmpty {
                                 Text("No tasks yet")
                                     .textStyle(.caption)
@@ -48,12 +48,20 @@ struct HarnessSidebar: View {
                                     .padding(.vertical, 4)
                             }
                             ForEach(tasks) { task in
-                                TaskRow(task: task, isSelected: model.page.take == task.take)
-                                    .onTapGesture { model.open(task.take) }
-                                    .draggable(task.take.name)
+                                TaskRow(title: task.title, status: model.snapshot.status(of: task),
+                                        line: model.snapshot.statusLine(of: task),
+                                        isSelected: model.page.taskID == task.id)
+                                    .onTapGesture { model.open(task.id) }
+                                    .draggable(task.id.uuidString)
                                     .contextMenu { taskMenu(task) }
                             }
                         }
+                    }
+                    if model.snapshot.projects.isEmpty {
+                        Text("Record something and its task shows up here.")
+                            .textStyle(.caption)
+                            .foregroundStyle(Theme.textMuted)
+                            .padding(Theme.Space.sm)
                     }
                 }
                 .padding(.horizontal, Theme.Space.sm)
@@ -66,8 +74,9 @@ struct HarnessSidebar: View {
                     SettingsWindowController.shared.show()
                 }
                 Spacer()
-                if model.needsYouCount > 0 {
-                    Text("\(model.needsYouCount) need\(model.needsYouCount == 1 ? "s" : "") you")
+                let waiting = model.snapshot.needsYou.count
+                if waiting > 0 {
+                    Text("\(waiting) need\(waiting == 1 ? "s" : "") you")
                         .textStyle(.caption)
                         .foregroundStyle(Theme.textMuted)
                 }
@@ -91,7 +100,7 @@ struct HarnessSidebar: View {
     }
 
     @ViewBuilder
-    private func projectHeader(_ project: HarnessProject) -> some View {
+    private func projectHeader(_ project: DeskProject) -> some View {
         let isOpen = !collapsed.contains(project.id)
         HStack(spacing: 6) {
             Image(systemName: "chevron.right")
@@ -118,37 +127,30 @@ struct HarnessSidebar: View {
         }
         .padding(.horizontal, Theme.Space.sm)
         .frame(height: 28)
-        .background(model.project == project.id && model.page == .newTask ? Theme.paper : .clear,
+        .background(model.currentProject?.id == project.id && model.page == .newTask ? Theme.paper : .clear,
                     in: RoundedRectangle(cornerRadius: Theme.Radius.md))
         .contentShape(Rectangle())
         .onTapGesture {
             toggle(project.id)
             model.project = project.id
         }
-        .dropDestination(for: String.self) { names, _ in
-            for name in names {
-                if let take = model.takes.first(where: { $0.name == name }) { model.move(take, to: project.id) }
-            }
-            return !names.isEmpty
+        .dropDestination(for: String.self) { ids, _ in
+            for id in ids.compactMap(UUID.init(uuidString:)) { model.move(id, to: project.id) }
+            return !ids.isEmpty
         }
         .contextMenu {
             Button("New task here") {
                 model.project = project.id
                 model.page = .newTask
             }
-            if project.id != ProjectBook.defaultID {
-                Button("Rename…") { startRenaming(project) }
-                Divider()
-                Button("Delete project", role: .destructive) { model.deleteProject(project.id) }
-                    .help("Its tasks go back to My videos")
-            }
+            Button("Rename…") { startRenaming(project) }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(isOpen ? "Folds the project" : "Shows the project's tasks")
     }
 
-    private func startRenaming(_ project: HarnessProject) {
+    private func startRenaming(_ project: DeskProject) {
         draft = project.name
         renaming = project.id
         DispatchQueue.main.async { nameFocused = true }
@@ -160,20 +162,24 @@ struct HarnessSidebar: View {
     }
 
     @ViewBuilder
-    private func taskMenu(_ task: TaskSummary) -> some View {
-        Button("Open") { model.open(task.take) }
+    private func taskMenu(_ task: DeskTask) -> some View {
+        Button("Open") { model.open(task.id) }
         Button("Open in Editor") {
-            model.open(task.take)
+            model.open(task.id)
             model.mode = .editor
         }
+        .disabled(task.take == nil)
         Menu("Move to") {
-            ForEach(model.book.projects) { project in
-                Button(project.name) { model.move(task.take, to: project.id) }
-                    .disabled(model.book.projectID(for: task.take) == project.id)
+            ForEach(model.snapshot.projects) { project in
+                Button(project.name) { model.move(task.id, to: project.id) }
+                    .disabled(task.projectID == project.id)
             }
         }
+        if let take = task.take {
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([take.screenURL]) }
+        }
         Divider()
-        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([task.take.screenURL]) }
+        Button("Archive") { model.archive(task.id) }
     }
 }
 
@@ -222,26 +228,28 @@ struct SidebarButton: View {
 
 /// One task under its project: title, where it's up to, and a mark:
 /// a spinner while an agent works, a dashed ring while something waits
-/// for you (proposed), nothing once it's settled.
+/// for you (proposed), a solid one once it's done.
 struct TaskRow: View {
-    let task: TaskSummary
+    let title: String
+    let status: TaskStatus
+    let line: String
     let isSelected: Bool
     @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: Theme.Space.sm) {
-            TaskMark(state: task.state)
+            TaskMark(status: status)
                 .frame(width: 14, height: 14)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 1) {
-                Text(task.title)
+                Text(title)
                     .textStyle(isSelected ? .bodyStrong : .body)
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Text(subtitle)
+                Text(line)
                     .textStyle(.caption)
-                    .foregroundStyle(task.state == .failed ? Theme.error : Theme.textMuted)
+                    .foregroundStyle(status == .failed ? Theme.error : Theme.textMuted)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -259,39 +267,32 @@ struct TaskRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
+        .accessibilityValue(status.title)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-
-    private var subtitle: String {
-        if let detail = task.detail { return detail }
-        guard let date = task.updatedAt else { return "Recorded" }
-        return date.formatted(.relative(presentation: .named))
     }
 }
 
-/// The mark before a task: working, needs you, didn't finish, or settled.
+/// The ring before a task: needs you, working, ready, done, didn't finish.
 struct TaskMark: View {
-    let state: TaskState
+    let status: TaskStatus
 
     var body: some View {
-        switch state {
+        switch status {
         case .working:
             ProgressView().controlSize(.mini)
-                .accessibilityLabel("Working")
         case .needsYou:
             Circle()
                 .strokeBorder(Theme.text, style: StrokeStyle(lineWidth: Theme.Stroke.ring, dash: Theme.Stroke.dashSmall))
                 .overlay(Circle().fill(Theme.text).padding(4))
-                .accessibilityLabel("Needs you")
+        case .ready:
+            Circle()
+                .strokeBorder(Theme.text, style: StrokeStyle(lineWidth: Theme.Stroke.ring, dash: Theme.Stroke.dashSmall))
+        case .done:
+            Circle().strokeBorder(Theme.text, lineWidth: Theme.Stroke.ring)
         case .failed:
             Image(systemName: "exclamationmark.circle")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.error)
-                .accessibilityLabel("Didn't finish")
-        case .idle:
-            Circle()
-                .strokeBorder(Theme.lineStrong, lineWidth: Theme.Stroke.hairline)
-                .accessibilityHidden(true)
         }
     }
 }
@@ -312,15 +313,18 @@ struct TaskRail: View {
                     model.page = .newTask
                 }
                 Rectangle().fill(Theme.line).frame(width: 24, height: Theme.Stroke.hairline)
-                ScrollView(showsIndicators: false) {
+                ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 6) {
-                        ForEach(model.tasks(in: model.project)) { task in
-                            Button { model.open(task.take) } label: {
-                                RailItem(task: task, isSelected: model.page.take == task.take)
+                        if let project = model.currentProject {
+                            ForEach(model.snapshot.tasks(in: project)) { task in
+                                Button { model.open(task.id) } label: {
+                                    RailItem(title: task.title, status: model.snapshot.status(of: task),
+                                             isSelected: model.page.taskID == task.id)
+                                }
+                                .buttonStyle(.plain)
+                                .help("\(task.title) · \(model.snapshot.statusLine(of: task))")
+                                .accessibilityLabel(task.title)
                             }
-                            .buttonStyle(.plain)
-                            .help("\(task.title)\(task.detail.map { " · \($0)" } ?? "")")
-                            .accessibilityLabel(task.title)
                         }
                     }
                 }
@@ -334,7 +338,8 @@ struct TaskRail: View {
 }
 
 private struct RailItem: View {
-    let task: TaskSummary
+    let title: String
+    let status: TaskStatus
     let isSelected: Bool
 
     var body: some View {
@@ -348,8 +353,8 @@ private struct RailItem: View {
                     RoundedRectangle(cornerRadius: Theme.Radius.md)
                         .strokeBorder(isSelected ? Theme.text : Theme.line, lineWidth: Theme.Stroke.hairline)
                 )
-            if task.state != .idle {
-                TaskMark(state: task.state)
+            if status != .done {
+                TaskMark(status: status)
                     .frame(width: 12, height: 12)
                     .background(Theme.paper, in: Circle())
                     .offset(x: 3, y: 3)
@@ -358,7 +363,7 @@ private struct RailItem: View {
     }
 
     private var initials: String {
-        let words = task.title.split(separator: " ").prefix(2)
+        let words = title.split(separator: " ").prefix(2)
         return words.compactMap(\.first).map { String($0).uppercased() }.joined()
     }
 }
