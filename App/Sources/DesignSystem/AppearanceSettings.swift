@@ -61,7 +61,7 @@ struct AppearanceSettingsView: View {
 
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
                 Text("Accent · your ring").textStyle(.label).foregroundStyle(Theme.textMuted)
-                RingPicker(selection: appearance.accent)
+                AccentRingPicker(selection: appearance.accent)
             }
 
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
@@ -207,7 +207,7 @@ private struct PresetCard: View {
 // MARK: Ring picker
 
 /// The six ring colours, plus any colour from the system picker.
-struct RingPicker: View {
+struct AccentRingPicker: View {
     @Binding var selection: UInt32
 
     struct Ring: Identifiable {
