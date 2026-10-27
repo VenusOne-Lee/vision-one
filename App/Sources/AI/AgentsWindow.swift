@@ -100,15 +100,26 @@ final class AgentsModel: ObservableObject {
         }
     }
 
-    func runSharer() {
-        sharerRun = .running("Writing a title, chapters and posts…")
+    /// `note` is what you told the Sharer to do differently on an
+    /// approval card; `launch` asks for the Version One fields whatever
+    /// the take is for.
+    func runSharer(note: String? = nil, launch: Bool = false) {
+        sharerRun = .running(note == nil ? "Writing a title, chapters and posts…" : "Writing it again…")
         let agent = SharerAgent(ladder: AIServices.shared.ladder())
+        var brief = brief
+        if let note, !note.isEmpty {
+            let post = brief.parts["post"].map { $0 + "\n" } ?? ""
+            brief.parts["post"] = post + "The builder read the last draft and asked: \(note)"
+        }
+        let product = BrandStore.shared.kit.name
+        let wantsLaunch = launch || purpose.id == "launch" || purpose.id == "update"
         Task {
             do {
                 let transcript = try Transcript.read(from: take.transcriptURL)
                 let edits = try EditList.load(from: take.editsURL, sourceDuration: transcript.duration)
                 let pack = try await agent.draft(transcript: transcript, edits: edits, brief: brief,
-                                                 launch: purpose.id == "launch" || purpose.id == "update")
+                                                 product: product.isEmpty ? nil : product,
+                                                 launch: wantsLaunch)
                 try pack.write(for: take)
                 share = pack
                 sharerRun = .done("")
@@ -136,9 +147,7 @@ final class AgentsModel: ObservableObject {
     /// after approval. Posting straight through Version One's MCP comes with
     /// the Vision One MCP server.
     func launchOnVersionOne() {
-        guard let launch = share?.launch else { return }
-        let text = [launch.name, launch.oneLine, launch.whoItsFor.map { "For: \($0)" }]
-            .compactMap { $0 }.joined(separator: "\n")
+        guard let text = share?.launch?.postText else { return }
         Task {
             do {
                 try await SharerAgent.approvePost(text, to: "versionone.co.za", network: "version one",
