@@ -1,0 +1,49 @@
+name: VisionOne
+options:
+  bundleIdPrefix: za.co.versionone
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+packages:
+  VisionOneKit:
+    path: .
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  VisionOne:
+    type: application
+    platform: macOS
+    sources:
+      - App/Sources
+    resources:
+      - App/Resources
+    dependencies:
+      - package: VisionOneKit
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Vision One
+        CFBundleName: Vision One
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        LSApplicationCategoryType: public.app-category.video
+        NSHumanReadableCopyright: MIT licence
+        NSMicrophoneUsageDescription: Vision One records your voice with your screen.
+        NSCameraUsageDescription: Vision One shows your camera in a bubble on the recording.
+    entitlements:
+      path: App/VisionOne.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+        com.apple.security.device.camera: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: za.co.versionone.visionone
+        PRODUCT_NAME: Vision One
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        GENERATE_INFOPLIST_FILE: NO

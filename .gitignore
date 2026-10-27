@@ -1,0 +1,9 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+build/
+*.xcodeproj
+xcuserdata/
+App/Info.plist
+App/VisionOne.entitlements
