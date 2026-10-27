@@ -46,6 +46,7 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | `Sources/VisionOneKit` | Testable logic: recording state, take folders, cursor log, timecodes, export plans |
 | `docs/RECORDER.md` | How recording works, and what a take folder holds |
 | `docs/EXPORT.md` | How export combines the tracks, and the presets |
+| `docs/AI.md` | The AI ladder (on device, ChatGPT plan, Decisions API, your own key), the approval gate, and the Producer, Editor, Clipper and Sharer agents |
 | `docs/DESIGN.md` | Design system: tokens, type, components, do's and don'ts |
 | `project.yml` | XcodeGen project (the `.xcodeproj` isn't committed) |
 
