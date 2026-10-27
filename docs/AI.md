@@ -52,6 +52,15 @@ Keep each decision question self-contained: small rungs get them in batches.
 | Clipper (`ClipperAgent`) | Scores candidate windows (from the clips feature's ClipFinder, or 15 to 60 s of whole sentences), keeps the best that don't overlap, titles them. Picks become proposed `Clip`s with origin `agent` in clips.json, so they show dashed in the editor's Clips tab. | Scores: Decisions first. Titles: any. |
 | Sharer (`SharerAgent`) | Title, description, chapters (timed on the edited video), one post per network and a Version One launch draft matching `share_launch`. Saved as `share.json`; posting asks each time. | Any; usually rung 2. |
 
+## Agent jobs (the Agent Desk)
+
+Every agent run is an `AgentJob` on the `AgentJobBoard` (`Sources/VisionOneKit/AI/Jobs/`), the list behind the Agent Desk's tasks and the after-Stop cards. A job has an agent, a title, its take, the user's ask, a state (queued, running, needsApproval, needsReview, done, undone, failed, cancelled), steps with their own state, a one-line receipt ("Cut 21 s across 3 parts."), the changes it wrote (cut and clip ids, share.json) and any approval waiting on it. `statusLine` reads "Clipper · running, step 3 of 5".
+
+- **Start:** `AgentRunner(board:ladder:)` has `edit`, `clips` and `share`; `afterRecording(_:plan:brief:)` starts them once a take is transcribed. The Energy dial decides how much is automatic: Calm runs only the Editor, Lively adds the Sharer, Viral (and Shorts) add the Clipper. Settings → AI can turn this off.
+- **Approvals:** inside a job, the gate parks the request on the task (`needsApproval`, with what is sent, where and the cost) until `resolveApproval(jobID:decision:)`. A "no" cancels the job. Until the Agent Desk shows these cards, the floating panel asks as well and whichever answers first wins.
+- **Keep and Undo:** `keep(_:)` makes the job's dashed cuts and clips solid; `undo(_:)` removes them and deletes its drafts.
+- **Watching:** `updates()` is an `AsyncStream` of the list, current list first. `needsYou` is the "Needs you" filter. Jobs are saved to `~/Library/Application Support/Vision One/jobs.json` for 30 days; ones cut off by quitting come back as "didn't finish".
+
 ## Pick what it's for, and the Energy dial
 
 `Purpose` is the "What are you making?" answer: launch, demo, short, tutorial, bugReport, update, talkingHead. Each sets a starting `Energy`, a target length and default prompts per part (hook, body, outro, title, post, chapters, clip, thumbnail). The look for each lives in the brand kit's `TemplateLook`, matched by the same id. `Purpose.brief(preset:variables:)` runs each part through the prompt presets' `PromptResolver` (your preset over these defaults, house style around it, `{product}`-style variables filled, plain words when the listing has none) and hands agents an `AgentBrief`.
