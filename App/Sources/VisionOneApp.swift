@@ -121,15 +121,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Opened in the background by an agent: stay out of the way.
         if CommandLine.arguments.contains(MCPService.backgroundFlag) { return }
         // First launch, or access was turned off: show only what's
-        // missing. Otherwise open on the Library.
+        // missing, then New task once it's done. Otherwise open straight
+        // on New task, ready to record or ask.
         if !AccessCenter.shared.checklist.canRecord {
+            SetupWindowController.shared.opensHarnessWhenDone = true
             SetupWindowController.shared.show()
         } else {
-            EditorWindowController.shared.showLibrary()
+            EditorWindowController.shared.showNewTask()
         }
     }
 
-    /// Clicking the Dock icon with no window open brings the main window back.
+    /// Clicking the Dock icon with no window open brings the main window
+    /// back, on New task (closing it ends the open task).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { EditorWindowController.shared.show() }
         return true
