@@ -8,7 +8,7 @@ Made for South African builders, as the sibling of [Version One](https://version
 
 ## How it works
 
-Record → stop → the editor opens (Edit on the take) → the transcript and suggested cuts appear → review → Export.
+Record → stop → the editor opens on the take → the transcript and suggested cuts appear → review → Export.
 
 ## v0.1 plan
 
