@@ -58,6 +58,7 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | `docs/RECORDER.md` | How recording works, and what a take folder holds |
 | `docs/EXPORT.md` | How export combines the tracks, and the presets |
 | `docs/AI.md` | The AI ladder (on device, ChatGPT plan, Decisions API, your own key), the approval gate, and the Producer, Editor, Clipper and Sharer agents |
+| `docs/CLIPS.md` | Short clips and thumbnails: finding, framing, rendering |
 | `docs/IPHONE.md` | Recording a plugged-in iPhone's screen, and the iPhone as a camera |
 | `docs/PRESETS.md` | Prompt presets: the file format and how a prompt is put together |
 | `docs/SOUND.md` | Music that ducks under your voice, and sound effects |

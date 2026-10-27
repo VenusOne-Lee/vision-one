@@ -23,14 +23,23 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     let effects: FrameEffects?
     /// Set for an intro or outro; the recording isn't read then.
     let card: (any CardSource)?
+    /// The part of the frame to show, normalized with origin top left, at
+    /// an output time. Clips use it to cut a 9:16 or 1:1 window out of
+    /// the wide screen. nil shows the whole frame.
+    let crop: (@Sendable (Double) -> NormalisedRect?)?
+    /// Fills the space around a frame that doesn't match the output shape.
+    let background: CIColor
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], overlayTimeOffset: Double = 0,
-         effects: FrameEffects? = nil) {
+         effects: FrameEffects? = nil,
+         crop: (@Sendable (Double) -> NormalisedRect?)? = nil, background: CIColor = .black) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
         self.overlayTimeOffset = overlayTimeOffset
         self.effects = effects
+        self.crop = crop
+        self.background = background
         card = nil
         requiredSourceTrackIDs = [NSNumber(value: trackID)]
     }
@@ -41,6 +50,8 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         overlays = []
         overlayTimeOffset = 0
         effects = nil
+        crop = nil
+        background = .white
         self.card = card
         requiredSourceTrackIDs = []
     }
@@ -94,6 +105,10 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
             image = FrameEffectRenderer.apply(effects, to: image,
                                               atOutput: request.compositionTime.seconds - instruction.overlayTimeOffset)
         }
+        // A clip's 9:16 or 1:1 window, inside whatever the zoom showed.
+        if let rect = instruction.crop?(request.compositionTime.seconds - instruction.overlayTimeOffset) {
+            image = Self.crop(image, to: rect)
+        }
         let scale = min(size.width / image.extent.width, size.height / image.extent.height)
         let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         // Centre it; the shape matches in v0.1, so this only matters once
@@ -102,7 +117,7 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         let y = (size.height - scaled.extent.height) / 2
         let placed = scaled
             .transformed(by: CGAffineTransform(translationX: x, y: y))
-            .composited(over: CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: size)))
+            .composited(over: CIImage(color: instruction.background).cropped(to: CGRect(origin: .zero, size: size)))
         context.render(placed, to: output, bounds: CGRect(origin: .zero, size: size), colorSpace: colorSpace)
 
         if !instruction.overlays.isEmpty {
@@ -110,6 +125,18 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
                  at: request.compositionTime.seconds - instruction.overlayTimeOffset)
         }
         request.finish(withComposedVideoFrame: output)
+    }
+
+    /// Cuts `rect` (normalized, origin top left) out of the image and
+    /// moves it to the origin. Core Image's origin is bottom left.
+    static func crop(_ image: CIImage, to rect: NormalisedRect) -> CIImage {
+        let e = image.extent
+        let r = CGRect(x: e.minX + rect.x * e.width,
+                       y: e.minY + (1 - rect.y - rect.height) * e.height,
+                       width: rect.width * e.width,
+                       height: rect.height * e.height)
+        guard r.width >= 2, r.height >= 2 else { return image }
+        return image.cropped(to: r).transformed(by: CGAffineTransform(translationX: -r.minX, y: -r.minY))
     }
 
     private func drawCard(_ card: any CardSource, on buffer: CVPixelBuffer, size: CGSize, at time: Double) {

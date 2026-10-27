@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import VisionOneKit
 
 /// Something drawn on top of every exported frame: burned-in captions,
@@ -47,6 +48,9 @@ struct VideoExporter {
     var cards: CardMaker?
     /// Draw the take's zooms (zooms.json) and blurs (blurs.json).
     var appliesEffects = true
+    /// Set for a short clip: renders at the clip format's size, cut out
+    /// of the screen with `framing`, instead of following the preset.
+    var clip: (format: ClipFormat, framing: ClipFraming)?
 
     /// Exports and returns the file's URL and size. `progress` is called
     /// from a background queue with 0...1.
@@ -73,9 +77,18 @@ struct VideoExporter {
         let source = ExportSource(width: Int(naturalSize.width), height: Int(naturalSize.height), frameRate: Double(frameRate))
         var settings: ExportSettings
         do {
-            settings = try ExportPlanner.settings(for: preset, source: source, duration: plan.duration)
+            if let clip {
+                settings = try ExportPlanner.settings(for: clip.format, sourceFrameRate: Double(frameRate), duration: plan.duration)
+            } else {
+                settings = try ExportPlanner.settings(for: preset, source: source, duration: plan.duration)
+            }
         } catch let error as ExportPlanError {
             throw Failure.plan(error)
+        }
+        let crop = clip.map { clip in
+            ClipFrame.rect(format: clip.format,
+                           sourceAspect: naturalSize.height > 0 ? Double(naturalSize.width / naturalSize.height) : 0,
+                           framing: clip.framing)
         }
 
         // Cards are drawn once at the export's size, then reused if the
@@ -92,7 +105,7 @@ struct VideoExporter {
         let url = outputURL ?? take.exportURL(for: preset)
         var bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
                                      sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     effects: effects, settings: settings, to: url, progress: progress)
+                                     effects: effects, settings: settings, crop: crop, to: url, progress: progress)
 
         // A single-pass encoder only roughly meets its average bitrate.
         // If a size-limited export overshoots, go again a little lower.
@@ -101,7 +114,7 @@ struct VideoExporter {
             settings.videoBitRate = Int(Double(settings.videoBitRate) * scale)
             bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
                                      sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     effects: effects, settings: settings, to: url, progress: progress)
+                                     effects: effects, settings: settings, crop: crop, to: url, progress: progress)
         }
         return (url, bytes)
     }
@@ -126,7 +139,7 @@ struct VideoExporter {
 
     private func render(timeline: ExportTimeline, plan: TemplatePlan, cards: BrandCardSet,
                         sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
-                        effects: FrameEffects?, settings: ExportSettings, to url: URL,
+                        effects: FrameEffects?, settings: ExportSettings, crop: NormalisedRect?, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
@@ -174,9 +187,20 @@ struct VideoExporter {
         }
         let videoStart = cards.intro != nil ? bodyStart : .zero
         let videoEnd = cards.intro != nil ? bodyEnd : Self.time(timeline.duration)
+        let cropAt: (@Sendable (Double) -> NormalisedRect?)?
+        if let crop {
+            cropAt = { @Sendable _ in crop }
+        } else {
+            cropAt = nil
+        }
         instructions.append(FrameInstruction(timeRange: CMTimeRange(start: videoStart, end: videoEnd),
                                              trackID: video.trackID, overlays: overlays,
-                                             overlayTimeOffset: videoStart.seconds, effects: effects))
+                                             overlayTimeOffset: videoStart.seconds, effects: effects,
+                                             crop: cropAt,
+                                             // "Fit" clips sit on the canvas, ink on paper.
+                                             background: crop == .full
+                                                ? CIColor(red: 0xF4 / 255.0, green: 0xF4 / 255.0, blue: 0xF1 / 255.0)
+                                                : .black))
         if let outro = cards.outro, let range = plan.outro {
             // Cover the composition to its very end, whatever rounding did.
             let end = CMTimeMaximum(videoEnd + Self.time(range.upperBound - range.lowerBound), composition.duration)
