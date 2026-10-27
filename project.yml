@@ -42,6 +42,11 @@ targets:
         NSHumanReadableCopyright: MIT licence
         NSMicrophoneUsageDescription: Vision One records your voice with your screen.
         NSCameraUsageDescription: Vision One shows your camera in a bubble on the recording.
+        # visionone://demo/rerecord?name=…: the rerecord-demos Action asks
+        # Autopilot to record a demo again (docs/AUTOPILOT.md).
+        CFBundleURLTypes:
+          - CFBundleURLName: za.co.versionone.visionone
+            CFBundleURLSchemes: [visionone]
         # Sparkle updates. Releases put appcast.xml on the latest GitHub
         # release; the public key comes from the release workflow
         # (docs/RELEASING.md). Builds without a key never check.

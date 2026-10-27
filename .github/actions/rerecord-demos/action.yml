@@ -1,0 +1,77 @@
+name: Re-record Vision One demos
+description: >
+  Asks Vision One on this Mac to record demos again with Autopilot, then
+  waits for each one. Runs on a self-hosted macOS runner where Vision One is
+  installed and has Screen Recording and Accessibility access; GitHub's own
+  Mac runners can't grant Screen Recording.
+author: Vision One
+
+inputs:
+  demos:
+    description: Demo names, one per line or comma separated, as they appear in Vision One's Autopilot window.
+    required: true
+  release:
+    description: The release the demos are for. Defaults to the release that triggered the workflow.
+    required: false
+    default: ${{ github.event.release.tag_name }}
+  timeout-minutes:
+    description: How long to wait for each demo.
+    required: false
+    default: "15"
+
+runs:
+  using: composite
+  steps:
+    - name: Re-record demos
+      shell: bash
+      env:
+        DEMOS: ${{ inputs.demos }}
+        RELEASE: ${{ inputs.release }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+      run: |
+        set -uo pipefail
+        if [ "$(uname)" != "Darwin" ]; then
+          echo "::error::Run this on a self-hosted macOS runner with Vision One installed."
+          exit 1
+        fi
+        requests="$HOME/Library/Application Support/Vision One/Autopilot/requests"
+        encode() { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+        field() { plutil -extract "$1" raw -o - "$2" 2>/dev/null || true; }
+        failed=0
+        while IFS= read -r name; do
+          name="$(echo "$name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          [ -z "$name" ] && continue
+          id="$(uuidgen)"
+          link="visionone://demo/rerecord?name=$(encode "$name")&request=$id&from=$(encode "GitHub Actions")"
+          [ -n "$RELEASE" ] && link="$link&release=$(encode "$RELEASE")"
+          echo "Recording “$name”${RELEASE:+ for $RELEASE}…"
+          open "$link"
+          file="$requests/$id.json"
+          deadline=$(( $(date +%s) + TIMEOUT_MINUTES * 60 ))
+          told=0
+          while :; do
+            state=""
+            [ -f "$file" ] && state="$(field state "$file")"
+            case "$state" in
+              recorded)
+                echo "✓ $name: $(field receipt "$file")"
+                take="$(field takeFolder "$file")"
+                [ -n "$take" ] && echo "  Take: $take"
+                break ;;
+              stopped|unknownDemo)
+                echo "::error::$name: $(field receipt "$file")"
+                failed=1
+                break ;;
+              waiting)
+                [ "$told" = 0 ] && echo "  Waiting for a yes in Vision One (turn on Re-record on release for this demo to skip this)."
+                told=1 ;;
+            esac
+            if [ "$(date +%s)" -gt "$deadline" ]; then
+              echo "::error::$name: no result after $TIMEOUT_MINUTES minutes."
+              failed=1
+              break
+            fi
+            sleep 5
+          done
+        done < <(printf '%s\n' "$DEMOS" | tr ',' '\n')
+        exit $failed
