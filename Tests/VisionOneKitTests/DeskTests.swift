@@ -157,7 +157,7 @@ final class DeskTests: XCTestCase {
 
     func testScriptStepRepliesWithTheScript() async throws {
         let desk = await makeDesk()
-        let board = desk.board
+        let board = await desk.board
         let task = await desk.newTask(ask: "/script")
         let waiting = try await wait(desk) { $0.task(task.id)?.openApprovals.isEmpty == false }
         await desk.confirm(waiting.task(task.id)!.openApprovals[0].id, in: task.id)
