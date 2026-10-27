@@ -38,6 +38,9 @@ final class EditorModel: ObservableObject {
     @Published private(set) var sound = SoundPlan()
     /// Sentences said again, saved to redos.json.
     @Published private(set) var redos = RedoList()
+    /// The voice tools' cleaned voice and AI word fixes (voice.json),
+    /// made in the Voice Tools window.
+    @Published private(set) var voiceEdits = VoiceEdits()
     /// Why some of the sound isn't playing, such as a moved music file.
     @Published private(set) var soundProblem: String?
     /// Playhead, in seconds of the original take.
@@ -99,6 +102,9 @@ final class EditorModel: ObservableObject {
     /// voice is silent under them.
     private var redoParameters: [AVMutableAudioMixInputParameters] = []
     private var redoMutes: [Range<Double>] = []
+    /// Kept AI word fixes, and the original words muted under them.
+    private var fixParameters: [AVMutableAudioMixInputParameters] = []
+    private var fixMutes: [TimeSpan] = []
     private var loadStarted = false
 
     init(take: Take) {
@@ -124,6 +130,7 @@ final class EditorModel: ObservableObject {
         outsideCutIDs = []
         sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
         redos = (try? RedoList.load(from: take.redosURL)) ?? RedoList()
+        voiceEdits = VoiceEdits.load(from: take.voiceURL)
         effects.load(edits: edits)
         undoManager.removeAllActions()
         steerLog = []
@@ -156,6 +163,7 @@ final class EditorModel: ObservableObject {
             // A damaged sound.json shouldn't stop the take opening.
             sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
             redos = (try? RedoList.load(from: take.redosURL)) ?? RedoList()
+            voiceEdits = VoiceEdits.load(from: take.voiceURL)
         } catch {
             phase = .failed("Couldn't open this take: \(error.localizedDescription)")
             return
@@ -180,8 +188,21 @@ final class EditorModel: ObservableObject {
                 guard let self, !Task.isCancelled else { return }
                 if self.transcriptState == .waiting { self.loadTranscript() }
                 if self.mergeOutsideCuts() { self.scheduleRebuild() }
+                self.pickUpVoiceEdits()
             }
         }
+    }
+
+    /// Voice Tools writes voice.json from its own window; hear a kept
+    /// cleaned voice or word fix here as soon as it's saved.
+    private func pickUpVoiceEdits() {
+        let disk = VoiceEdits.load(from: take.voiceURL)
+        guard disk != voiceEdits else { return }
+        let rebuild = disk.cleanVoice?.kept != voiceEdits.cleanVoice?.kept
+            || disk.cleanVoice?.file != voiceEdits.cleanVoice?.file
+            || disk.keptFixes != voiceEdits.keptFixes
+        voiceEdits = disk
+        if rebuild { scheduleRebuild() }
     }
 
     /// Adds cuts in edits.json that this editor has never seen. Returns
@@ -456,12 +477,13 @@ final class EditorModel: ObservableObject {
         let wasPlaying = isPlaying
         let keep = sourceTime
         do {
-            let composition = try await PreviewComposition.make(from: asset, keeping: edits.keptSpans)
+            let composition = try await PreviewComposition.make(from: asset, keeping: edits.keptSpans, take: take)
             let voiceTracks = composition.tracks(withMediaType: .audio).map(\.trackID)
             let timeline = ExportTimeline(keep: edits.keptSpans.map { $0.start..<$0.end },
                                           sourceDuration: edits.sourceDuration, frameRate: 0)
             let added = await SoundComposer.add(sound, timeline: timeline, words: wordSpans, to: composition)
             let redone = await RedoComposer.add(redos.playing, take: take, timeline: timeline, to: composition)
+            let fixes = await VoiceComposer.addFixes(for: take, timeline: timeline, to: composition, offset: 0)
             guard !Task.isCancelled else { return }
             if let track = composition.tracks(withMediaType: .video).first {
                 let natural = try await track.load(.naturalSize)
@@ -485,6 +507,12 @@ final class EditorModel: ObservableObject {
             soundParameters = added.parameters
             redoParameters = redone.parameters
             redoMutes = redone.mutes
+            fixParameters = fixes.parameters
+            // A redone sentence replaces any fixed word inside it.
+            for parameters in fixParameters { RedoComposer.mute(parameters, during: redoMutes) }
+            fixMutes = fixes.mutes.filter { fix in
+                !redoMutes.contains { $0.overlaps(fix.start - 0.05..<fix.end + 0.05) }
+            }
             // Redone lines are fitted to their slot; keep the voice's pitch.
             item.audioTimePitchAlgorithm = .spectral
             item.audioMix = previewAudioMix()
@@ -520,13 +548,16 @@ extension EditorModel {
         if !laneMix.isAudible(.voice) {
             inputs += (mixTracks[.voice] ?? []).map(silent)
             inputs += redoParameters.map { silent($0.trackID) }
+            inputs += fixParameters.map { silent($0.trackID) }
         } else {
             inputs += redoParameters
-            if !redoMutes.isEmpty {
+            inputs += fixParameters
+            if !redoMutes.isEmpty || !fixMutes.isEmpty {
                 for id in mixTracks[.voice] ?? [] {
                     let parameters = AVMutableAudioMixInputParameters()
                     parameters.trackID = id
                     RedoComposer.mute(parameters, during: redoMutes)
+                    VoiceComposer.mute(fixMutes, on: parameters)
                     inputs.append(parameters)
                 }
             }
@@ -558,15 +589,24 @@ extension EditorModel {
 /// same spans export renders, so what you hear is what you get. It only
 /// points at screen.mov, so rebuilding it after an edit is quick.
 enum PreviewComposition {
-    static func make(from asset: AVAsset, keeping spans: [TimeSpan]) async throws -> AVMutableComposition {
+    /// With `take`, a kept cleaned voice plays in place of the mic, as
+    /// in export.
+    static func make(from asset: AVAsset, keeping spans: [TimeSpan], take: Take? = nil) async throws -> AVMutableComposition {
         let composition = AVMutableComposition()
         let scale: CMTimeScale = 60_000
-        for track in try await asset.load(.tracks) {
-            guard track.mediaType == .video || track.mediaType == .audio,
-                  let output = composition.addMutableTrack(withMediaType: track.mediaType,
+        var sources: [(track: AVAssetTrack, range: CMTimeRange)] = []
+        for track in try await asset.load(.tracks) where track.mediaType == .video || track.mediaType == .audio {
+            sources.append((track, try await track.load(.timeRange)))
+        }
+        if let take {
+            let audio = sources.filter { $0.track.mediaType == .audio }
+            let voice = await VoiceComposer.sources(audio, take: take)
+            sources = sources.filter { $0.track.mediaType == .video } + voice
+        }
+        for (track, trackRange) in sources {
+            guard let output = composition.addMutableTrack(withMediaType: track.mediaType,
                                                            preferredTrackID: kCMPersistentTrackID_Invalid)
             else { continue }
-            let trackRange = try await track.load(.timeRange)
             var outputStart = 0.0
             for span in spans {
                 let wanted = CMTimeRange(start: CMTime(seconds: span.start, preferredTimescale: scale),

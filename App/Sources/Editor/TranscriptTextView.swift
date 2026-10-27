@@ -59,6 +59,7 @@ struct TranscriptTextView: NSViewRepresentable {
         private(set) var wordRanges: [NSRange] = []
         private var renderedEdits: EditList?
         private var renderedWordCount = -1
+        private var renderedFixes: [VoiceEdits.WordFix]?
         private var underlined: Int?
 
         init(model: EditorModel) {
@@ -67,13 +68,15 @@ struct TranscriptTextView: NSViewRepresentable {
 
         func update() {
             guard let textView, let storage = textView.textStorage else { return }
-            if renderedEdits != model.edits || renderedWordCount != model.words.count {
+            if renderedEdits != model.edits || renderedWordCount != model.words.count
+                || renderedFixes != model.voiceEdits.fixes {
                 let selection = textView.selectedRanges
                 let (text, ranges) = TranscriptRenderer.render(model: model)
                 storage.setAttributedString(text)
                 wordRanges = ranges
                 renderedEdits = model.edits
                 renderedWordCount = model.words.count
+                renderedFixes = model.voiceEdits.fixes
                 underlined = nil
                 let kept = selection.filter { $0.rangeValue.upperBound <= storage.length }
                 textView.selectedRanges = kept.isEmpty ? [NSValue(range: NSRange(location: 0, length: 0))] : kept
@@ -170,6 +173,8 @@ enum TranscriptRenderer {
             .paragraphStyle: paragraph,
         ]
         let mono = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        // Words re-said in an AI copy of the voice, always labelled.
+        let fixes = Dictionary(model.voiceEdits.fixes.map { ($0.wordID, $0) }, uniquingKeysWith: { _, last in last })
 
         var index = 0
         var previousEnd: Double?
@@ -207,9 +212,26 @@ enum TranscriptRenderer {
                         attributes[.dashedOutline] = DashedOutline.proposed.rawValue
                     }
                 }
+                let fix = fixes[word.id]
+                if let fix, attributes[.dashedOutline] == nil, attributes[.strikethroughStyle] == nil {
+                    // Dashed while proposed, solid once kept.
+                    attributes[.dashedOutline] = (fix.kept ? DashedOutline.aiVoiceKept : .proposed).rawValue
+                }
                 let start = text.length
-                text.append(NSAttributedString(string: word.text, attributes: attributes))
+                let shown = fix.map { $0.replacement.isEmpty ? word.text : $0.replacement } ?? word.text
+                text.append(NSAttributedString(string: shown, attributes: attributes))
                 ranges.append(NSRange(location: start, length: text.length - start))
+                if let fix {
+                    text.append(NSAttributedString(string: "\u{2009}AI voice", attributes: [
+                        .font: NSFont.systemFont(ofSize: 10, weight: .medium),
+                        .foregroundColor: NSColor(Theme.textMuted),
+                        .baselineOffset: 6,
+                        .paragraphStyle: paragraph,
+                        .toolTip: fix.kept
+                            ? "Re-said by an AI copy of your voice (was “\(fix.original)”). Export says so."
+                            : "Proposed: re-said by an AI copy of your voice (was “\(fix.original)”). Keep or undo it in Voice Tools.",
+                    ]))
+                }
                 text.append(NSAttributedString(string: " ", attributes: base))
                 previousEnd = word.end
                 index += 1
@@ -227,6 +249,8 @@ extension NSAttributedString.Key {
 
 enum DashedOutline: Int {
     case filler, proposed, pause
+    /// A kept AI word fix: the same outline, solid.
+    case aiVoiceKept
 }
 
 /// Draws the dashed outlines after the normal background.
@@ -244,8 +268,8 @@ final class DashedLayoutManager: NSLayoutManager {
                 let box = rect.offsetBy(dx: origin.x, dy: origin.y).insetBy(dx: -2, dy: 1)
                 let path = NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4)
                 path.lineWidth = 1
-                path.setLineDash([3, 2], count: 2, phase: 0)
-                color.setStroke()
+                if kind != .aiVoiceKept { path.setLineDash([3, 2], count: 2, phase: 0) }
+                (kind == .aiVoiceKept ? NSColor(Theme.text) : color).setStroke()
                 path.stroke()
             }
         }
