@@ -62,9 +62,22 @@ find ~/Library/Developer/Xcode/DerivedData -path '*artifacts/sparkle/Sparkle/bin
 
 Once Vision One has enough users, the cask can move to `homebrew/cask` so `brew install --cask vision-one` works without the tap.
 
+## Rehearsing a release
+
+Before the first release, or after changing a key, run **Actions → Release rehearsal → Run workflow** on `main`. It does the real thing with the real keys, up to the point of publishing, and then stops:
+
+1. Builds Vision One (version `0.0.0`) and signs it with your Developer ID certificate, then checks the signature is for `APPLE_TEAM_ID` and the app carries `SPARKLE_PUBLIC_KEY`.
+2. Notarises the app with Apple and staples it, then has Gatekeeper check it.
+3. Makes the DMG, signs it, notarises and staples that too.
+4. Signs the DMG with `SPARKLE_PRIVATE_KEY` and checks the signature with `SPARKLE_PUBLIC_KEY` (`scripts/release/check-sparkle-key.sh`), so you know the two halves match.
+
+The run's summary lists each check. It publishes nothing: no tag, no GitHub release, no workflow artifact, no appcast and no Homebrew update, and the signed files and keys are deleted when the job ends. That isn't a setting you could get wrong: the job's token can only read the repo, the tap token is never passed in, and `scripts/release/check-rehearsal-workflow.sh` (run by CI on every pull request) fails any change that would let the rehearsal publish.
+
+It does send two builds to Apple's notary service, which is normal and costs nothing. Notarised builds that are never shipped do no harm.
+
 ## Cutting a release
 
-1. Make sure `main` is green.
+1. Make sure `main` is green. If this is the first release, run the rehearsal first.
 2. Actions → **Release** → Run workflow → branch `main`, version `0.1.0` → Run.
 3. When it's done, check the release page, download the DMG on a Mac that has never run Vision One, and open it. It should open without "unidentified developer".
 
