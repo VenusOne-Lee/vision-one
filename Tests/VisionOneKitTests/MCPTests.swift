@@ -430,7 +430,7 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(waits.count, 2, "the think in the middle and the tail after the last click")
         XCTAssertTrue(waits.allSatisfy { $0.state == .proposed })
         let job = await mcp.board.jobs.first { $0.takeFolder != nil }
-        XCTAssertEqual(job?.state, .done)
+        XCTAssertEqual(job?.state, .needsReview, "the proposed skips wait for the user")
         XCTAssertEqual(job?.changes.count, 2, "keep_changes on the task keeps the skips")
     }
 
