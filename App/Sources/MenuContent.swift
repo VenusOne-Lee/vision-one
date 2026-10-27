@@ -164,25 +164,53 @@ struct ExportRow: View {
                 }
             }
 
-            if case let .exporting(_, progress) = exports.phase {
-                // Ink fills from dashed to solid; no orange, no green.
-                ProgressView(value: progress)
-                    .progressViewStyle(.linear)
-                    .tint(Theme.text)
-            }
-
             if !exports.phase.status.isEmpty {
-                Text(exports.phase.status)
-                    .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(exportFailed ? Theme.error : Theme.textMuted)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: Theme.Space.sm) {
+                    if let ring = ringProgress {
+                        ExportRing(progress: ring)
+                    }
+                    Text(exports.phase.status)
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(exportFailed ? Theme.error : Theme.textMuted)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+        }
+    }
+
+    /// The ring fills while exporting and is solid once done.
+    private var ringProgress: Double? {
+        switch exports.phase {
+        case let .exporting(_, progress): return progress
+        case .done: return 1
+        default: return nil
         }
     }
 
     private var exportFailed: Bool {
         if case .failed = exports.phase { return true }
         return false
+    }
+}
+
+/// Dashed ring filling to solid: dashed means not done yet, solid means
+/// done. Ink for now; the builder's ring colour once it's linked to
+/// Version One. Never orange, never green.
+struct ExportRing: View {
+    let progress: Double
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Theme.textMuted, style: StrokeStyle(lineWidth: 1.5, dash: [2, 2.5]))
+            Circle()
+                .trim(from: 0, to: min(max(progress, 0), 1))
+                .stroke(Theme.text, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.easeOut(duration: 0.3), value: progress)
+        }
+        .frame(width: 14, height: 14)
+        .accessibilityHidden(true)
     }
 }
