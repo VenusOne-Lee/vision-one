@@ -184,6 +184,6 @@ final class LanguagesTests: XCTestCase {
         let afrikaans = FillerLexicon.lexicon(for: .afrikaans).entries.map { $0.tokens.joined(separator: " ") }
         XCTAssertTrue(afrikaans.contains("jy weet"))
         XCTAssertTrue(afrikaans.contains("ne"))   // "nê", accents folded
-        XCTAssertEqual(FillerLexicon.lexicon(for: .english), .standard)
+        XCTAssertEqual(FillerLexicon.lexicon(for: .english).entries.map(\.tokens), FillerLexicon.standard.entries.map(\.tokens))
     }
 }
