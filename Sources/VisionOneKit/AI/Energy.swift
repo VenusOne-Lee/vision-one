@@ -1,6 +1,7 @@
 import Foundation
 
-/// The Energy dial: one control for how busy the edit feels. It sets zooms,
+/// The Energy dial: one control for how busy the edit feels (it replaces
+/// the sound feature's first version, same cases). It sets zooms,
 /// punch-ins, sound effects, caption style and how tightly the Editor cuts,
 /// so they always agree. Templates pick the starting value.
 public enum Energy: String, Codable, CaseIterable, Identifiable, Sendable {
