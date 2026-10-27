@@ -95,6 +95,13 @@ public struct MeterReading: Equatable, Sendable {
     /// Average pause between words, in seconds.
     public var pause: Double?
 
+    public init(pace: Double?, ums: Int, energy: Double?, pause: Double?) {
+        self.pace = pace
+        self.ums = ums
+        self.energy = energy
+        self.pause = pause
+    }
+
     public var energyLabel: String {
         guard let energy else { return "–" }
         switch energy {

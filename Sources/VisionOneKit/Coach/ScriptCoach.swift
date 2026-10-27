@@ -49,6 +49,12 @@ public struct ScriptLength: Equatable, Sendable {
     /// The purpose's target, when it has one.
     public var target: ClosedRange<Double>?
 
+    public init(seconds: Double, wordsPerMinute: Double, target: ClosedRange<Double>?) {
+        self.seconds = seconds
+        self.wordsPerMinute = wordsPerMinute
+        self.target = target
+    }
+
     public enum Fit: Equatable, Sendable { case short, fits, long, noTarget }
 
     public var fit: Fit {
@@ -69,6 +75,11 @@ public struct ScriptLength: Equatable, Sendable {
 public struct ScriptReport: Equatable, Sendable {
     public var flags: [ScriptFlag]
     public var length: ScriptLength
+
+    public init(flags: [ScriptFlag], length: ScriptLength) {
+        self.flags = flags
+        self.length = length
+    }
 
     public func flags(for line: Int) -> [ScriptFlag] { flags.filter { $0.line == line } }
 }
