@@ -50,6 +50,7 @@ struct SoundPanel: View {
                         .font(.system(size: 12, weight: .medium))
                 }
                 .menuStyle(.button)
+                .buttonStyle(PillButtonStyle(kind: .secondary))
                 .fixedSize()
             }
             Text(model.soundProblem ?? model.sound.music?.licence ?? "Vision One's own beds are free to use anywhere.")
@@ -110,6 +111,7 @@ struct SoundPanel: View {
                 Text("Add effect").font(.system(size: 12, weight: .medium))
             }
             .menuStyle(.button)
+            .buttonStyle(PillButtonStyle(kind: .secondary))
             .fixedSize()
             .help("Adds a sound effect at the playhead")
             if model.proposedEffectCount > 0 {

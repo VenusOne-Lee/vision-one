@@ -4,9 +4,11 @@ import VisionOneKit
 
 /// The whole take as one strip: speech in ink, fillers in ring gold,
 /// cuts hatched and faded, proposals dashed, an ink playhead. Click or
-/// drag to scrub.
+/// drag to scrub; right-click a dashed proposal to cut or keep it.
 struct EditorTimeline: View {
     @ObservedObject var model: EditorModel
+    /// The proposal under the pointer, for the right-click menu.
+    @State private var hoveredCut: Cut?
 
     var body: some View {
         GeometryReader { geometry in
@@ -19,6 +21,7 @@ struct EditorTimeline: View {
             let removedSpans = model.edits.removedSpans
             let proposed = model.edits.cuts.filter { $0.state == .proposed }
             let playhead = model.sourceTime
+            let hovered = hoveredCut?.id
             Canvas { context, size in
                 let lane = CGRect(x: 0, y: size.height / 2 - 8, width: size.width, height: 16)
                 for (i, span) in spans.enumerated() {
@@ -51,7 +54,7 @@ struct EditorTimeline: View {
                     let rect = CGRect(x: x(cut.start), y: lane.minY - 3, width: max(2, x(cut.end) - x(cut.start)), height: lane.height + 6)
                     context.stroke(Path(roundedRect: rect, cornerRadius: 3),
                                    with: .color(Theme.ringGold),
-                                   style: StrokeStyle(lineWidth: 1.5, dash: [3, 2]))
+                                   style: StrokeStyle(lineWidth: cut.id == hovered ? 2.5 : 1.5, dash: [3, 2]))
                 }
                 let head = CGRect(x: x(playhead) - 1, y: 4, width: 2, height: size.height - 8)
                 context.fill(Path(head), with: .color(Theme.text))
@@ -60,6 +63,21 @@ struct EditorTimeline: View {
             .gesture(DragGesture(minimumDistance: 0).onChanged { value in
                 model.seek(toSource: Double(value.location.x / max(width, 1)) * duration)
             })
+            .onContinuousHover { phase in
+                switch phase {
+                case let .active(location):
+                    let cut = model.proposedCut(at: Double(location.x / max(width, 1)) * duration)
+                    if cut?.id != hoveredCut?.id { hoveredCut = cut }
+                case .ended:
+                    if hoveredCut != nil { hoveredCut = nil }
+                }
+            }
+            .contextMenu {
+                if let cut = hoveredCut {
+                    Button("Cut this part") { model.decide(cut.id, accept: true) }
+                    Button("Keep this part") { model.decide(cut.id, accept: false) }
+                }
+            }
         }
         .frame(height: 40)
         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))

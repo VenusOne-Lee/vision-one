@@ -134,3 +134,63 @@ final class ExportNamingTests: XCTestCase {
         XCTAssertEqual(ExportPhase.size(14_249_000), "14.2 MB")
     }
 }
+
+final class ExportRetryTests: XCTestCase {
+    let settings = ExportSettings(width: 1280, height: 720, frameRate: 30,
+                                  videoBitRate: 1_800_000, audioBitRate: 96_000, audioChannels: 2)
+
+    /// What the encoder writes if it overshoots every video bitrate by `factor`.
+    func written(_ s: ExportSettings, duration: Double, factor: Double) -> Int64 {
+        let audio = Double(s.audioBitRate) * duration / 8 * 1.02
+        let video = Double(s.videoBitRate) * duration / 8 * 1.02 * factor
+        return Int64(audio + video)
+    }
+
+    func testRetryLandsUnderTheLimitWhenTheEncoderOvershootsTheSame() {
+        let limit: Int64 = 16_000_000
+        let duration = 70.0
+        let first = written(settings, duration: duration, factor: 1.25)
+        XCTAssertGreaterThan(first, limit)
+
+        var next = settings
+        next.videoBitRate = ExportPlanner.retryVideoBitRate(after: settings, bytes: first, limit: limit,
+                                                            duration: duration, attempt: 1)
+        XCTAssertLessThan(next.videoBitRate, settings.videoBitRate)
+        XCTAssertLessThanOrEqual(written(next, duration: duration, factor: 1.25), Int64(Double(limit) * 0.86))
+    }
+
+    func testLaterRetriesAimLower() {
+        let first = ExportPlanner.retryVideoBitRate(after: settings, bytes: 17_000_000, limit: 16_000_000,
+                                                    duration: 60, attempt: 1)
+        let second = ExportPlanner.retryVideoBitRate(after: settings, bytes: 17_000_000, limit: 16_000_000,
+                                                     duration: 60, attempt: 2)
+        XCTAssertLessThan(second, first)
+        XCTAssertLessThan(first, settings.videoBitRate)
+    }
+
+    func testRetryNeverGoesToZero() {
+        let next = ExportPlanner.retryVideoBitRate(after: settings, bytes: 900_000_000, limit: 16_000_000,
+                                                   duration: 600, attempt: 2)
+        XCTAssertEqual(next, ExportPlanner.minRetryVideoBitRate)
+    }
+
+    func testProgressOnlyMovesForwardAcrossTries() {
+        XCTAssertEqual(ExportPlanner.progressRange(attempt: 0, of: 1), 0...1)
+        let attempts = ExportPlanner.sizeLimitAttempts
+        XCTAssertEqual(attempts, 3)
+        var last = -1.0
+        for attempt in 0..<attempts {
+            for step in 0...10 {
+                let p = ExportPlanner.overallProgress(Double(step) / 10, attempt: attempt, of: attempts)
+                XCTAssertGreaterThanOrEqual(p, last)
+                last = p
+            }
+        }
+        XCTAssertEqual(last, 1, accuracy: 1e-9)
+        XCTAssertEqual(ExportPlanner.overallProgress(0, attempt: 0, of: attempts), 0)
+    }
+
+    func testStillTooBigSaysHowToFix() {
+        XCTAssertEqual(ExportPhase.stillTooBig(limitBytes: 16_000_000), "Still over 16 MB. Cut it shorter or pick 720p.")
+    }
+}

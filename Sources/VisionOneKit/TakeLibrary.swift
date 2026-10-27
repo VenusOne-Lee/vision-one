@@ -6,7 +6,9 @@ import Foundation
 ///     Vision One 2026-10-27 at 10.53.12/
 ///       screen.mov    video + system sound track + mic track (fragmented)
 ///       events.json   cursor moves and clicks, timed from the first frame
+///       audio-tracks.json  which source each audio track in screen.mov holds
 ///       transcript.json  word-timed transcript of the mic track
+///       transcript-failed.json  only when the take can never be transcribed (no sound)
 ///       edits.json       cuts made in the editor; screen.mov is never changed
 ///       zooms.json       zooms, proposed from clicks or added by hand
 ///       blurs.json       blurs over secrets found on screen or drawn by hand
@@ -32,6 +34,10 @@ public struct Take: Equatable, Sendable {
     public var cameraInfoURL: URL { folder.appendingPathComponent("camera.json") }
     public var phoneURL: URL { folder.appendingPathComponent("phone.mov") }
     public var transcriptURL: URL { folder.appendingPathComponent("transcript.json") }
+    /// Written by TakeWriter: the audio tracks in screen.mov, in order.
+    public var audioTracksURL: URL { folder.appendingPathComponent("audio-tracks.json") }
+    /// Written when a take can never be transcribed, so launches skip it.
+    public var transcriptFailedURL: URL { folder.appendingPathComponent("transcript-failed.json") }
     public var editsURL: URL { folder.appendingPathComponent("edits.json") }
     public var clipsURL: URL { folder.appendingPathComponent("clips.json") }
     public var thumbnailsFolder: URL { folder.appendingPathComponent("thumbnails", isDirectory: true) }
