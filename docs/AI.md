@@ -61,6 +61,19 @@ Every agent run is an `AgentJob` on the `AgentJobBoard` (`Sources/VisionOneKit/A
 - **Keep and Undo:** `keep(_:)` makes the job's dashed cuts and clips solid; `undo(_:)` removes them and deletes its drafts.
 - **Watching:** `updates()` is an `AsyncStream` of the list, current list first. `needsYou` is the "Needs you" filter. Jobs are saved to `~/Library/Application Support/Vision One/jobs.json` for 30 days; ones cut off by quitting come back as "didn't finish".
 
+## The Desk (Codex-style projects and tasks)
+
+`Desk` (`Sources/VisionOneKit/Desk/`) is the model behind the main window's sidebar, task threads and the menu bar's Tasks list. The app has one, `AIServices.shared.desk`; the MCP server calls the same methods.
+
+- **Projects** (`DeskProject`): name, notes every agent reads (like AGENTS.md), a prompt preset, and `sources` the Producer reads for scripts (GitHub repos, Linear teams).
+- **Tasks** (`DeskTask`): one per video. A thread of `TaskCell`s (ask, take, agent reply, quiet log, plan, receipt with Keep/Undo, numbered approval card, failure), queued asks, the mode (Just do it or Plan first) and the agent jobs it started. Stop makes one (`taskForRecording`); once transcribed, `transcribed(_:)` starts the automatic agents by the Energy dial.
+- **Asking:** `submit(_:to:mode:)` routes the text through `AskRouter` (slash commands, or plain rules for "tighten the open and make 3 clips") into a `DeskPlan`. Just do it runs it now; Plan first shows the plan with a Yes/No card; while agents are busy the ask is queued and runs next. Commands the window handles itself (`/captions`, `/edit`, `/record`) come back as `.open`.
+- **Approvals:** cards have numbered options with one preselected (`confirm` is Return). A job waiting on the gate shows "Yes, send it / Yes, and don't ask again for … in this project / No, and tell the agent what to do differently"; posts get Yes / No. "Don't ask again" lasts until the app quits for now.
+- **Status:** `DeskSnapshot.status(of:)` is the ring (needs you, working, ready, done, didn't finish), `statusLine(of:)` the line under the title, `activity(of:)` the status bar ("Clipper is making clips (12 s · Esc to stop)"), `needsYou` the "2 need you" count. `stop` is Esc.
+- **Try in a copy:** `TakeVersions` (versions.json) keeps the main cut in edits.json and copies beside it. `makeCopy`, `makeMain` (swaps files, the old main stays as a copy), `lock` on export. Plans with `inCopy`, or a locked main cut, run the Editor on a copy.
+- **Scripts from your tools:** `ScriptSources` reads GitHub releases (token optional, for private repos) and Linear finished issues (API key), both from the Keychain. Only the repo or team name goes out. `ProducerAgent.script(from:brief:ask:)` turns them into a hook, lines and a call to action; the `/script` step posts it in the thread.
+- **Watching:** `updates()` streams `DeskSnapshot`; `openRequests()` streams task ids the menu bar or a notification asked to open (`requestOpen`).
+
 ## Pick what it's for, and the Energy dial
 
 `Purpose` is the "What are you making?" answer: launch, demo, short, tutorial, bugReport, update, talkingHead. Each sets a starting `Energy`, a target length and default prompts per part (hook, body, outro, title, post, chapters, clip, thumbnail). The look for each lives in the brand kit's `TemplateLook`, matched by the same id. `Purpose.brief(preset:variables:)` runs each part through the prompt presets' `PromptResolver` (your preset over these defaults, house style around it, `{product}`-style variables filled, plain words when the listing has none) and hands agents an `AgentBrief`.

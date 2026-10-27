@@ -12,7 +12,11 @@ let package = Package(
         .library(name: "VisionOneKit", targets: ["VisionOneKit"]),
     ],
     targets: [
-        .target(name: "VisionOneKit"),
+        .target(
+            name: "VisionOneKit",
+            // The share page viewers open; SharePageBundle fills it in.
+            resources: [.copy("Share/Page/share-page.html")]
+        ),
         .testTarget(name: "VisionOneKitTests", dependencies: ["VisionOneKit"]),
     ],
     swiftLanguageModes: [.v5]

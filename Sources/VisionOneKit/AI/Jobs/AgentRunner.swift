@@ -6,29 +6,66 @@ import Foundation
 public struct AgentRunner: Sendable {
     public let board: AgentJobBoard
     public let ladder: AILadder
+    /// Called as each job goes on the board, before it starts, so the Desk
+    /// can put it in its task (and its approvals land there).
+    public var onJobAdded: (@Sendable (AgentJob) async -> Void)?
 
-    public init(board: AgentJobBoard, ladder: AILadder) {
+    public init(board: AgentJobBoard, ladder: AILadder, onJobAdded: (@Sendable (AgentJob) async -> Void)? = nil) {
         self.board = board
         self.ladder = ladder
+        self.onJobAdded = onJobAdded
+    }
+
+    // MARK: Producer
+
+    /// Reads the project's sources and drafts a script. The script comes
+    /// back with the job; nothing is written into a take.
+    public func script(sources: ScriptSources?, refs: [ScriptSourceRef], brief: AgentBrief,
+                       ask: String? = nil) async -> (AgentJob, ProducerAgent.Script?) {
+        let job = AgentJob(agent: .producer, title: "Draft a script", ask: ask,
+                           steps: ["Read what's new", "Write the script"])
+        let box = ScriptBox()
+        let done = await run(job) { id in
+            await board.step(id, 0)
+            var items: [ScriptSourceItem] = []
+            var skipped: [String] = []
+            if let sources, !refs.isEmpty {
+                let fetched = await sources.fetch(refs)
+                items = fetched.items
+                skipped = fetched.failures.map { "\($0.key.title): \($0.value)" }.sorted()
+            }
+            await board.step(id, 1)
+            let script = try await ProducerAgent(ladder: ladder).script(from: items, brief: brief, ask: ask)
+            await box.set(script)
+            var receipt = items.isEmpty
+                ? "Wrote a \(script.lines.count)-line script."
+                : "Wrote a \(script.lines.count)-line script from \(items.count) \(items.count == 1 ? "update" : "updates")."
+            if !skipped.isEmpty { receipt += " Skipped " + skipped.joined(separator: "; ") + "." }
+            return (receipt, [])
+        }
+        return (done, await box.value)
     }
 
     // MARK: Editor
 
+    /// `version` runs it on a copy of the cut (Try in a copy) instead of the main one.
     @discardableResult
     public func edit(_ take: Take, brief: AgentBrief, goal: EditorAgent.Goal, energy: Energy,
-                     title: String? = nil) async -> AgentJob {
-        let job = AgentJob(agent: .editor, title: title ?? "Edit \(Self.name(of: take))", take: take, ask: goal.ask,
+                     title: String? = nil, version: TakeVersion? = nil) async -> AgentJob {
+        var job = AgentJob(agent: .editor, title: title ?? "Edit \(Self.name(of: take))", take: take, ask: goal.ask,
                            steps: ["Read the transcript", "Ask which sentences to keep", "Propose cuts"])
+        let editsURL = version.map { TakeVersions.url(of: $0, in: take) } ?? take.editsURL
+        if let version, !version.isMain { job.editsFile = version.file }
         return await run(job) { id in
             await board.step(id, 0)
             let transcript = try Transcript.read(from: take.transcriptURL)
-            var list = try EditList.load(from: take.editsURL, sourceDuration: transcript.duration)
+            var list = try EditList.load(from: editsURL, sourceDuration: transcript.duration)
             await board.step(id, 1)
             let proposals = try await EditorAgent(ladder: ladder)
                 .propose(transcript: transcript, edits: list, brief: brief, goal: goal, energy: energy)
             await board.step(id, 2)
             let added = list.propose(proposals)
-            try list.write(to: take.editsURL)
+            try list.write(to: editsURL)
             return (AgentReceipt.cuts(added, ask: goal.ask), added.map { AgentJob.Change.cut($0.id) })
         }
     }
@@ -129,6 +166,7 @@ public struct AgentRunner: Sendable {
     private func run(_ job: AgentJob,
                      _ work: @escaping @Sendable (UUID) async throws -> (String, [AgentJob.Change])) async -> AgentJob {
         await board.add(job)
+        await onJobAdded?(job)
         await AgentJobContext.$jobID.withValue(job.id) {
             do {
                 let (receipt, changes) = try await work(job.id)
@@ -173,3 +211,9 @@ public struct AgentRunner: Sendable {
         }
     }
 }
+
+private actor ScriptBox {
+    var value: ProducerAgent.Script?
+    func set(_ script: ProducerAgent.Script) { value = script }
+}
+
