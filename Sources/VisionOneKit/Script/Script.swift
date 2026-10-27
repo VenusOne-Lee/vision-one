@@ -34,10 +34,12 @@ public struct Script: Codable, Equatable, Sendable {
     }
 
     /// Lines are sentences: split at line breaks, then after . ! ? (and
-    /// the following quote or bracket). Blank pieces are dropped.
+    /// the following quote or bracket). Blank pieces are dropped. Audio
+    /// tags for text to speech ("[pause]", "[upbeat]") are direction, not
+    /// words, so they're left out of the lines.
     public static func split(_ text: String) -> [ScriptLine] {
         var pieces: [String] = []
-        for paragraph in text.components(separatedBy: .newlines) {
+        for paragraph in withoutAudioTags(text).components(separatedBy: .newlines) {
             var current = ""
             let characters = Array(paragraph)
             for (i, character) in characters.enumerated() {
@@ -57,6 +59,12 @@ public struct Script: Codable, Equatable, Sendable {
             .filter { !normalizedWords(in: $0).isEmpty }
             .enumerated()
             .map { ScriptLine(id: $0.offset, text: $0.element, words: normalizedWords(in: $0.element)) }
+    }
+
+    /// The text with [bracketed] audio tags taken out and the spaces
+    /// around them closed up.
+    public static func withoutAudioTags(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\s*\[[^\]\n]*\]"#, with: "", options: .regularExpression)
     }
 
     /// Lowercased words without punctuation, the way they're compared.

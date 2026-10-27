@@ -23,6 +23,12 @@ final class ScriptTests: XCTestCase {
         XCTAssertEqual(script.estimatedSeconds(wordsPerMinute: 120), 14, accuracy: 0.001)
     }
 
+    func testAudioTagsAreNotWordsOrShown() {
+        let script = Script(text: "[upbeat] Pick your rank. [pause] See the queue.")
+        XCTAssertEqual(script.lines.map(\.text), ["Pick your rank.", "See the queue."])
+        XCTAssertEqual(script.wordCount, 6)
+    }
+
     func testBlankScriptHasNoLines() {
         XCTAssertTrue(Script(text: " \n  \n").isEmpty)
     }
