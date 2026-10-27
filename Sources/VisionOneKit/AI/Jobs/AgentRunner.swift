@@ -187,6 +187,7 @@ public struct AgentRunner: Sendable {
         guard let origin = MCPJobContext.origin else { return job }
         var copy = AgentJob(id: origin.jobID, agent: job.agent, title: job.title, take: job.take, ask: job.ask,
                             steps: job.steps.map(\.title), createdAt: job.createdAt)
+        copy.editsFile = job.editsFile
         copy.requestedBy = origin.requestedBy
         return copy
     }

@@ -102,6 +102,8 @@ public actor MCPPermissions {
 public protocol VisionOneMCPHost: Sendable {
     /// Shows the card and waits for the user.
     func ask(_ question: MCPQuestion) async -> MCPAnswer
+    /// Takes the card away when the user answered on the task instead.
+    func dismiss(_ questionID: UUID) async
     /// An agent connected (for Settings › Agents).
     func connected(_ client: MCPClient) async
     func isRecording() async -> Bool

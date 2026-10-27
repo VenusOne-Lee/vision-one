@@ -27,6 +27,7 @@ actor FakeMCPHost: VisionOneMCPHost {
         return answer
     }
 
+    func dismiss(_ questionID: UUID) async {}
     func connected(_ client: MCPClient) async {}
     func isRecording() async -> Bool { recording }
 
@@ -335,6 +336,26 @@ final class MCPTests: XCTestCase {
 
         let missing = await call(mcp, "cut_to_length")
         XCTAssertTrue(missing.isError)
+    }
+
+    func testCallsLandAsDeskTasksMarkedWithTheAgent() async throws {
+        let take = try makeTake()
+        let board = AgentJobBoard()
+        let desk = Desk(board: board)
+        let host = FakeMCPHost(answer: MCPAnswer(.allowOnce), library: library, board: board)
+        let mcp = VisionOneMCP(library: library, board: board, desk: desk, host: host, patience: 5)
+        let result = await call(mcp, "cut_part", ["quote": "Welcome"])
+        XCTAssertFalse(result.isError, result.text)
+        let tasks = await desk.tasks
+        XCTAssertEqual(tasks.count, 1)
+        XCTAssertEqual(tasks.first?.requestedBy, "Claude Code")
+        XCTAssertEqual(tasks.first?.takeFolders, [take.folder])
+        XCTAssertEqual(tasks.first?.jobIDs.count, 1)
+
+        _ = await call(mcp, "clean_up")
+        let after = await desk.tasks
+        XCTAssertEqual(after.count, 1, "same take, same task")
+        XCTAssertEqual(after.first?.jobIDs.count, 2)
     }
 
     // MARK: Recording, export, share

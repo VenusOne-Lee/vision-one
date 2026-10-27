@@ -203,6 +203,9 @@ public struct DeskTask: Codable, Equatable, Identifiable, Sendable {
     public var jobIDs: [UUID]
     /// Set by Archive; hidden from the sidebar.
     public var archived: Bool
+    /// The agent that started it over MCP ("Claude Code"), for the
+    /// "from Claude Code" tag; nil when the user started it.
+    public var requestedBy: String?
     public var createdAt: Date
     public var updatedAt: Date
 

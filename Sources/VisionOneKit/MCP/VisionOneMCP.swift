@@ -8,6 +8,8 @@ import Foundation
 public final class VisionOneMCP: Sendable {
     public let library: TakeLibrary
     public let board: AgentJobBoard
+    /// Files each call's jobs under a task, marked with who asked.
+    public let desk: Desk?
     public let host: any VisionOneMCPHost
     public let permissions: MCPPermissions
     public let version: String
@@ -15,10 +17,11 @@ public final class VisionOneMCP: Sendable {
     /// Codex gives a tool 60 seconds.
     public let patience: Double
 
-    public init(library: TakeLibrary, board: AgentJobBoard, host: any VisionOneMCPHost,
+    public init(library: TakeLibrary, board: AgentJobBoard, desk: Desk? = nil, host: any VisionOneMCPHost,
                 permissions: MCPPermissions = MCPPermissions(), version: String = "0.1", patience: Double = 40) {
         self.library = library
         self.board = board
+        self.desk = desk
         self.host = host
         self.permissions = permissions
         self.version = version
@@ -210,6 +213,9 @@ public final class VisionOneMCP: Sendable {
             if let named { try? take.setTitle(named) }
             if let purpose { try? TakePlan(purpose: purpose).write(for: take) }
             await board.update(job.id) { $0.takeFolder = take.folder }
+            if let desk, let task = await desk.tasks.first(where: { $0.jobIDs.contains(job.id) }) {
+                await desk.addTake(take, to: task.id)
+            }
             await board.step(job.id, 1)
             return .done("Recording “\(named ?? take.name)”. Call stop_recording when the demo is done.",
                          ["take": .string(take.name), "task_id": .string(job.id.uuidString)])
@@ -285,7 +291,7 @@ public final class VisionOneMCP: Sendable {
         let plan = await host.plan(for: take)
         let brief = await host.brief(for: plan)
         let title = finalGoal.targetSeconds.map { "Cut “\(take.displayTitle())” to \(AgentReceipt.duration($0))" }
-        return await runAgent(client) { runner in
+        return await runAgent(client, take: take) { runner in
             await runner.edit(take, brief: brief, goal: finalGoal, energy: plan.energy, title: title)
         }
     }
@@ -323,7 +329,7 @@ public final class VisionOneMCP: Sendable {
         let format = args["format"]?.stringValue.flatMap(ClipFormat.init(rawValue:)) ?? .vertical
         let plan = await host.plan(for: take)
         let brief = await host.brief(for: plan)
-        return await runAgent(client) { runner in
+        return await runAgent(client, take: take) { runner in
             await runner.clips(take, brief: brief, format: format, count: count)
         }
     }
@@ -335,7 +341,7 @@ public final class VisionOneMCP: Sendable {
         let product = args["product"]?.stringValue
         let plan = await host.plan(for: take)
         let brief = await host.brief(for: plan)
-        return await runAgent(client) { runner in
+        return await runAgent(client, take: take) { runner in
             await runner.share(take, brief: brief, launch: launch, product: product)
         }
     }
@@ -577,20 +583,41 @@ public final class VisionOneMCP: Sendable {
         return id
     }
 
-    /// Adds a job marked with who asked for it.
+    /// Adds a job marked with who asked for it, filed under its task.
     func addJob(_ job: AgentJob, _ client: MCPClient) async -> AgentJob {
         var job = job
         job.requestedBy = client.displayName
-        return await board.add(job)
+        let added = await board.add(job)
+        if let desk, let taskID = await deskTask(for: job.take, title: job.title, client: client) {
+            await desk.attach(jobID: added.id, to: taskID)
+        }
+        return added
+    }
+
+    /// The Desk task for a take: the one it's already in, or a new one
+    /// tagged with the agent.
+    func deskTask(for take: Take?, title: String, client: MCPClient) async -> UUID? {
+        guard let desk else { return nil }
+        if let take, let existing = await desk.tasks.first(where: { !$0.archived && $0.takeFolders.contains(take.folder) }) {
+            return existing.id
+        }
+        let task = await desk.newTask(title: take.map { $0.displayTitle() } ?? title, takes: take.map { [$0] } ?? [])
+        await desk.markRequested(task.id, by: client.displayName)
+        return task.id
     }
 
     /// Starts an agent job and follows it for a while.
-    func runAgent(_ client: MCPClient, _ work: @escaping @Sendable (AgentRunner) async -> Void) async -> MCPToolResult {
+    func runAgent(_ client: MCPClient, take: Take,
+                  _ work: @escaping @Sendable (AgentRunner) async -> Void) async -> MCPToolResult {
         let origin = AgentJobOrigin(requestedBy: client.displayName)
-        let runner = await host.runner()
+        var runner = await host.runner()
+        if let desk, let taskID = await deskTask(for: take, title: take.displayTitle(), client: client) {
+            runner.onJobAdded = { job in await desk.attach(jobID: job.id, to: taskID) }
+        }
+        let started = runner
         Task {
             await MCPJobContext.$origin.withValue(origin) {
-                await work(runner)
+                await work(started)
             }
         }
         guard let job = await settle(origin.jobID, within: patience) else {
@@ -656,21 +683,26 @@ public final class VisionOneMCP: Sendable {
 
     /// Asks the user, unless they allowed this agent until quit. The
     /// task shows it's waiting while the card is up.
+    /// Asks the user, unless they allowed this agent until quit. With a
+    /// task, the question is a card on it as well as the floating card;
+    /// whichever the user answers first counts and the other goes away.
     func permit(_ question: MCPQuestion, destination: String, onTask: Bool = true) async -> MCPAnswer {
         if await permissions.allows(question.client, question.action) { return MCPAnswer(.allowForSession) }
-        let jobID = onTask ? question.jobID : nil
-        if let jobID {
-            await board.update(jobID) { job in
-                job.state = .needsApproval
-                job.approval = AgentJob.Approval(question, destination: destination)
+        let answer: MCPAnswer
+        if onTask, let jobID = question.jobID {
+            let floating = AnswerBox()
+            let host = self.host
+            let decision = await board.requestApproval(jobID: jobID,
+                                                       approval: AgentJob.Approval(question, destination: destination)) {
+                let reply = await host.ask(question)
+                await floating.set(reply)
+                return reply.decision
             }
-        }
-        let answer = await host.ask(question)
-        if let jobID {
-            await board.update(jobID) { job in
-                job.approval = nil
-                if job.state == .needsApproval { job.state = answer.allowed ? .running : .cancelled }
-            }
+            await host.dismiss(question.id)
+            let note = await floating.answer?.note
+            answer = MCPAnswer(decision, note: decision == .deny ? note : nil)
+        } else {
+            answer = await host.ask(question)
         }
         if answer.decision == .allowForSession { await permissions.allow(question.client, question.action) }
         return answer
@@ -699,4 +731,10 @@ public final class VisionOneMCP: Sendable {
     static func iso(_ date: Date) -> String {
         ISO8601DateFormatter().string(from: date)
     }
+}
+
+/// Holds the floating card's answer, note and all.
+actor AnswerBox {
+    private(set) var answer: MCPAnswer?
+    func set(_ answer: MCPAnswer) { self.answer = answer }
 }
