@@ -47,6 +47,10 @@ struct NativeCard: CardSource, @unchecked Sendable {
     /// The logo, already decoded. CGImage is immutable, so sharing it
     /// with the compositor's threads is safe.
     let logo: CGImage?
+    /// A personalised version's two lines ("Made for Thandi", "Joburg
+    /// Taxi Association"), drawn instead of the name and tagline.
+    var headline: String?
+    var subline: String?
 
     func draw(in context: CGContext, size: CGSize, at cardTime: Double) {
         let short = min(size.width, size.height)
@@ -64,8 +68,8 @@ struct NativeCard: CardSource, @unchecked Sendable {
         let diameter = short * 0.18
         let lineWidth = short * 0.022
 
-        let name = brand.name.isEmpty ? "Vision One" : brand.name
-        let second = kind == .intro ? brand.tagline : brand.cta
+        let name = headline ?? (brand.name.isEmpty ? "Vision One" : brand.name)
+        let second = headline != nil ? (subline ?? "") : (kind == .intro ? brand.tagline : brand.cta)
         let third = kind == .outro ? brand.displaySite : ""
 
         let nameLine = line(name, font: font(brand.fonts.display, size: short * 0.09, bold: true), color: ink)

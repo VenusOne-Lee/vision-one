@@ -204,6 +204,9 @@ struct CardMaker: Sendable {
     let look: TemplateLook?
     /// The template's folder, for its own card files.
     let templateFolder: URL?
+    /// A personalised version's title card: drawn natively in place of
+    /// the intro, so 40 versions don't need 40 WebKit renders.
+    var personal: (headline: String, subline: String)?
 
     func plan(bodyDuration: Double) -> TemplatePlan {
         TemplatePlan(brand: brand, look: look, bodyDuration: bodyDuration)
@@ -211,7 +214,11 @@ struct CardMaker: Sendable {
 
     func make(plan: TemplatePlan, size: CGSize, frameRate: Int) async -> BrandCardSet {
         var set = BrandCardSet.empty
-        if let intro = plan.intro {
+        if let personal, plan.intro != nil {
+            let logoData = brand.logoURL(in: brandFolder).flatMap { try? Data(contentsOf: $0) }
+            set.intro = NativeCard(kind: .intro, brand: brand, logo: Self.decode(logoData),
+                                   headline: personal.headline, subline: personal.subline)
+        } else if let intro = plan.intro {
             set.intro = await card(.intro, choice: look?.intro, duration: intro.upperBound - intro.lowerBound,
                                    size: size, frameRate: frameRate)
         }

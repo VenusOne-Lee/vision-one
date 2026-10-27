@@ -14,9 +14,12 @@ enum CaptionExport {
     /// frame-snapped one the export renders, so the words stay on their
     /// frames however many cuts there are. Times are the edited video's
     /// own clock (the compositor takes the intro off).
+    /// `language` swaps in that translation for this export only (a
+    /// personalised version in the person's language).
     static func overlays(for take: Take, timeline: ExportTimeline,
-                         ringHex: UInt32 = CaptionRenderer.ringBlue) -> [ExportOverlay] {
-        let settings = take.loadCaptionSettings()
+                         ringHex: UInt32 = CaptionRenderer.ringBlue, language: SALanguage? = nil) -> [ExportOverlay] {
+        var settings = take.loadCaptionSettings()
+        if let language { settings.language = language }
         guard settings.isOn, settings.burnIn,
               let cues = try? take.captionCues(settings: settings, timeline: timeline), !cues.isEmpty else {
             return []
@@ -45,13 +48,17 @@ enum CaptionExport {
         }
     }
 
-    /// Deletes the .srt and .vtt that belong to `video`, if there are any.
+    /// Deletes the .srt and .vtt that belong to `video`, translated ones
+    /// included, if there are any.
     static func removeFiles(beside video: URL) {
         let folder = video.deletingLastPathComponent()
         let name = video.deletingPathExtension().lastPathComponent
         for format in SubtitleFile.Format.allCases {
             let url = folder.appendingPathComponent(name).appendingPathExtension(format.fileExtension)
             try? FileManager.default.removeItem(at: url)
+        }
+        for file in Take.translatedSubtitleNames(for: name) {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(file))
         }
     }
 }

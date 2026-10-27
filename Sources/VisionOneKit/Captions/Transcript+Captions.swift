@@ -61,17 +61,28 @@ extension Take {
         try encoder.encode(settings).write(to: captionSettingsURL, options: .atomic)
     }
 
-    /// Captions for the edited take, from transcript.json and edits.json.
+    /// The words captions are made from: the translation in
+    /// `settings.language` when the take has one, otherwise what was said.
+    public func captionTranscript(language: SALanguage?) throws -> Transcript {
+        if let language, FileManager.default.fileExists(atPath: transcriptURL(language: language).path) {
+            return try Transcript.read(from: transcriptURL(language: language))
+        }
+        return try Transcript.read(from: transcriptURL)
+    }
+
+    /// Captions for the edited take, from transcript.json (or the chosen
+    /// translation) and edits.json.
     public func captionCues(settings: CaptionSettings) throws -> [CaptionCue] {
-        let transcript = try Transcript.read(from: transcriptURL)
+        let transcript = try captionTranscript(language: settings.language)
         let edits = try EditList.load(from: editsURL, sourceDuration: transcript.duration)
         return settings.builder.cues(for: transcript, edits: edits)
     }
 
     /// Captions for one export, timed on the timeline it rendered and
-    /// moved later by `offset` (the brand intro), from transcript.json.
+    /// moved later by `offset` (the brand intro), from transcript.json
+    /// or the chosen translation.
     public func captionCues(settings: CaptionSettings, timeline: ExportTimeline, offset: Double = 0) throws -> [CaptionCue] {
-        let transcript = try Transcript.read(from: transcriptURL)
+        let transcript = try captionTranscript(language: settings.language)
         return settings.builder.cues(for: transcript, timeline: timeline, offset: offset)
     }
 
@@ -84,10 +95,29 @@ extension Take {
 
     /// Writes the .srt and .vtt for one export, timed to match the video
     /// it made: the same timeline, moved later by the intro's length.
+    /// Every other translated language gets its own pair too, named
+    /// "<name>.zu.srt", so one export carries all of them.
     @discardableResult
     public func writeCaptionFiles(settings: CaptionSettings, timeline: ExportTimeline, offset: Double = 0,
                                   to folder: URL, name: String = "captions") throws -> [URL] {
-        try Self.writeSubtitles(captionCues(settings: settings, timeline: timeline, offset: offset), to: folder, name: name)
+        var urls = try Self.writeSubtitles(captionCues(settings: settings, timeline: timeline, offset: offset),
+                                           to: folder, name: name)
+        for language in captionLanguages() where language != settings.language {
+            var other = settings
+            other.language = language
+            if let cues = try? captionCues(settings: other, timeline: timeline, offset: offset) {
+                urls += (try? Self.writeSubtitles(cues, to: folder, name: "\(name).\(language.code)")) ?? []
+            }
+        }
+        return urls
+    }
+
+    /// The names of the translated subtitle files written beside a
+    /// video: "<name>.zu.srt" and ".vtt" for every caption language.
+    public static func translatedSubtitleNames(for name: String) -> [String] {
+        (SALanguage.captionTargets + [.english]).flatMap { language in
+            SubtitleFile.Format.allCases.map { "\(name).\(language.code).\($0.fileExtension)" }
+        }
     }
 
     private static func writeSubtitles(_ cues: [CaptionCue], to folder: URL, name: String) throws -> [URL] {

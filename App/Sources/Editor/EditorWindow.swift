@@ -87,6 +87,14 @@ struct EditorView: View {
             if model.phase == .ready {
                 EditorExportStatus(exports: exports)
                 if model.proposedChangeCount > 0 { suggestions }
+                IconGroup {
+                    ToolbarIcon(systemImage: "person.2", help: "Versions: a copy for each person on a list, with their name on the title card") {
+                        VersionsWindowController.shared.show(for: model.take)
+                    }
+                    ToolbarIcon(systemImage: "globe", help: "Languages: captions in South Africa's languages, and an optional dub") {
+                        LanguagesWindowController.shared.show(for: model.take)
+                    }
+                }
                 Button("Agents") { AgentsWindowController.shared.show(for: model.take) }
                     .buttonStyle(PillButtonStyle(kind: .secondary))
                     .fixedSize()
