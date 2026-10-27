@@ -85,6 +85,10 @@ struct AppCommands: Commands {
                 .keyboardShortcut(ShortcutMap.library)
             Button("Copy a Style…") { CopyStyleWindowController.shared.show() }
             Button("Autopilot…") { AutopilotWindowController.shared.show() }
+            Divider()
+            Button("Script Coach…") { ScriptCoachWindowController.shared.show() }
+            Button("Rehearse…") { RehearseWindowController.shared.show() }
+            Button("Voice Tools…") { VoiceToolsWindowController.shared.show(for: EditorWindowController.shared.currentTake) }
         }
         CommandGroup(after: .appSettings) {
             Button("Settings…") { SettingsWindowController.shared.show() }

@@ -230,6 +230,9 @@ struct VideoExporter {
             audio.append(added)
             audioSources.append((track, try await track.load(.timeRange)))
         }
+        // Kept voice tools (voice.json): the cleaned voice in place of the mic.
+        let micIndex = await MicTrack.micIndex(of: sourceAudio, take: take)
+        audioSources = await VoiceComposer.sources(audioSources, take: take)
 
         // The camera, on its own track, cut the same way as the screen.
         // Clips skip it for now: their crop would cut the bubble in half.
@@ -324,6 +327,8 @@ struct VideoExporter {
         // Sentences said again replace the original voice in their slot.
         let redos = ((try? RedoList.load(from: take.redosURL)) ?? RedoList()).accepted
         let redone = await RedoComposer.add(redos, take: take, timeline: timeline, to: composition, offset: joinOffset)
+        // Words re-said in the user's cloned voice, with the original muted under them.
+        let voiceFixes = await VoiceComposer.addFixes(for: take, timeline: timeline, to: composition, offset: joinOffset)
 
         let videoComposition = AVMutableVideoComposition()
         videoComposition.customVideoCompositorClass = FrameCompositor.self
@@ -332,13 +337,19 @@ struct VideoExporter {
         videoComposition.instructions = instructions
 
         let audioMix = AVMutableAudioMix()
-        let recorded: [AVMutableAudioMixInputParameters] = audio.map { track in
+        let recorded: [AVMutableAudioMixInputParameters] = audio.enumerated().map { index, track in
             let parameters = AVMutableAudioMixInputParameters(track: track)
             RedoComposer.mute(parameters, during: redone.mutes)
-            // Ramps can't overlap: a join right beside a redone line
-            // keeps the redo's fades.
+            // Ramps can't overlap: a word fix inside a redone line is
+            // already silent, and a join right beside a redone line or a
+            // fixed word keeps their fades.
+            let fixMutes = voiceFixes.mutes.filter { fix in
+                !redone.mutes.contains { $0.lowerBound - 0.2 < fix.end && fix.start < $0.upperBound + 0.2 }
+            }
+            if index == micIndex { VoiceComposer.mute(fixMutes, on: parameters) }
+            let quiet = redone.mutes + fixMutes.map { $0.start..<max($0.start, $0.end) }
             let joins = timeline.joins.map { $0 + joinOffset }.filter { join in
-                !redone.mutes.contains { ($0.lowerBound - 0.2)...($0.upperBound + 0.2) ~= join }
+                !quiet.contains { ($0.lowerBound - 0.2)...($0.upperBound + 0.2) ~= join }
             }
             for join in joins {
                 let fade = Self.time(Self.joinFade)
@@ -348,10 +359,10 @@ struct VideoExporter {
             }
             return parameters
         }
-        audioMix.inputParameters = recorded + soundTracks.parameters + redone.parameters
+        audioMix.inputParameters = recorded + soundTracks.parameters + redone.parameters + voiceFixes.parameters
 
         return try await encode(composition: composition, videoTracks: [video] + (cameraTrack.map { [$0] } ?? []),
-                                audio: audio + soundTracks.tracks + redone.tracks,
+                                audio: audio + soundTracks.tracks + redone.tracks + voiceFixes.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
                                 duration: duration.seconds, settings: settings, to: url, progress: progress)
     }

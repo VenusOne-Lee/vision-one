@@ -365,21 +365,3 @@ public struct CloudflareShareHost: Sendable {
     }
 }
 
-/// multipart/form-data, for the Worker upload.
-struct MultipartForm {
-    let boundary = "vision-one-" + UUID().uuidString
-    private var body = Data()
-
-    var contentType: String { "multipart/form-data; boundary=\(boundary)" }
-
-    mutating func add(name: String, filename: String? = nil, contentType: String, data: Data) {
-        var head = "--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\""
-        if let filename { head += "; filename=\"\(filename)\"" }
-        head += "\r\nContent-Type: \(contentType)\r\n\r\n"
-        body.append(Data(head.utf8))
-        body.append(data)
-        body.append(Data("\r\n".utf8))
-    }
-
-    var finished: Data { body + Data("--\(boundary)--\r\n".utf8) }
-}

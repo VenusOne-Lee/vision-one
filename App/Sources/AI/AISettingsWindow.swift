@@ -64,6 +64,9 @@ struct AISettingsView: View {
             ToolKeyField(title: "Linear API key", hint: "Reads finished issues for the teams you add to a project.",
                          name: ScriptSources.linearKeyName)
 
+            Rectangle().fill(Theme.line).frame(height: 1)
+            elevenLabsRow
+
             if case let .failed(message) = signIn.phase {
                 EditorNotice(title: "Sign in with ChatGPT", message: message, isError: true)
             }
@@ -75,6 +78,27 @@ struct AISettingsView: View {
         .themed()
         .task { await ai.refresh() }
         .sheet(item: $editingKey) { id in keySheet(id) }
+    }
+
+    /// ElevenLabs isn't a rung: it doesn't write text. It voices the
+    /// coach and the voice tools, with the user's own key.
+    private var elevenLabsRow: some View {
+        let ready = !ai.key(AISecretName.elevenLabsKey).isEmpty
+        return HStack(spacing: Theme.Space.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("ElevenLabs · voice").font(.system(size: 13, weight: .semibold))
+                Text("Optional. Voices for Hear it first, Talk it through and the voice tools. Asks before any audio is sent.")
+                    .font(.system(size: 11)).foregroundStyle(Theme.textMuted).lineLimit(2)
+            }
+            Spacer()
+            Button(ready ? "Change" : "Add key") {
+                draftKey = ""
+                editingKey = .elevenLabs
+            }
+            .buttonStyle(PillButtonStyle(kind: .secondary))
+            StatusChip(ready: ready)
+        }
+        .opacity(ai.settings.onDeviceOnly ? 0.45 : 1)
     }
 
     private var orderedRows: [AIServices.Row] {
@@ -139,6 +163,7 @@ struct AISettingsView: View {
         case .openAIKey, .openAIDecisions: return AISecretName.openAIKey
         case .anthropicKey: return AISecretName.anthropicKey
         case .openRouterKey: return AISecretName.openRouterKey
+        case .elevenLabs: return AISecretName.elevenLabsKey
         default: return nil
         }
     }
@@ -153,7 +178,8 @@ struct AISettingsView: View {
                 TextField("http://127.0.0.1:8080/v1", text: $draftKey).textFieldStyle(.roundedBorder)
                 TextField("Model, such as mlx-community/Qwen3-8B-4bit", text: $ai.localModel).textFieldStyle(.roundedBorder)
             } else {
-                Text(id == .anthropicKey ? "Anthropic API key" : id == .openRouterKey ? "OpenRouter API key" : "OpenAI API key")
+                Text(id == .anthropicKey ? "Anthropic API key" : id == .openRouterKey ? "OpenRouter API key"
+                     : id == .elevenLabs ? "ElevenLabs API key" : "OpenAI API key")
                     .font(.system(size: 15, weight: .bold))
                 Text("Kept in your Keychain. Used only for jobs you approve.")
                     .font(.system(size: 12)).foregroundStyle(Theme.textMuted)
@@ -173,6 +199,8 @@ struct AISettingsView: View {
                     if id == .localServer {
                         ai.localServerURL = draftKey
                         Task { await ai.refresh() }
+                    } else if id == .elevenLabs {
+                        CoachServices.shared.setKey(draftKey)
                     } else if let name = secretName(id) {
                         ai.setKey(draftKey, for: name)
                     }
