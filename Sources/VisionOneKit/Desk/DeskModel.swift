@@ -175,6 +175,16 @@ public struct ApprovalCard: Codable, Equatable, Identifiable, Sendable {
     /// The three choices for something leaving the Mac.
     public static func job(_ jobID: UUID, approval: AgentJob.Approval, agent: AgentKind,
                            project: String) -> ApprovalCard {
+        if let asker = approval.askedBy {
+            // An outside agent over MCP: "Record your screen for Claude Code?"
+            var options = [ApprovalOption(approval.isPost ? "Yes, open the post" : "Yes, allow once", .allowOnce)]
+            if approval.canRemember ?? false {
+                options.append(ApprovalOption("Yes, and allow \(asker) until Vision One quits", .allowAlways))
+            }
+            options.append(ApprovalOption("No, and tell \(asker) what to do instead", .deny))
+            return ApprovalCard(subject: .job(jobID), question: approval.summary,
+                                detail: approval.preview.isEmpty ? nil : approval.preview, options: options)
+        }
         let cost: String
         if approval.fromPlan { cost = "from your ChatGPT plan, R0" }
         else if let rand = approval.estimatedRand { cost = String(format: "about R%.2f", rand) }
@@ -383,6 +393,7 @@ public struct DeskSnapshot: Equatable, Sendable {
         switch status(of: task) {
         case .needsYou:
             if let job = jobs.last(where: { $0.state == .needsApproval }), let approval = job.approval {
+                if let asker = approval.askedBy { return "Needs you · \(asker) is asking" }
                 return "Needs you · " + (approval.isPost ? "post to \(approval.destination)" : "send to \(approval.providerName)")
             }
             return task.openApprovals.first?.subject == ApprovalCard.Subject.plan ? "Needs you · approve the plan" : "Needs you"

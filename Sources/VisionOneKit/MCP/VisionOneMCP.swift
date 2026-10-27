@@ -681,26 +681,33 @@ public final class VisionOneMCP: Sendable {
 
     // MARK: Approvals
 
-    /// Asks the user, unless they allowed this agent until quit. The
-    /// task shows it's waiting while the card is up.
     /// Asks the user, unless they allowed this agent until quit. With a
-    /// task, the question is a card on it as well as the floating card;
-    /// whichever the user answers first counts and the other goes away.
+    /// task, the question is a card on it, waiting on the job board. The
+    /// floating card asks too only when the host says the task's card is
+    /// out of view; then whichever the user answers counts and the other
+    /// goes away. A "no" note comes back from either.
     func permit(_ question: MCPQuestion, destination: String, onTask: Bool = true) async -> MCPAnswer {
         if await permissions.allows(question.client, question.action) { return MCPAnswer(.allowForSession) }
         let answer: MCPAnswer
         if onTask, let jobID = question.jobID {
             let floating = AnswerBox()
             let host = self.host
-            let decision = await board.requestApproval(jobID: jobID,
-                                                       approval: AgentJob.Approval(question, destination: destination)) {
-                let reply = await host.ask(question)
-                await floating.set(reply)
-                return reply.decision
+            let showsCard = await host.showsCard(for: question)
+            var alsoAsk: (@Sendable () async -> OutboundDecision)?
+            if showsCard {
+                alsoAsk = {
+                    let reply = await host.ask(question)
+                    await floating.set(reply)
+                    return reply.decision
+                }
             }
-            await host.dismiss(question.id)
-            let note = await floating.answer?.note
-            answer = MCPAnswer(decision, note: decision == .deny ? note : nil)
+            let decision = await board.requestApproval(jobID: jobID,
+                                                       approval: AgentJob.Approval(question, destination: destination),
+                                                       alsoAsk: alsoAsk)
+            if showsCard { await host.dismiss(question.id) }
+            let fromTask = await board.takeNote(jobID: jobID)
+            let fromCard = await floating.answer?.note
+            answer = MCPAnswer(decision, note: decision == .deny ? (fromTask ?? fromCard) : nil)
         } else {
             answer = await host.ask(question)
         }

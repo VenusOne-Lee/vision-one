@@ -56,8 +56,9 @@ final class AIServices: ObservableObject {
     /// threads and the menu bar's Tasks list show (saved to desk.json).
     let desk: Desk
     /// One gate for the whole app, so "Allow for this session" holds until
-    /// quit. A job's approvals wait on its task; until the Agent Desk shows
-    /// those cards, the floating panel asks for them too.
+    /// quit. A job's approvals wait on its task's card; the floating panel
+    /// asks too only when the main window is out of view, and anything
+    /// outside a task asks on the panel alone (`ApprovalPlacement`).
     let gate: OutboundGate
     /// Start the agents on their own once a take is transcribed.
     @Published var autoAgents: Bool {
@@ -82,8 +83,11 @@ final class AIServices: ObservableObject {
         chatGPT = ChatGPTSession(store: secrets)
         let board = AgentJobBoard(storeURL: AgentJobBoard.standardURL)
         jobs = board
-        desk = Desk(board: board, storeURL: Desk.standardURL)
-        gate = OutboundGate(approver: board.approver(fallback: PanelApprover(), panelForJobs: true))
+        let desk = Desk(board: board, storeURL: Desk.standardURL)
+        self.desk = desk
+        gate = OutboundGate(approver: board.approver(fallback: PanelApprover(), panelFor: { jobID in
+            await ApprovalPlacement.panelAsks(jobID: jobID, desk: desk)
+        }))
         autoAgents = UserDefaults.standard.object(forKey: "ai.autoAgents") as? Bool ?? true
         if let data = UserDefaults.standard.data(forKey: "ai.settings"),
            let saved = try? JSONDecoder().decode(AISettings.self, from: data) {
@@ -234,9 +238,15 @@ final class AIServices: ObservableObject {
 }
 
 /// The approval sheet as a gate approver: asks on the main thread and
-/// waits for the user's answer.
+/// waits for the user's answer. When the board cancels it (the task's card
+/// was answered first), the panel takes the request away.
 struct PanelApprover: OutboundApprover {
     func approve(_ request: OutboundRequest) async -> OutboundDecision {
-        await ApprovalCenter.shared.ask(request)
+        let id = request.id
+        return await withTaskCancellationHandler {
+            await ApprovalCenter.shared.ask(request)
+        } onCancel: {
+            Task { @MainActor in ApprovalCenter.shared.dismiss(id) }
+        }
     }
 }
