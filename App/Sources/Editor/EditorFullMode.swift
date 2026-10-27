@@ -23,6 +23,8 @@ struct EditorFullMode<Rail: View>: View {
     @AppStorage("editor.showTranscript") private var showAside = true
     @AppStorage("editor.asideWidth") private var asideWidth = 340.0
     @AppStorage("editor.aside") private var asideRaw = EditorAside.transcript.rawValue
+    /// An agent recorded this take (actions.json), so it has a Steps tab.
+    @State private var hasSteps: Bool
     @AppStorage("editor.timelineHeight") private var timelineHeight = 172.0
     @AppStorage("editor.showTracks") private var showTracks = true
     @AppStorage("editor.lane.waveform") private var showWaveform = true
@@ -44,12 +46,14 @@ struct EditorFullMode<Rail: View>: View {
         self.onBack = onBack
         self.rail = rail
         _filmstrip = StateObject(wrappedValue: FilmstripModel(url: model.take.screenURL))
+        _hasSteps = State(initialValue: AgentStepsPane.has(model.take))
     }
 
     private var tool: EditorTool { EditorTool(rawValue: toolRaw) ?? .select }
 
     private var asides: [EditorAside] {
         var all: [EditorAside] = [.transcript, .changes]
+        if hasSteps { all.append(.steps) }
         if clips != nil { all.append(.clips) }
         if thumbnail != nil { all.append(.thumbnail) }
         return all
@@ -236,6 +240,7 @@ struct EditorFullMode<Rail: View>: View {
             switch aside {
             case .transcript: TranscriptPane(model: model)
             case .changes: ChangesPanel(model: model, effects: model.effects)
+            case .steps: AgentStepsPane(model: model)
             case .clips:
                 if let clips { ClipsPane(model: clips) }
             case .thumbnail:
@@ -259,12 +264,13 @@ extension EditorFullMode where Rail == EmptyView {
 
 /// What the pane beside the video shows.
 enum EditorAside: String, CaseIterable, Identifiable {
-    case transcript, changes, clips, thumbnail
+    case transcript, changes, steps, clips, thumbnail
     var id: String { rawValue }
     var title: String {
         switch self {
         case .transcript: return "Transcript"
         case .changes: return "Changes"
+        case .steps: return "Steps"
         case .clips: return "Clips"
         case .thumbnail: return "Thumbnail"
         }
