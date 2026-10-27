@@ -8,6 +8,7 @@ struct MenuContent: View {
     @EnvironmentObject private var recorder: ScreenRecorder
     @ObservedObject private var exports = ExportController.shared
     @ObservedObject private var transcriber = Transcriber.shared
+    @ObservedObject private var devices = CaptureDevices.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
@@ -33,6 +34,17 @@ struct MenuContent: View {
                             .foregroundStyle(Theme.textMuted)
                     }
                 }
+            }
+
+            if !recorder.phase.isLive && !recorder.phase.isBusy {
+                SourcesRow(devices: devices)
+            }
+
+            ForEach(recorder.trackNotes, id: \.self) { note in
+                Text(note)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if case let .failed(message) = recorder.phase {

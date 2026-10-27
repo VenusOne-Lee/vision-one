@@ -13,6 +13,9 @@ final class ScreenRecorder: NSObject, ObservableObject {
 
     @Published private(set) var phase: RecordingPhase = .idle
     @Published private(set) var lastTake: Take?
+    /// Why an extra track (like a plugged-in iPhone's screen) is missing
+    /// from the current take. The screen recording carries on without it.
+    @Published private(set) var trackNotes: [String] = []
 
     let library = TakeLibrary.standard
 
@@ -21,6 +24,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
     private var sink: CaptureSink?
     private var cursor: CursorLogger?
     private var take: Take?
+    private let deviceTracks = DeviceTracks()
 
     func toggle() async {
         switch phase {
@@ -86,6 +90,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
             }
             cursor.start()
             try await stream.startCapture()
+            trackNotes = await deviceTracks.start(for: take)
 
             self.stream = stream
             self.sink = sink
@@ -105,6 +110,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
         } catch {
             // Keep going: whatever was written is still worth finishing.
         }
+        await deviceTracks.stop()
         cursor?.stop(writingTo: take.eventsURL)
         let saved = await sink.finish()
         if saved {
@@ -134,6 +140,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
     private func fail(_ error: Error) {
         if let take { cursor?.stop(writingTo: take.eventsURL) }
         if let sink { Task { _ = await sink.finish() } }
+        Task { await deviceTracks.stop() }
         reset()
         phase = .failed(message: RecorderError.describe(error))
     }

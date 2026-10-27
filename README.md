@@ -46,6 +46,8 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | `Sources/VisionOneKit` | Testable logic: recording state, take folders, cursor log, timecodes, export plans |
 | `docs/RECORDER.md` | How recording works, and what a take folder holds |
 | `docs/EXPORT.md` | How export combines the tracks, and the presets |
+| `docs/IPHONE.md` | Recording a plugged-in iPhone's screen, and the iPhone as a camera |
+| `docs/PRESETS.md` | Prompt presets: the file format and how a prompt is put together |
 | `docs/DESIGN.md` | Design system: tokens, type, components, do's and don'ts |
 | `project.yml` | XcodeGen project (the `.xcodeproj` isn't committed) |
 

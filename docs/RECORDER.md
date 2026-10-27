@@ -11,6 +11,7 @@ Each recording is one folder in `~/Movies/Vision One`:
 | `screen.mov` | Screen video (HEVC), a system sound track and a mic track (AAC), in that order |
 | `events.json` | Cursor moves and clicks, in seconds from the first frame, positions in display points (origin top left) |
 | `camera.mov` | Coming next: the camera, drawn in the ring bubble at export |
+| `phone.mov` | A plugged-in iPhone's screen and sound, when you picked one (see [IPHONE.md](IPHONE.md)) |
 
 ## Pipeline
 
