@@ -110,6 +110,13 @@ struct AskBar: View {
             status
                 .padding(.horizontal, 14)
         }
+        // Said while holding Space, and not one of the edits done on the spot.
+        .onChange(of: model.pendingAsk) { _, said in
+            guard let said else { return }
+            model.pendingAsk = nil
+            ask.text = said
+            ask.go(on: model)
+        }
     }
 
     @ViewBuilder
