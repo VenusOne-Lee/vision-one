@@ -24,6 +24,7 @@ struct VersionsView: View {
         }
         .background(Theme.canvas)
         .frame(minWidth: 620, minHeight: 460)
+        .themed()
     }
 
     // MARK: List

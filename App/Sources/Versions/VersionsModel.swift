@@ -212,7 +212,6 @@ final class VersionsWindowController {
                                   styleMask: [.titled, .closable, .resizable, .miniaturizable],
                                   backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.minSize = NSSize(width: 620, height: 460)
             window.setFrameAutosaveName("VisionOneVersions")
             window.center()

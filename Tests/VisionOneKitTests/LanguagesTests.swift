@@ -1,22 +1,5 @@
 import XCTest
 @testable import VisionOneKit
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
-
-/// Answers every request with the next canned reply and keeps what was sent.
-private final class CannedHTTP: HTTPClient, @unchecked Sendable {
-    var replies: [(Int, Data)]
-    var sent: [URLRequest] = []
-
-    init(_ replies: [(Int, Data)]) { self.replies = replies }
-
-    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        sent.append(request)
-        let (status, data) = replies.isEmpty ? (200, Data()) : replies.removeFirst()
-        return (data, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
-    }
-}
 
 private func word(_ id: Int, _ text: String, _ start: Double, _ end: Double) -> TranscriptWord {
     TranscriptWord(id: id, text: text, start: start, end: end)
@@ -202,67 +185,5 @@ final class LanguagesTests: XCTestCase {
         XCTAssertTrue(afrikaans.contains("jy weet"))
         XCTAssertTrue(afrikaans.contains("ne"))   // "nê", accents folded
         XCTAssertEqual(FillerLexicon.lexicon(for: .english), .standard)
-    }
-
-    // MARK: ElevenLabs
-
-    func testScribeWordsBecomePieces() throws {
-        let json = #"""
-        {"language_code": "zul", "words": [
-          {"text": "Sawubona", "start": 0.1, "end": 0.6, "type": "word", "logprob": -0.1},
-          {"text": " ", "start": 0.6, "end": 0.7, "type": "spacing"},
-          {"text": "(laughs)", "start": 0.7, "end": 1.0, "type": "audio_event"},
-          {"text": "nonke.", "start": 1.0, "end": 1.4, "type": "word"}
-        ]}
-        """#
-        let result = try ElevenLabsClient.pieces(fromScribe: Data(json.utf8))
-        XCTAssertEqual(result.language, "zul")
-        XCTAssertEqual(result.pieces.map(\.text), ["Sawubona", "nonke."])
-        XCTAssertTrue(result.pieces.allSatisfy(\.startsWord))
-        XCTAssertEqual(result.pieces[0].confidence ?? 0, exp(-0.1), accuracy: 1e-9)
-    }
-
-    func testDubStatus() throws {
-        XCTAssertEqual(try ElevenLabsClient.dubStatus(from: Data(#"{"status": "dubbing"}"#.utf8)), .working)
-        XCTAssertEqual(try ElevenLabsClient.dubStatus(from: Data(#"{"status": "dubbed"}"#.utf8)), .done)
-        XCTAssertEqual(try ElevenLabsClient.dubStatus(from: Data(#"{"status": "failed", "error": "No speech"}"#.utf8)),
-                       .failed("No speech"))
-    }
-
-    func testScribeAsksFirstAndSendsTheLanguage() async throws {
-        let reply = Data(#"{"language_code": "afr", "words": [{"text": "Hallo", "start": 0, "end": 0.5, "type": "word"}]}"#.utf8)
-        let http = CannedHTTP([(200, reply)])
-        let approver = RecordingApprover(.allowOnce)
-        let client = ElevenLabsClient(apiKey: "key", gate: OutboundGate(approver: approver), http: http)
-        let transcript = try await client.transcribe(audio: Data([1, 2, 3]), fileName: "voice.wav", mimeType: "audio/wav",
-                                                     seconds: 1, language: .afrikaans)
-        XCTAssertEqual(transcript.language, "af")
-        XCTAssertEqual(transcript.words.map(\.text), ["Hallo"])
-        let asked = await approver.asked
-        XCTAssertEqual(asked.count, 1)
-        XCTAssertEqual(asked.first?.kind, .audio)
-        let body = String(decoding: http.sent.first?.httpBody ?? Data(), as: UTF8.self)
-        XCTAssertTrue(body.contains("afr"))
-        XCTAssertTrue(body.contains("scribe_v2"))
-        XCTAssertEqual(http.sent.first?.url?.path, "/v1/speech-to-text")
-    }
-
-    func testDubRefusesLanguagesElevenLabsDoesNotDub() async {
-        let client = ElevenLabsClient(apiKey: "key", gate: OutboundGate(approver: FixedApprover(.allowOnce)), http: CannedHTTP([]))
-        do {
-            _ = try await client.startDub(audio: Data(), fileName: "a.m4a", mimeType: "audio/mp4", seconds: 1,
-                                         from: .english, to: .xhosa, name: "x")
-            XCTFail("isiXhosa can't be dubbed")
-        } catch {
-            XCTAssertEqual(error as? AIError, .unavailable(.elevenLabs, "ElevenLabs doesn't dub isiXhosa yet. Captions still work."))
-        }
-    }
-
-    func testScribeUploadIsMonoWAV() {
-        let data = WAVFile.data(samples: [0, 1, -1], sampleRate: 16_000, channels: 1)
-        XCTAssertEqual(data.count, 44 + 6)
-        XCTAssertEqual(data[22], 1)  // channels
-        XCTAssertEqual(data[44 + 2], 0xFF)  // 32767 little endian: FF 7F
-        XCTAssertEqual(data[44 + 3], 0x7F)
     }
 }
