@@ -2,14 +2,16 @@ import AVFoundation
 import ScreenCaptureKit
 
 /// Writes ScreenCaptureKit's sample buffers to screen.mov with one video
-/// track and separate system sound and mic tracks. The file is written
-/// in fragments every 2 seconds, so a crash loses seconds, not the take.
+/// track and separate system sound and mic tracks, each left out when
+/// switched off. The file is written in fragments every 2 seconds, so a
+/// crash loses seconds, not the take.
 ///
 /// Used only from the capture queue, so it needs no locking.
 final class TakeWriter: @unchecked Sendable {
     private let writer: AVAssetWriter
     private let video: AVAssetWriterInput
-    private let systemAudio: AVAssetWriterInput
+    /// Nil when System sound is switched off.
+    private let systemAudio: AVAssetWriterInput?
     /// Nil when Microphone access is off; the take then has no mic track.
     private let mic: AVAssetWriterInput?
 
@@ -17,7 +19,7 @@ final class TakeWriter: @unchecked Sendable {
     /// timed from here, so they line up in the editor.
     private(set) var firstFrameTime: CMTime?
 
-    init(url: URL, width: Int, height: Int, includeMicrophone: Bool) throws {
+    init(url: URL, width: Int, height: Int, includeSystemAudio: Bool, includeMicrophone: Bool) throws {
         writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         writer.movieFragmentInterval = CMTime(seconds: 2, preferredTimescale: 600)
 
@@ -30,8 +32,13 @@ final class TakeWriter: @unchecked Sendable {
         ])
         video.expectsMediaDataInRealTime = true
 
-        systemAudio = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.aac(channels: 2))
-        systemAudio.expectsMediaDataInRealTime = true
+        if includeSystemAudio {
+            let systemAudio = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.aac(channels: 2))
+            systemAudio.expectsMediaDataInRealTime = true
+            self.systemAudio = systemAudio
+        } else {
+            systemAudio = nil
+        }
 
         if includeMicrophone {
             let mic = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.aac(channels: 1))
@@ -71,7 +78,7 @@ final class TakeWriter: @unchecked Sendable {
             }
             if video.isReadyForMoreMediaData { video.append(buffer) }
         case .audio:
-            appendAudio(buffer, to: systemAudio)
+            if let systemAudio { appendAudio(buffer, to: systemAudio) }
         case .microphone:
             if let mic { appendAudio(buffer, to: mic) }
         @unknown default:
@@ -89,7 +96,7 @@ final class TakeWriter: @unchecked Sendable {
     func finish() async -> Bool {
         guard writer.status == .writing else { return false }
         video.markAsFinished()
-        systemAudio.markAsFinished()
+        systemAudio?.markAsFinished()
         mic?.markAsFinished()
         await writer.finishWriting()
         return writer.status == .completed
