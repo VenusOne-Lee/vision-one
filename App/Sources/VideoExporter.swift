@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import VisionOneKit
 
 /// Something drawn on top of every exported frame: burned-in captions,
