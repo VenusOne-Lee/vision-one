@@ -1,0 +1,313 @@
+<title>Vision One Record Picker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a light canvas of mock Mac screens, panels drawn at true size, then one flow diagram. Light only, per Vision One's rules. */
+:root {
+  --paper: #FFFFFF;
+  --canvas: #F4F4F1;
+  --line: #E2E1DC;
+  --text: #121212;
+  --muted: #5C5B57;
+  --tally: #FF5A1F;
+  --desk: #D9D8D2;
+  --dim: rgba(18, 18, 18, 0.38);
+  --display: "Bricolage Grotesque", -apple-system, "Helvetica Neue", sans-serif;
+  --body: "Bricolage Grotesque", -apple-system, "Helvetica Neue", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+body {
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+header { display: flex; flex-direction: column; gap: 10px; max-width: 680px; }
+.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { font-family: var(--display); font-weight: 300; font-size: clamp(2rem, 5vw, 3.2rem); letter-spacing: -0.025em; line-height: 1.05; margin: 0; text-wrap: balance; }
+h1 b { font-weight: 800; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.35rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 65ch; }
+.lead { font-size: 16px; color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 18px; }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 22px; height: 14px; border-radius: 4px; border: 1.5px solid var(--text); background: var(--paper); }
+.sw.dash { border-style: dashed; }
+.sw.live { border-color: var(--tally); }
+
+/* Mock panels */
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; align-items: start; }
+.shot { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cap { font-size: 12px; color: var(--muted); }
+.cap b { color: var(--text); font-weight: 600; }
+.panel {
+  width: 100%; max-width: 280px; background: var(--paper); border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(18,18,18,0.12), 0 0 0 0.5px rgba(18,18,18,0.18);
+  padding: 16px; display: flex; flex-direction: column; gap: 16px; font-size: 13px;
+}
+.row { display: flex; align-items: center; gap: 8px; }
+.between { justify-content: space-between; }
+.brand { font-weight: 600; }
+.kbd { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.rec { display: flex; align-items: center; gap: 16px; }
+.rbtn { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--text); display: grid; place-items: center; flex: none; background: var(--paper); }
+.rbtn i { width: 18px; height: 18px; border-radius: 50%; background: var(--tally); display: block; }
+.rbtn.live { border-color: var(--tally); }
+.rbtn.live i { width: 14px; height: 14px; border-radius: 3px; background: var(--text); }
+.status b { display: block; font-weight: 500; }
+.tc { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.seg { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; }
+.seg span { flex: 1; text-align: center; padding: 5px 0; border-radius: 999px; font-size: 12px; font-weight: 500; }
+.seg .on { background: var(--text); color: var(--paper); }
+.popup { display: flex; align-items: center; justify-content: space-between; border: 1px solid #C9C8C3; border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+.popup::after { content: "⌄"; color: var(--muted); font-size: 11px; }
+.muted { color: var(--muted); font-size: 12px; }
+.mono { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pill { display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; border: 1px solid var(--text); background: var(--paper); color: var(--text); white-space: nowrap; }
+.pill.primary { background: var(--text); color: var(--paper); }
+.toggles { display: flex; gap: 16px; font-size: 12px; }
+.tg { display: inline-flex; align-items: center; gap: 6px; }
+.sw-ui { width: 26px; height: 15px; border-radius: 999px; background: var(--text); position: relative; }
+.sw-ui::after { content: ""; position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--paper); }
+.sw-ui.off { background: var(--line); }
+.sw-ui.off::after { right: auto; left: 2px; }
+hr.div { border: 0; border-top: 1px solid var(--line); margin: 0; }
+.foot { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+.foot .pill { margin-right: auto; }
+
+/* Mock screens */
+.screens { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+.screen {
+  position: relative; aspect-ratio: 16 / 10; max-width: 100%; border-radius: 10px; overflow: hidden;
+  background: var(--desk); box-shadow: 0 0 0 1px rgba(18,18,18,0.12);
+}
+.menubar { position: absolute; inset: 0 0 auto; height: 18px; background: rgba(255,255,255,0.85); display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 9px; }
+.menubar .ring { margin-left: auto; width: 10px; height: 10px; border-radius: 50%; border: 1.5px dashed var(--text); }
+.menubar .ring.live { border: 0; background: var(--tally); }
+.win { position: absolute; background: var(--paper); border-radius: 6px; box-shadow: 0 4px 14px rgba(18,18,18,0.14); overflow: hidden; }
+.win::before { content: ""; display: block; height: 12px; background: var(--canvas); border-bottom: 1px solid var(--line); }
+.win .lines { padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+.win .lines i { display: block; height: 4px; border-radius: 2px; background: var(--line); }
+.dimmer { position: absolute; inset: 0; background: var(--dim); }
+.area {
+  position: absolute; left: 22%; top: 24%; width: 46%; height: 48%;
+  box-shadow: 0 0 0 9999px var(--dim); border: 2px dashed var(--paper);
+}
+.area.live { box-shadow: none; border: 2px solid var(--tally); }
+.area b { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--paper); border: 1.5px solid var(--text); transform: translate(-50%, -50%); }
+.bubble .grip { position: absolute; right: 4%; bottom: 4%; width: 22%; aspect-ratio: 1; border-radius: 50%; background: var(--paper); border: 1.5px solid var(--text); }
+.bubble { cursor: grab; }
+.ctrl { position: absolute; left: 22%; top: calc(72% + 8px); background: var(--paper); border-radius: 999px; padding: 4px 6px 4px 12px; display: flex; gap: 6px; align-items: center; font-size: 10px; }
+.ctrl .pill { padding: 3px 9px; font-size: 10px; }
+.hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--paper); border-radius: 999px; padding: 6px 8px 6px 14px; display: flex; gap: 8px; align-items: center; font-size: 11px; white-space: nowrap; }
+.hint .pill { padding: 3px 9px; font-size: 10px; }
+
+/* Camera bubble (proposed) */
+.bubble { position: absolute; right: 6%; bottom: 8%; width: 18%; aspect-ratio: 1; border-radius: 50%; padding: 3px;
+  background: conic-gradient(#D62B2B 0 25%, #1F3FBF 0 50%, #E0A21B 0 75%, #121212 0); }
+.bubble i { display: block; width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle at 50% 38%, #C9B8A6 0 22%, transparent 23%), radial-gradient(ellipse at 50% 95%, #8C7B6C 0 42%, transparent 43%), #EDE9E2; }
+.proposed { border: 1.5px dashed var(--text); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; background: transparent; }
+.tag { align-self: flex-start; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; border: 1px dashed var(--text); border-radius: 999px; padding: 2px 10px; }
+
+/* Flow diagram */
+.diagram { overflow-x: auto; background: var(--paper); border-radius: 12px; padding: 20px; }
+.diagram svg { display: block; min-width: 860px; width: 100%; height: auto; }
+.diagram text { font-family: var(--body); fill: var(--text); }
+.diagram .small { font-size: 11px; fill: var(--muted); }
+.diagram .mono { font-family: var(--mono); font-size: 11px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.note { background: var(--paper); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.note h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.note p { font-size: 13px; color: var(--muted); }
+code { font-family: var(--mono); font-size: 12px; }
+@media (max-width: 480px) { .panel { max-width: none; } }
+@media (prefers-reduced-motion: no-preference) {
+  .area.live { animation: none; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Vision One · v0.1 · picker built, camera proposed · everything movable and resizable</div>
+    <h1>Choose <b>what</b> you record</h1>
+    <p class="lead">The menu bar panel gains a Screen, Window or Area switch and two sound switches. Your choice is remembered, so ⌘⇧R records the same way next time. The camera bubble comes in the next PR.</p>
+    <div class="legend">
+      <span><i class="sw"></i>Solid: built in this PR</span>
+      <span><i class="sw dash"></i>Dashed: proposed, not built yet</span>
+      <span><i class="sw live"></i>Orange: recording is live</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>The panel, in each mode</h2>
+    <div class="panels">
+      <div class="shot">
+        <div class="panel" aria-label="Panel in Screen mode">
+          <div class="row between"><span class="brand">vision one</span><span class="kbd">⌘⇧R</span></div>
+          <div class="rec"><span class="rbtn"><i></i></span><div class="status"><b>Record screen</b><span class="tc">00:00:00</span></div></div>
+          <div class="seg"><span class="on">Screen</span><span>Window</span><span>Area</span></div>
+          <div class="popup">Built-in Retina Display</div>
+          <div class="toggles"><span class="tg"><i class="sw-ui"></i>Mic</span><span class="tg"><i class="sw-ui"></i>System sound</span></div>
+          <hr class="div">
+          <div class="foot"><span class="pill">Show recordings</span><span>Access</span><span>Quit</span></div>
+        </div>
+        <div class="cap"><b>Screen.</b> Same as today. A screen menu appears only when a second display is plugged in.</div>
+      </div>
+
+      <div class="shot">
+        <div class="panel" aria-label="Panel in Window mode">
+          <div class="row between"><span class="brand">vision one</span><span class="kbd">⌘⇧R</span></div>
+          <div class="rec"><span class="rbtn"><i></i></span><div class="status"><b>Record window</b><span class="tc">00:00:00</span></div></div>
+          <div class="seg"><span>Screen</span><span class="on">Window</span><span>Area</span></div>
+          <div class="popup">Safari: Version One</div>
+          <div class="toggles"><span class="tg"><i class="sw-ui"></i>Mic</span><span class="tg"><i class="sw-ui off"></i>System sound</span></div>
+          <hr class="div">
+          <div class="foot"><span class="pill">Show recordings</span><span>Access</span><span>Quit</span></div>
+        </div>
+        <div class="cap"><b>Window.</b> Pick from open windows, listed as app then title. The take follows the window even if it's moved or covered. Here System sound is off, so the take has no system sound track.</div>
+      </div>
+
+      <div class="shot">
+        <div class="panel" aria-label="Panel in Area mode">
+          <div class="row between"><span class="brand">vision one</span><span class="kbd">⌘⇧R</span></div>
+          <div class="rec"><span class="rbtn"><i></i></span><div class="status"><b>Record area</b><span class="tc">00:00:00</span></div></div>
+          <div class="seg"><span>Screen</span><span>Window</span><span class="on">Area</span></div>
+          <div class="row between"><span class="mono">1280 × 720</span><span class="pill">Change area</span></div>
+          <div class="toggles"><span class="tg"><i class="sw-ui"></i>Mic</span><span class="tg"><i class="sw-ui"></i>System sound</span></div>
+          <hr class="div">
+          <div class="foot"><span class="pill">Show recordings</span><span>Access</span><span>Quit</span></div>
+        </div>
+        <div class="cap"><b>Area.</b> Shows the size of the last area. If no area has been chosen yet, pressing record opens the area overlay first.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Choosing an area, then recording it</h2>
+    <div class="screens">
+      <div class="shot">
+        <div class="screen" aria-label="Overlay before dragging">
+          <div class="menubar">Finder<span class="ring"></span></div>
+          <div class="win" style="left:8%;top:16%;width:56%;height:62%"><div class="lines"><i style="width:60%"></i><i></i><i style="width:80%"></i><i style="width:40%"></i></div></div>
+          <div class="win" style="left:52%;top:30%;width:42%;height:56%"><div class="lines"><i></i><i style="width:70%"></i></div></div>
+          <div class="dimmer"></div>
+          <div class="hint">Drag to choose the area to record. Move or resize it after.<span class="pill">Cancel</span></div>
+        </div>
+        <div class="cap"><b>1. Overlay.</b> The screen dims. Esc cancels.</div>
+      </div>
+      <div class="shot">
+        <div class="screen" aria-label="Area being chosen, dashed">
+          <div class="menubar">Finder<span class="ring"></span></div>
+          <div class="win" style="left:8%;top:16%;width:56%;height:62%"><div class="lines"><i style="width:60%"></i><i></i><i style="width:80%"></i><i style="width:40%"></i></div></div>
+          <div class="win" style="left:52%;top:30%;width:42%;height:56%"><div class="lines"><i></i><i style="width:70%"></i></div></div>
+          <div class="area"><b style="left:0%;top:0%"></b><b style="left:50%;top:0%"></b><b style="left:100%;top:0%"></b><b style="left:0%;top:50%"></b><b style="left:100%;top:50%"></b><b style="left:0%;top:100%"></b><b style="left:50%;top:100%"></b><b style="left:100%;top:100%"></b></div>
+          <div class="ctrl"><span class="mono" style="font-size:10px;color:var(--muted)">1280 × 720</span><span class="pill">Cancel</span><span class="pill primary">Record this area</span></div>
+        </div>
+        <div class="cap"><b>2. Adjust.</b> Drag inside the area to move it, or pull any of the eight handles to resize it. It stays on screen and never shrinks below 64 points a side. It stays dashed until you accept with the button or Return. Next time it opens where you left it.</div>
+      </div>
+      <div class="shot">
+        <div class="screen" aria-label="Area recording, orange outline">
+          <div class="menubar">Finder<span class="ring live"></span></div>
+          <div class="win" style="left:8%;top:16%;width:56%;height:62%"><div class="lines"><i style="width:60%"></i><i></i><i style="width:80%"></i><i style="width:40%"></i></div></div>
+          <div class="win" style="left:52%;top:30%;width:42%;height:56%"><div class="lines"><i></i><i style="width:70%"></i></div></div>
+          <div class="area live"></div>
+        </div>
+        <div class="cap"><b>3. Live.</b> A thin orange frame marks what's being recorded. Like every Vision One window, the frame itself isn't in the video.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>How a take is made</h2>
+    <div class="diagram">
+      <svg viewBox="0 0 900 300" role="img" aria-label="Flow from the panel choice to the files in the take folder">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#121212"/></marker>
+        </defs>
+        <!-- Choice -->
+        <rect x="10" y="40" width="170" height="104" rx="12" fill="#F4F4F1" stroke="#121212" stroke-width="1.5"/>
+        <text x="26" y="66" font-weight="600" font-size="14">Your choice</text>
+        <text x="26" y="88" class="small">Screen · Window · Area</text>
+        <text x="26" y="106" class="small">Mic on or off</text>
+        <text x="26" y="124" class="small">System sound on or off</text>
+        <text x="26" y="168" class="small">Saved between launches</text>
+
+        <!-- Target -->
+        <rect x="230" y="40" width="190" height="104" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="246" y="66" font-weight="600" font-size="14">What to capture</text>
+        <text x="246" y="88" class="small">Display, minus Vision One</text>
+        <text x="246" y="106" class="small">or one window</text>
+        <text x="246" y="124" class="small">or display + area rectangle</text>
+
+        <!-- Stream -->
+        <rect x="470" y="40" width="160" height="104" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="486" y="66" font-weight="600" font-size="14">ScreenCaptureKit</text>
+        <text x="486" y="88" class="small">frames at up to 60 fps</text>
+        <text x="486" y="106" class="small">system sound, if on</text>
+        <text x="486" y="124" class="small">mic, if on and allowed</text>
+
+        <!-- Files -->
+        <rect x="680" y="20" width="210" height="62" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="696" y="44" class="mono">screen.mov</text>
+        <text x="696" y="64" class="small">video + up to 2 sound tracks</text>
+
+        <rect x="680" y="100" width="210" height="62" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="696" y="124" class="mono">events.json</text>
+        <text x="696" y="144" class="small">clicks, relative to the area</text>
+
+        <rect x="680" y="200" width="210" height="62" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5" stroke-dasharray="6 4"/>
+        <text x="696" y="224" class="mono">camera.mov</text>
+        <text x="696" y="244" class="small">next PR: camera, own file</text>
+
+        <!-- Cursor logger -->
+        <rect x="470" y="190" width="160" height="62" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="486" y="216" font-weight="600" font-size="14">Cursor log</text>
+        <text x="486" y="236" class="small">same clock as video</text>
+
+        <!-- Arrows -->
+        <path d="M180 92 H226" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <path d="M420 92 H466" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <path d="M630 80 C655 70 660 55 676 52" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <path d="M325 144 V221 H466" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <text x="335" y="212" class="small">where it is on screen</text>
+        <path d="M630 221 C655 210 655 140 676 133" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <path d="M630 245 C650 245 660 235 676 231" stroke="#121212" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+        <text x="40" y="270" class="small">All files land in one take folder in ~/Movies/Vision One.</text>
+      </svg>
+    </div>
+    <div class="notes">
+      <div class="note"><h3>Window follows you</h3><p>Window mode records just that window, even when it's moved or covered by another one.</p></div>
+      <div class="note"><h3>Area is exact</h3><p>Area mode records the display cropped to your rectangle (<code>sourceRect</code>). Video sides are rounded to even pixels so HEVC accepts them.</p></div>
+      <div class="note"><h3>Clicks line up</h3><p><code>events.json</code> now stores positions relative to what was recorded, so later zooms land in the right place in every mode.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Next: the camera bubble</h2>
+    <div class="proposed">
+      <span class="tag">Proposed</span>
+      <div class="screens">
+        <div class="shot">
+          <div class="screen" aria-label="Recording with a camera bubble">
+            <div class="menubar">Safari<span class="ring live"></span></div>
+            <div class="win" style="left:6%;top:14%;width:88%;height:78%"><div class="lines"><i style="width:40%"></i><i></i><i style="width:85%"></i><i style="width:65%"></i><i style="width:75%"></i></div></div>
+            <div class="bubble"><i></i><span class="grip"></span></div>
+          </div>
+          <div class="cap"><b>While recording.</b> A round camera preview in your Version One ring floats over your screen. Drag it anywhere, and pull its handle to make it bigger or smaller. It remembers where you left it. It's off by default, with a Camera switch next to Mic.</div>
+        </div>
+        <div class="shot" style="justify-content:center">
+          <p>The camera saves to its own <code>camera.mov</code> in the take folder rather than being burned into the screen video. In the editor you can then move, resize or hide the bubble, or go full-camera for a section. Screen Studio and Tella work the same way.</p>
+          <p class="muted">Until export is built, a take has the screen and camera as two files side by side.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
