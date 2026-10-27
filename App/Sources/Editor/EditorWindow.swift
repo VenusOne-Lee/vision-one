@@ -2,165 +2,6 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
-/// The editor window's content until the Codex frame hosts the full
-/// modes: a slim toolbar (back to the Library, the take, Editor or
-/// Sound, Agents and Export) over the editor or sound full mode.
-struct EditorView: View {
-    @ObservedObject var model: EditorModel
-    @ObservedObject var clips: ClipsModel
-    @ObservedObject var thumbnail: ThumbnailModel
-    @ObservedObject private var exports = ExportController.shared
-
-    @AppStorage("editor.mode") private var modeRaw = Mode.editor.rawValue
-    @AppStorage("editor.lane.waveform") private var showWaveform = true
-    /// An export of this take exists: the ring before its name goes solid.
-    @State private var isExported = false
-    @State private var showExport = false
-    @State private var showShortcuts = false
-
-    enum Mode: String, CaseIterable {
-        case editor, sound
-        var title: String { self == .editor ? "Editor" : "Sound" }
-    }
-
-    private var mode: Mode { Mode(rawValue: modeRaw) ?? .editor }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider().overlay(Theme.line)
-            switch mode {
-            case .editor:
-                EditorFullMode(model: model, clips: clips, thumbnail: thumbnail) {
-                    EditorWindowController.shared.showLibrary()
-                }
-            case .sound:
-                SoundFullMode(model: model) { modeRaw = Mode.editor.rawValue }
-            }
-        }
-        .frame(minWidth: 520, minHeight: 480)
-        .background(Theme.canvas)
-        .foregroundStyle(Theme.text)
-        .themed()
-        .onReceive(exports.$phase) { _ in refreshExported() }
-    }
-
-    private func refreshExported() {
-        let take = model.take
-        let exported = ExportPreset.allCases.contains {
-            FileManager.default.fileExists(atPath: take.exportURL(for: $0).path)
-        }
-        if exported != isExported { isExported = exported }
-    }
-
-    // MARK: Toolbar (44 px)
-
-    /// One black pill (Export); everything else is quieter.
-    private var toolbar: some View {
-        HStack(spacing: 10) {
-            // Back to every take; the editor and Library share one window.
-            Button {
-                EditorWindowController.shared.showLibrary()
-            } label: {
-                Label("Library", systemImage: "chevron.left")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-                    .fixedSize()
-            }
-            .buttonStyle(.plain)
-            .help("Back to all your recordings (⇧⌘L)")
-            HStack(spacing: 6) {
-                // Dashed until this take has been exported, then solid.
-                Circle()
-                    .strokeBorder(Theme.text, style: StrokeStyle(lineWidth: 1.5, dash: isExported ? [] : [3, 2]))
-                    .frame(width: 14, height: 14)
-                    .accessibilityLabel(isExported ? "Exported" : "Not exported yet")
-                Text(model.take.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .layoutPriority(-1)
-            SegmentedTabs(selection: Binding(get: { mode }, set: { modeRaw = $0.rawValue }),
-                          options: Mode.allCases) { $0.title }
-            Spacer(minLength: Theme.Space.sm)
-            if model.phase == .ready {
-                EditorExportStatus(exports: exports)
-                if model.proposedChangeCount > 0 { suggestions }
-                IconGroup {
-                    ToolbarIcon(systemImage: "person.2", help: "Versions: a copy for each person on a list, with their name on the title card") {
-                        PeopleVersionsWindowController.shared.show(for: model.take)
-                    }
-                    ToolbarIcon(systemImage: "globe", help: "Languages: captions in South Africa's languages, and an optional dub") {
-                        LanguagesWindowController.shared.show(for: model.take)
-                    }
-                }
-                Button("Agents") { AgentsWindowController.shared.show(for: model.take) }
-                    .buttonStyle(PillButtonStyle(kind: .secondary))
-                    .fixedSize()
-                    .help("Pick what it's for, ask for a length, find clips, and write a title and posts")
-                // Exports exactly what's on screen, even if saving failed.
-                Button("Export") { showExport = true }
-                    .buttonStyle(PillButtonStyle(kind: .primary))
-                    .fixedSize()
-                    .help("Pick formats and captions, then export")
-                    .sheet(isPresented: $showExport) {
-                        ExportSheet(take: model.take,
-                                    keep: model.edits.keptSpans.map { $0.start..<$0.end }) {
-                            showExport = false
-                        }
-                    }
-            }
-            moreMenu
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 44)
-        .background(Theme.paper)
-    }
-
-    /// Rare and destructive things live here, out of the way.
-    private var moreMenu: some View {
-        Menu {
-            Button("Undo all changes") { model.undoAll() }
-                .disabled(!model.canUndoAll)
-                .help("Back to the take as you recorded it: your cuts go and every suggestion is turned off. Blurs stay. ⌘Z brings it all back.")
-            Divider()
-            Toggle("Waveform on the timeline", isOn: $showWaveform)
-            Divider()
-            Button("Keyboard shortcuts") { showShortcuts = true }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(Theme.text)
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("More")
-        .popover(isPresented: $showShortcuts, arrowEdge: .bottom) { ShortcutsCard() }
-    }
-
-    /// The suggestions, compact, in the toolbar. Dashed, like the
-    /// suggestions themselves, until you decide.
-    private var suggestions: some View {
-        HStack(spacing: 6) {
-            Text("\(model.proposedChangeCount) suggested")
-                .font(.system(size: 12).monospacedDigit())
-                .foregroundStyle(Theme.textMuted)
-                .lineLimit(1)
-                .fixedSize()
-            Button("Accept all") { model.acceptAllChanges() }
-                .buttonStyle(PillButtonStyle(kind: .secondary))
-                .fixedSize()
-        }
-        .padding(.leading, 10)
-        .padding(.trailing, 4)
-        .padding(.vertical, 3)
-        .overlay(Capsule().strokeBorder(Theme.textMuted, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
-        .help("Dashed until you decide. Each one is in Changes. ⌘Z undoes Accept all.")
-    }
-}
-
 /// A quiet square icon button for the toolbar and transport.
 struct ToolbarIcon: View {
     let systemImage: String
@@ -187,18 +28,6 @@ struct ToolbarIcon: View {
         .onHover { hovering = $0 }
         .help(help)
         .accessibilityLabel(help)
-    }
-}
-
-/// Icons that belong together, in one hairline capsule.
-struct IconGroup<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        HStack(spacing: 0) { content }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 1)
-            .overlay(Capsule().strokeBorder(Theme.line))
     }
 }
 
@@ -335,36 +164,6 @@ extension TransportBar where Accessory == EmptyView {
     }
 }
 
-/// The keys, for the ⋯ menu.
-private struct ShortcutsCard: View {
-    private let rows: [(String, String)] = [
-        ("Space", "Play or pause; hold it to talk"),
-        ("J  K  L", "Back 5 s, stop, play (in the transcript)"),
-        ("←  →", "One frame (timeline selected)"),
-        ("⇧←  ⇧→", "One second (timeline selected)"),
-        ("I  O", "Start and end of a stretch at the playhead"),
-        ("⌫", "Cut the selected words or stretch"),
-        ("⌘+  ⌘−", "Zoom the timeline"),
-        ("⌘Z  ⇧⌘Z", "Undo and redo"),
-        ("V  C  Z  B  D", "Select, Cut, Zoom, Blur and Draw tools"),
-        ("⌘2", "Side pane"),
-    ]
-
-    var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-            ForEach(rows, id: \.0) { row in
-                GridRow {
-                    Text(row.0).font(.system(size: 12, design: .monospaced))
-                    Text(row.1).font(.system(size: 12)).foregroundStyle(Theme.textMuted)
-                }
-            }
-        }
-        .padding(16)
-        .background(Theme.paper)
-        .themed()
-    }
-}
-
 /// Tint plus a bold lead sentence, per the design's alerts.
 struct EditorNotice: View {
     let title: String
@@ -490,42 +289,5 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         model.mode = .tasks
         model.page = .newTask
-    }
-}
-
-/// The ring and percentage beside the Export pill while exporting, and
-/// a solid ring with Show once the file is ready.
-struct EditorExportStatus: View {
-    @ObservedObject var exports: ExportController
-
-    var body: some View {
-        switch exports.phase {
-        case let .exporting(preset, progress):
-            HStack(spacing: 6) {
-                ExportRing(progress: progress)
-                Text("\(preset.title) \(Int(progress * 100))%")
-                    .font(.system(size: 12).monospacedDigit())
-                    .foregroundStyle(Theme.textMuted)
-                Button("Cancel") { exports.cancel() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-            }
-        case let .done(_, _, bytes):
-            HStack(spacing: 6) {
-                ExportRing(progress: 1)
-                Button("Show · \(ExportPhase.size(bytes))") { exports.revealExport() }
-                    .buttonStyle(PillButtonStyle(kind: .secondary))
-            }
-        case let .failed(message):
-            Text(message)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.error)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(message)
-        case .idle:
-            EmptyView()
-        }
     }
 }
