@@ -12,6 +12,7 @@ import Foundation
 ///       blurs.json       blurs over secrets found on screen or drawn by hand
 ///       sound.json       music and sound effects over the edit
 ///       camera.mov    (next) camera, drawn in the ring bubble at export
+///       phone.mov     iPhone screen + sound over USB, when one was recorded
 ///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
 public struct Take: Equatable, Sendable {
     public let folder: URL
@@ -24,6 +25,7 @@ public struct Take: Equatable, Sendable {
     public var screenURL: URL { folder.appendingPathComponent("screen.mov") }
     public var eventsURL: URL { folder.appendingPathComponent("events.json") }
     public var cameraURL: URL { folder.appendingPathComponent("camera.mov") }
+    public var phoneURL: URL { folder.appendingPathComponent("phone.mov") }
     public var transcriptURL: URL { folder.appendingPathComponent("transcript.json") }
     public var editsURL: URL { folder.appendingPathComponent("edits.json") }
 

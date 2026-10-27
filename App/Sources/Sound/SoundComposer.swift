@@ -14,9 +14,12 @@ enum SoundComposer {
         var problem: String?
     }
 
-    /// - Parameter words: word spans in take seconds, for ducking.
+    /// - Parameters:
+    ///   - words: word spans in take seconds, for ducking.
+    ///   - offset: seconds before the edited video starts in the
+    ///     composition (a brand intro), so the sound lines up with it.
     static func add(_ plan: SoundPlan, timeline: ExportTimeline, words: [TimeSpan],
-                    to composition: AVMutableComposition) async -> Added {
+                    to composition: AVMutableComposition, offset: Double = 0) async -> Added {
         var added = Added()
         guard !plan.isEmpty, timeline.duration > 0 else { return added }
 
@@ -42,13 +45,13 @@ enum SoundComposer {
             do {
                 for piece in mix.music {
                     try track.insertTimeRange(CMTimeRange(start: time(piece.sourceStart), duration: time(piece.duration)),
-                                              of: source, at: time(piece.outputStart))
+                                              of: source, at: time(piece.outputStart + offset))
                 }
                 let parameters = AVMutableAudioMixInputParameters(track: track)
                 if let first = envelope.points.first { parameters.setVolume(first.gain, at: .zero) }
                 for (a, b) in zip(envelope.points, envelope.points.dropFirst()) where b.time > a.time {
                     parameters.setVolumeRamp(fromStartVolume: a.gain, toEndVolume: b.gain,
-                                             timeRange: CMTimeRange(start: time(a.time), end: time(b.time)))
+                                             timeRange: CMTimeRange(start: time(a.time + offset), end: time(b.time + offset)))
                 }
                 added.tracks.append(track)
                 added.parameters.append(parameters)
@@ -73,7 +76,7 @@ enum SoundComposer {
                 }
                 guard let source = sources[effect.soundID] else { continue }
                 let (track, parameters) = lanes[effect.lane]
-                let start = time(effect.outputStart)
+                let start = time(effect.outputStart + offset)
                 try track.insertTimeRange(CMTimeRange(start: .zero, duration: time(effect.duration)), of: source, at: start)
                 parameters.setVolume(effect.gain, at: start)
             } catch {
