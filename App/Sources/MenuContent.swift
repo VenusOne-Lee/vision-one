@@ -178,7 +178,8 @@ struct ExportRow: View {
                 Menu("Export") {
                     ForEach(ExportPreset.allCases) { preset in
                         Button("\(preset.title) · \(preset.detail)") {
-                            exports.export(take, preset: preset)
+                            CaptionExport.writeFiles(for: take, preset: preset)
+                            exports.export(take, preset: preset, overlays: CaptionExport.overlays(for: take))
                         }
                     }
                 }

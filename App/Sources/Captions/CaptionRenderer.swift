@@ -15,12 +15,21 @@ struct CaptionRenderer {
     var track: CaptionTrack
     /// Style, size and position, all adjustable in the editor.
     var settings: CaptionSettings
-    var ringColor: CGColor
+    /// The builder's ring colour as 0xRRGGBB (kept as a number so the
+    /// renderer stays Sendable for the export compositor).
+    var ringHex: UInt32
 
-    init(track: CaptionTrack, settings: CaptionSettings, ringColor: CGColor = CaptionRenderer.ringBlue) {
+    init(track: CaptionTrack, settings: CaptionSettings, ringHex: UInt32 = CaptionRenderer.ringBlue) {
         self.track = track
         self.settings = settings
-        self.ringColor = ringColor
+        self.ringHex = ringHex
+    }
+
+    var ringColor: CGColor { Self.color(hex: ringHex) }
+
+    static func color(hex: UInt32) -> CGColor {
+        CGColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
     }
 
     var style: CaptionStyle { settings.style }
@@ -29,7 +38,7 @@ struct CaptionRenderer {
     static let paper = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
     /// Words not said yet, in the word styles.
     static let later = CGColor(srgbRed: 0xA9 / 255.0, green: 0xA8 / 255.0, blue: 0xA3 / 255.0, alpha: 1)
-    static let ringBlue = CGColor(srgbRed: 0x1F / 255.0, green: 0x3F / 255.0, blue: 0xBF / 255.0, alpha: 1)
+    static let ringBlue: UInt32 = 0x1F3FBF
 
     /// Draws the cue at `outputTime`, if there is one. The context's
     /// origin is bottom left.
@@ -137,13 +146,13 @@ struct CaptionRenderer {
 struct CaptionPreview: View {
     let track: CaptionTrack
     @Binding var settings: CaptionSettings
-    var ringColor: CGColor = CaptionRenderer.ringBlue
+    var ringHex: UInt32 = CaptionRenderer.ringBlue
     let time: Double
 
     @State private var dragStart: Double?
 
     var body: some View {
-        let renderer = CaptionRenderer(track: track, settings: settings, ringColor: ringColor)
+        let renderer = CaptionRenderer(track: track, settings: settings, ringHex: ringHex)
         GeometryReader { proxy in
             Canvas { context, size in
                 context.withCGContext { cg in

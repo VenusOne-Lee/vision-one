@@ -115,6 +115,7 @@ struct EditorView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
                 PlayerSurface(player: model.player)
+                    .overlay { CaptionLayer(model: model) }
                     .background(Theme.text)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
