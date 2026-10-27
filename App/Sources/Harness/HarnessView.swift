@@ -135,21 +135,20 @@ struct HarnessView: View {
             }
         case .editor:
             if let workspace = model.workspace {
-                HStack(spacing: 0) {
-                    EditorView(model: workspace.editor, clips: workspace.clips, thumbnail: workspace.thumbnail) {
-                        model.open($0)
-                    }
-                    .id(workspace.take.name)
+                EditorFullMode(model: workspace.editor, clips: workspace.clips, thumbnail: workspace.thumbnail,
+                               onBack: { model.mode = .tasks }) {
                     TaskRail(model: model) { model.mode = .tasks }
                 }
+                .id(workspace.take.name)
+                .task(id: workspace.take.name) { await workspace.load() }
             }
         case .sound:
             if let workspace = model.workspace {
-                HStack(spacing: 0) {
-                    SoundFullView(workspace: workspace)
-                        .id(workspace.take.name)
+                SoundFullMode(model: workspace.editor, onBack: { model.mode = .tasks }) {
                     TaskRail(model: model) { model.mode = .tasks }
                 }
+                .id(workspace.take.name)
+                .task(id: workspace.take.name) { await workspace.load() }
             }
         }
     }

@@ -51,7 +51,7 @@ final class TaskWorkspace: ObservableObject {
     func load() async {
         guard !loaded else { return }
         loaded = true
-        await editor.load()
+        await editor.loadIfNeeded()
         await clips.load()
     }
 
@@ -93,6 +93,9 @@ final class HarnessModel: ObservableObject {
 
     private var watching: Task<Void, Never>?
     private var knownTakes: Set<String> = []
+    /// Tasks whose ask was just handed to an agent, until the job ends,
+    /// so the queue doesn't send a second one before the first shows up.
+    private var starting: Set<String> = []
 
     private init() {
         book = ProjectBook.load()
@@ -220,10 +223,9 @@ final class HarnessModel: ObservableObject {
         case .record:
             if !input.text.isEmpty { nextTakeAsks.append(input.text) }
             Task { await ScreenRecorder.shared.toggle() }
-        case .edit:
-            mode = .editor
-        case .sound:
-            mode = .sound
+        case .edit, .sound:
+            if page.take == nil, let newest = takes.first { open(newest) }
+            if page.take != nil { mode = input.command == .edit ? .editor : .sound }
         case .review:
             mode = .tasks
             updateLayout { $0.show(.changes) }
@@ -252,7 +254,7 @@ final class HarnessModel: ObservableObject {
     }
 
     private func enqueueOrRun(_ raw: String, on take: Take) {
-        let busy = TaskThread.isBusy(jobs(for: take))
+        let busy = TaskThread.isBusy(jobs(for: take)) || starting.contains(take.name)
         let ready = FileManager.default.fileExists(atPath: take.transcriptURL.path)
         if busy || !ready {
             queued[take.name, default: []].append(raw)
@@ -266,7 +268,7 @@ final class HarnessModel: ObservableObject {
     private func flushQueued() {
         for (name, asks) in queued where !asks.isEmpty {
             guard let take = takes.first(where: { $0.name == name }),
-                  !TaskThread.isBusy(jobs(for: take)),
+                  !TaskThread.isBusy(jobs(for: take)), !starting.contains(name),
                   FileManager.default.fileExists(atPath: take.transcriptURL.path) else { continue }
             var rest = asks
             let next = rest.removeFirst()
@@ -287,7 +289,12 @@ final class HarnessModel: ObservableObject {
         let brief = ai.brief(for: plan)
         let runner = ai.runner()
         let text = input.text
+        starting.insert(take.name)
         Task {
+            defer {
+                starting.remove(take.name)
+                flushQueued()
+            }
             switch input.command {
             case .clips:
                 let count = text.firstMatch(of: #/\d+/#).flatMap { Int($0.output) }.map { min(10, max(1, $0)) } ?? 3

@@ -22,7 +22,7 @@ struct PanelHost: View {
                             PanelContent(kind: selected, workspace: workspace, model: model)
                                 .frame(height: proxy.size.height * layout.splitFraction)
                             DragDivider(axis: .horizontal, value: splitBinding(height: proxy.size.height),
-                                        range: 0...proxy.size.height)
+                                        range: 0...Double(proxy.size.height))
                             splitHeader(split)
                             PanelContent(kind: split, workspace: workspace, model: model)
                                 .frame(maxHeight: .infinity)
@@ -173,7 +173,7 @@ struct PanelContent: View {
         Group {
             switch kind {
             case .video:
-                VideoPanel(editor: workspace.editor)
+                EditorPanel(model: workspace.editor, onExpand: { model.mode = .editor })
             case .changes:
                 ChangesPanel(model: workspace.editor, effects: workspace.editor.effects)
             case .clips:
@@ -195,34 +195,6 @@ struct PanelContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.paper)
-    }
-}
-
-/// The take playing, with captions over it and the transport below.
-struct VideoPanel: View {
-    @ObservedObject var editor: EditorModel
-    @State private var zoom = 1.0
-
-    var body: some View {
-        VStack(spacing: 0) {
-            switch editor.phase {
-            case .loading:
-                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
-            case let .failed(message):
-                Notice(.error, lead: "Couldn't open this take", detail: message).padding(Theme.Space.md)
-                Spacer()
-            case .ready:
-                PlayerSurface(player: editor.player)
-                    .overlay(CaptionLayer(model: editor))
-                    .background(Color.black)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .onTapGesture { editor.togglePlay() }
-                Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
-                TransportBar(model: editor, zoom: $zoom)
-                    .padding(.horizontal, Theme.Space.sm)
-                    .frame(height: Theme.Size.toolbar)
-            }
-        }
     }
 }
 
@@ -279,27 +251,5 @@ struct FormatsPanel: View {
                 showExport = false
             }
         }
-    }
-}
-
-/// Sound filling the window: the video on top, music, ducking and
-/// effects below.
-struct SoundFullView: View {
-    @ObservedObject var workspace: TaskWorkspace
-
-    var body: some View {
-        VSplitView {
-            VideoPanel(editor: workspace.editor)
-                .frame(minHeight: 220)
-            ScrollView {
-                SoundPanel(model: workspace.editor)
-                    .padding(Theme.Space.lg)
-                    .frame(maxWidth: 900)
-                    .frame(maxWidth: .infinity)
-            }
-            .frame(minHeight: 200)
-            .background(Theme.paper)
-        }
-        .task { await workspace.load() }
     }
 }
