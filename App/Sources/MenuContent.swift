@@ -234,7 +234,8 @@ struct ExportMenu: View {
         Menu("Export") {
             ForEach(ExportPreset.allCases) { preset in
                 Button("\(preset.title) · \(preset.detail)") {
-                    exports.export(take, preset: preset, keep: keep)
+                    CaptionExport.writeFiles(for: take, preset: preset)
+                    exports.export(take, preset: preset, keep: keep, overlays: CaptionExport.overlays(for: take))
                 }
             }
         }
