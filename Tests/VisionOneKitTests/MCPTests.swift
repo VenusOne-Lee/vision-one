@@ -573,6 +573,37 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(reply["result"], .object([:]))
     }
 
+    func testSocketServerAnswersAfterTheAgentStopsSending() throws {
+        let path = "/tmp/v1-\(UUID().uuidString.prefix(8)).sock"
+        let (mcp, _) = server()
+        let socketServer = MCPSocketServer(path: path) { MCPSession(server: mcp) }
+        try socketServer.start()
+        defer { socketServer.stop() }
+        let fd = UnixSocket.connect(to: path)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer { close(fd) }
+        let first: JSONValue = ["jsonrpc": "2.0", "id": 1, "method": "ping"]
+        let second: JSONValue = ["jsonrpc": "2.0", "id": 2, "method": "tools/list"]
+        var lines = first.encodedLine()
+        lines.append(10)
+        lines.append(second.encodedLine())
+        lines.append(10)
+        XCTAssertTrue(UnixSocket.writeAll(fd, lines))
+        shutdown(fd, SHUT_WR)
+        var timeout = timeval(tv_sec: 5, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        var received = Data()
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let count = read(fd, &buffer, buffer.count)
+            if count <= 0 { break }
+            received.append(contentsOf: buffer[0..<count])
+        }
+        var parser = LineBuffer()
+        let ids = parser.append(received).compactMap { (try? JSONDecoder().decode(JSONValue.self, from: $0))?["id"] }
+        XCTAssertEqual(Set(ids.compactMap(\.intValue)), [1, 2], "both answered, then the app hung up")
+    }
+
     func testBridgeAnswersWithAPlainErrorWhenTheAppIsClosed() throws {
         let reply = try XCTUnwrap(MCPBridge.offlineReply(to: Data(#"{"jsonrpc":"2.0","id":5,"method":"initialize"}"#.utf8)))
         let parsed = try JSONDecoder().decode(JSONValue.self, from: reply)

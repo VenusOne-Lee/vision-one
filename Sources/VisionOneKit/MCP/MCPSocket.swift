@@ -224,20 +224,28 @@ public final class MCPSocketServer: @unchecked Sendable {
     private func serve(_ fd: Int32, writer: SocketWriter, session: MCPSession) {
         var lines = LineBuffer()
         var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        // Requests still being answered when the agent stops sending.
+        let pending = DispatchGroup()
         while true {
             let count = read(fd, &buffer, buffer.count)
             if count < 0, errno == EINTR { continue }
             if count <= 0 { break }
             for line in lines.append(Data(buffer[0..<count])) {
+                pending.enter()
                 Task {
                     if let reply = await session.handle(line) { writer.send(reply) }
+                    pending.leave()
                 }
             }
         }
-        lock.lock()
-        writers[ObjectIdentifier(writer)] = nil
-        lock.unlock()
-        writer.close()
+        // A one-shot `printf … | Vision One --mcp` closes its side right
+        // after sending: answer what it asked, then hang up.
+        pending.notify(queue: .global()) { [self] in
+            lock.lock()
+            writers[ObjectIdentifier(writer)] = nil
+            lock.unlock()
+            writer.close()
+        }
     }
 }
 
@@ -247,12 +255,13 @@ public final class MCPSocketServer: @unchecked Sendable {
 /// request with a plain error, so the agent shows why.
 public enum MCPBridge {
     /// Returns the exit code.
-    public static func run(socketPath: String = MCPSocketPath.standard, openApp: () -> Void,
-                           waitSeconds: Double = 8) -> Int32 {
+    /// `openApp` returns false when it didn't open anything (Vision One is
+    /// already running with agents turned off), so there's nothing to wait for.
+    public static func run(socketPath: String = MCPSocketPath.standard, openApp: () -> Bool,
+                           waitSeconds: Double = 8, replyWait: Double = 120) -> Int32 {
         signal(SIGPIPE, SIG_IGN)
         var fd = UnixSocket.connect(to: socketPath)
-        if fd < 0 {
-            openApp()
+        if fd < 0, openApp() {
             let deadline = Date().addingTimeInterval(waitSeconds)
             while fd < 0, Date() < deadline {
                 usleep(200_000)
@@ -264,6 +273,7 @@ public enum MCPBridge {
             return 1
         }
         let app = fd
+        let state = BridgeState()
 
         // App → agent, on its own thread.
         let replies = Thread {
@@ -274,8 +284,9 @@ public enum MCPBridge {
                 if count <= 0 { break }
                 if !UnixSocket.writeAll(STDOUT_FILENO, Data(buffer[0..<count])) { break }
             }
-            // The app quit or turned agents off.
-            exit(0)
+            // The app hung up: it answered everything after the agent
+            // finished sending, or it quit or turned agents off mid-session.
+            if state.finish() { exit(0) }
         }
         replies.start()
 
@@ -287,8 +298,31 @@ public enum MCPBridge {
             if count <= 0 { break }
             if !UnixSocket.writeAll(app, Data(buffer[0..<count])) { break }
         }
+        state.inputClosed()
         shutdown(app, SHUT_WR)
+        // Let the replies to what was sent reach stdout before exiting.
+        _ = state.done.wait(timeout: .now() + replyWait)
         return 0
+    }
+
+    private final class BridgeState: @unchecked Sendable {
+        let done = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var stdinOpen = true
+
+        func inputClosed() {
+            lock.lock()
+            stdinOpen = false
+            lock.unlock()
+        }
+
+        /// True when the agent is still sending, so the bridge should exit now.
+        func finish() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            done.signal()
+            return stdinOpen
+        }
     }
 
     static let offlineMessage = "Vision One isn't running, or \"Let coding agents use Vision One\" is off in Settings › Agents. Open Vision One and try again."
