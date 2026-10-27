@@ -69,6 +69,10 @@ final class Transcriber: ObservableObject {
                 pieces: pieces, language: "en", engine: ParakeetEngine.name,
                 audioTrack: audio.track, duration: audio.duration)
             try transcript.write(to: take.transcriptURL)
+            // Propose cuts for fillers and long pauses. A failure here
+            // leaves the transcript usable, so it isn't shown as an error.
+            let loudness = LoudnessEnvelope.measure(samples: audio.samples, sampleRate: TakeAudio.sampleRate)
+            try? AutoClean.run(on: take, transcript: transcript, loudness: loudness)
             phase = .idle
         } catch {
             phase = .failed(takeName: take.name, message: Self.describe(error))
