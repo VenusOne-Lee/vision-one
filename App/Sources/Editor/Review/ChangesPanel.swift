@@ -8,14 +8,15 @@ struct ChangesPanel: View {
     @ObservedObject var model: EditorModel
     /// Observed too, so zoom and blur rows follow their own changes.
     @ObservedObject var effects: EffectsModel
+    /// Watched so a transcript that fails or restarts changes the empty state.
+    @ObservedObject private var transcriber = Transcriber.shared
 
     var body: some View {
         let groups = model.changeGroups
         VStack(spacing: 0) {
             if groups.isEmpty {
-                EditorNotice(title: "No suggestions yet.",
-                             message: "They appear here once the transcript is written.",
-                             isError: false)
+                emptyState
+                    .padding(Theme.Space.md)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -32,6 +33,39 @@ struct ChangesPanel: View {
             }
         }
         .background(Theme.paper)
+    }
+
+    /// Still transcribing, transcript ready with nothing to change, or no
+    /// transcript at all (with a way to try again).
+    private var emptyState: some View {
+        let state = ChangesEmptyState.resolve(hasTranscript: model.transcriptState == .ready,
+                                              failure: transcriptFailure)
+        return VStack(spacing: Theme.Space.sm) {
+            EditorNotice(title: state.title, message: state.message, isError: state.isError)
+            if state.isError {
+                Button("Try again") { retryTranscript() }
+                    .buttonStyle(PillButtonStyle(kind: .secondary))
+                    .help("Transcribe this take again, on this Mac")
+            }
+        }
+    }
+
+    /// Why there's no transcript, or nil while it's still on its way.
+    private var transcriptFailure: String? {
+        if case let .failed(why) = model.transcriptState { return why }
+        let take = model.take
+        if let message = transcriber.failures[take.name] { return message }
+        guard FileManager.default.fileExists(atPath: take.transcriptFailedURL.path) else { return nil }
+        // The marker's own message; blank falls back to "nothing was heard".
+        return (try? TranscriptFailure.read(from: take.transcriptFailedURL))?.message ?? ""
+    }
+
+    /// Clears the marker and queues the take again; the editor picks the
+    /// transcript up when it lands.
+    private func retryTranscript() {
+        let take = model.take
+        try? FileManager.default.removeItem(at: take.transcriptFailedURL)
+        transcriber.transcribe(take)
     }
 
     private var footer: some View {

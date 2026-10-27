@@ -268,6 +268,10 @@ struct DragHint: View {
 final class SetupWindowController: NSObject, NSWindowDelegate {
     static let shared = SetupWindowController()
     private var window: NSWindow?
+    /// Set when setup opens at launch: closing it once recording is
+    /// allowed opens the main window on New task, so first run never
+    /// ends on nothing.
+    var opensHarnessWhenDone = false
 
     func show() {
         AccessCenter.shared.startWatching()
@@ -304,7 +308,24 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
         window?.close()
     }
 
+    /// The end of setup: the main window on New task, and the first
+    /// recording straight away when asked.
+    func finish(record: Bool) {
+        opensHarnessWhenDone = false
+        window?.close()
+        EditorWindowController.shared.showNewTask()
+        if record { Task { await ScreenRecorder.shared.toggle() } }
+    }
+
     nonisolated func windowWillClose(_ notification: Notification) {
-        MainActor.assumeIsolated { AccessCenter.shared.stopWatching() }
+        MainActor.assumeIsolated {
+            AccessCenter.shared.stopWatching()
+            // Closed with the window's own button after the first run's
+            // access was granted: land on New task anyway.
+            if opensHarnessWhenDone, AccessCenter.shared.checklist.canRecord {
+                opensHarnessWhenDone = false
+                Task { @MainActor in EditorWindowController.shared.showNewTask() }
+            }
+        }
     }
 }

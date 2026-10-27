@@ -176,6 +176,13 @@ struct AppMCPHost: VisionOneMCPHost {
         await AgentAskCenter.shared.dismiss(questionID)
     }
 
+    /// The floating card asks only when the task's card is out of view.
+    func showsCard(for question: MCPQuestion) async -> Bool {
+        guard let jobID = question.jobID else { return true }
+        let desk = await MainActor.run { AIServices.shared.desk }
+        return await ApprovalPlacement.panelAsks(jobID: jobID, desk: desk)
+    }
+
     func connected(_ client: MCPClient) async {
         await MCPService.shared.connected(client)
     }

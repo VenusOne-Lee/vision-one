@@ -38,7 +38,6 @@ final class AutopilotPill: ObservableObject {
             panel.isOpaque = false
             panel.hasShadow = false
             panel.isReleasedWhenClosed = false
-            panel.appearance = NSAppearance(named: .aqua)
             panel.sharingType = .none
             panel.contentViewController = NSHostingController(rootView: AutopilotPillView(pill: self))
             self.panel = panel
@@ -88,7 +87,7 @@ struct AutopilotPillView: View {
         .overlay(Capsule().strokeBorder(Theme.line))
         .floatShadow()
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
         .padding(2)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(headline)
