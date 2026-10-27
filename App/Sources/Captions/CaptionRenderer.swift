@@ -58,7 +58,7 @@ struct CaptionRenderer {
                 text.append(NSAttributedString(string: (k == 0 ? "" : " ") + word.text, attributes: attributes))
             }
             firstIndex += words.count
-            let line = CTLineCreateWithAttributedString(text)
+            let line = CTLineCreateWithAttributedString(text as CFAttributedString)
             var ascent: CGFloat = 0
             var descent: CGFloat = 0
             var leading: CGFloat = 0
@@ -182,44 +182,46 @@ struct CaptionControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
             Toggle("Captions", isOn: $settings.isOn)
-            Picker("Style", selection: $settings.style) {
-                ForEach(CaptionStyle.allCases, id: \.self) { style in
-                    Text(style.title).tag(style)
+            VStack(alignment: .leading, spacing: Theme.Space.md) {
+                Picker("Style", selection: $settings.style) {
+                    ForEach(CaptionStyle.allCases, id: \.self) { style in
+                        Text(style.title).tag(style)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
+                .pickerStyle(.segmented)
 
-            VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                Text("Size").foregroundStyle(Theme.textMuted)
-                Slider(value: $settings.sizeScale, in: CaptionSettings.sizeRange)
-            }
-
-            if settings.style != .subtitle {
-                Stepper(
-                    "Words at a time: \(settings.wordsAtATime ?? settings.style.layout.maxWordsPerCue ?? 4)",
-                    value: Binding(
-                        get: { settings.wordsAtATime ?? settings.style.layout.maxWordsPerCue ?? 4 },
-                        set: { settings.wordsAtATime = $0 }
-                    ),
-                    in: CaptionSettings.wordsRange
-                )
-            }
-
-            HStack {
-                Text(settings.position == nil ? "Drag the caption to move it" : "Moved by you")
-                    .foregroundStyle(Theme.textMuted)
-                Spacer()
-                if settings.position != nil {
-                    Button("Reset position") { settings.position = nil }
-                        .buttonStyle(PillButtonStyle(kind: .secondary))
+                VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                    Text("Size").foregroundStyle(Theme.textMuted)
+                    Slider(value: $settings.sizeScale, in: CaptionSettings.sizeRange)
                 }
-            }
 
-            Toggle("Burn into the video", isOn: $settings.burnIn)
-            Toggle("Also save .srt and .vtt", isOn: $settings.writeFiles)
+                if settings.style != .subtitle {
+                    Stepper(
+                        "Words at a time: \(settings.wordsAtATime ?? settings.style.layout.maxWordsPerCue ?? 4)",
+                        value: Binding(
+                            get: { settings.wordsAtATime ?? settings.style.layout.maxWordsPerCue ?? 4 },
+                            set: { settings.wordsAtATime = $0 }
+                        ),
+                        in: CaptionSettings.wordsRange
+                    )
+                }
+
+                HStack {
+                    Text(settings.position == nil ? "Drag the caption to move it" : "Moved by you")
+                        .foregroundStyle(Theme.textMuted)
+                    Spacer()
+                    if settings.position != nil {
+                        Button("Reset position") { settings.position = nil }
+                            .buttonStyle(PillButtonStyle(kind: .secondary))
+                    }
+                }
+
+                Toggle("Burn into the video", isOn: $settings.burnIn)
+                Toggle("Also save .srt and .vtt", isOn: $settings.writeFiles)
+            }
+            .disabled(!settings.isOn)
         }
         .font(.system(size: 12))
         .foregroundStyle(Theme.text)
-        .disabled(!settings.isOn)
     }
 }
