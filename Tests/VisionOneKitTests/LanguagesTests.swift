@@ -62,10 +62,13 @@ final class LanguagesTests: XCTestCase {
         XCTAssertEqual(transcript.words.map(\.text), ["Khetha", "irenki", "yakho."])
         XCTAssertEqual(transcript.words.first?.start, 1)
         XCTAssertEqual(transcript.words.last?.end, 3)
-        // Back to back, longer words get longer.
+        // Back to back, and time follows length: same-length words get the same time.
         let words = transcript.words
         XCTAssertEqual(words[0].end, words[1].start, accuracy: 1e-9)
-        XCTAssertGreaterThan(words[1].duration, words[0].duration)
+        XCTAssertEqual(words[0].duration, words[1].duration, accuracy: 1e-9)
+        let short = Transcript.translated([TranslatedLine(start: 0, end: 2, source: "Go now.", text: "Hamba manje-manje.")],
+                                          language: .zulu, engine: "test", duration: 2).words
+        XCTAssertGreaterThan(short[1].duration, short[0].duration)
         XCTAssertEqual(Set(words.map(\.id)).count, 3)
     }
 
