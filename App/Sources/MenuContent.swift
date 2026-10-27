@@ -50,6 +50,9 @@ struct MenuContent: View {
             Divider().overlay(Theme.line)
 
             HStack {
+                Button("Edit last take") { EditorWindowController.shared.openLatest() }
+                    .buttonStyle(PillButtonStyle(kind: .primary))
+                    .disabled(recorder.phase.isLive || recorder.phase.isBusy)
                 Button("Show recordings") { recorder.revealRecordings() }
                     .buttonStyle(PillButtonStyle(kind: .secondary))
                 Spacer()
