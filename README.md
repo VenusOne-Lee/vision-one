@@ -4,7 +4,7 @@ A free, open source Mac screen recorder that edits itself. Record, pick what it'
 
 Made for South African builders, as the sibling of [Version One](https://versionone.co.za).
 
-> **Status: v1 is coming together on main.** Vision One opens on a New task page in one window laid out like a coding agent: projects and tasks on the left, a task thread in the middle where the Producer plans and agents work, and a panel on the right that swaps between Video, Changes, Clips, Sound and Post. Record from anywhere (⇧⌘R); stopping files the take as a new task. The editor and sound mixer open in full mode, you can edit by talking or drawing, try changes in a copy, and the AI asks for your approval once, in the thread. Six preset looks (Paper is the default), a script teleprompter, Autopilot demos that re-record themselves, share pages on your own Cloudflare, and an MCP server so Claude Code or Codex can record, edit and share are all in.
+> **Status: v1 is ready on main, pending checks on a real Mac before the first public release.** Vision One opens on a New task page in one window laid out like a coding agent: projects and tasks on the left, a task thread in the middle where the Producer plans and agents work, and a panel on the right that swaps between Video, Changes, Clips, Sound and Post. Record from anywhere (⇧⌘R); stopping files the take as a new task. The editor and sound mixer open in full mode, you can edit by talking or drawing, try changes in a copy, and the AI asks for your approval once, in the thread. Six preset looks (Paper is the default), a script teleprompter, Autopilot demos that re-record themselves, share pages on your own Cloudflare, an MCP server so Claude Code or Codex can record, edit and share, recording an AI agent as it uses your Mac, a script and voice coach, personalised versions for a list of people, and captions and dubs in South Africa's eleven languages are all in.
 
 ## How it works
 
@@ -28,10 +28,13 @@ Press record (or ⇧⌘R from any app) → stop → the take opens as a task →
 - Music that ducks under your voice, and sound effects with an Energy dial ([docs/SOUND.md](docs/SOUND.md))
 - Brand kit with intro and outro cards and a corner logo ([docs/BRAND.md](docs/BRAND.md))
 - Auto zoom on clicks and blur for secrets on screen ([docs/EFFECTS.md](docs/EFFECTS.md))
-- The AI ladder: on device first, then your ChatGPT plan or your own key ([docs/AI.md](docs/AI.md)), used by the editor's Ask bar and the Agents window
+- The AI ladder: on device first, then your ChatGPT plan or your own key ([docs/AI.md](docs/AI.md)), used by the task thread, the editor's Ask bar and the agents
 - Clips and thumbnails for social apps ([docs/CLIPS.md](docs/CLIPS.md))
 - Copy a style: drop a video you like and get a template with its pacing, captions and framing ([docs/STYLE.md](docs/STYLE.md))
 - Autopilot: Vision One clicks through your app from saved steps while it records, and records the demo again when you ship a release ([docs/AUTOPILOT.md](docs/AUTOPILOT.md))
+- Script and voice coach: easier lines, Rehearse with live meters, Hear it first ([docs/COACH.md](docs/COACH.md))
+- Record an AI agent using your Mac, with its waits proposed as cuts ([docs/AGENT-RECORDING.md](docs/AGENT-RECORDING.md))
+- Versions for a list of people ([docs/VERSIONS.md](docs/VERSIONS.md)) and captions and dubs in South Africa's languages ([docs/LANGUAGES.md](docs/LANGUAGES.md))
 
 ## Install
 
@@ -74,6 +77,9 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | `App/Sources/Share` | Share step, approvals for outbound posts, and share pages |
 | `App/Sources/Recording` | Countdown, pause, mic meter, area shapes and the script teleprompter |
 | `App/Sources/DesignSystem` | Tokens, components and the six preset looks |
+| `App/Sources/Coach` | Script coach, Rehearse and the ElevenLabs voice tools |
+| `App/Sources/AgentRecording` | Recording an AI agent while it uses the Mac |
+| `App/Sources/Versions`, `App/Sources/Languages` | Personalised versions, and captions and dubs in other languages |
 | `App/Sources/Editor` | The editor window: takes, preview, timeline, transcript, sound panel |
 | `App/Sources/Captions` | Caption drawing for the preview and burn-in, and .srt/.vtt files |
 | `App/Sources/Brand` | Brand kit settings, intro and outro cards, corner logo |
