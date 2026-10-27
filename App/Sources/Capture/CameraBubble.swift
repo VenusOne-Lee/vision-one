@@ -470,9 +470,9 @@ private final class CameraFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDe
     /// Finishes camera.mov. `firstFrame` is its first frame on the host
     /// clock, or nil when no frame arrived.
     func finishWriting() async -> (firstFrame: Double?, error: Error?) {
-        let (writer, input, first): (AVAssetWriter?, AVAssetWriterInput?, Double?) = await withCheckedContinuation { done in
+        let taken: (AVAssetWriter?, AVAssetWriterInput?, Double?) = await withCheckedContinuation { done in
             frameQueue.async { [self] in
-                let result = (writer, input, firstFrame)
+                let result = (self.writer, self.input, self.firstFrame)
                 pendingURL = nil
                 self.writer = nil
                 self.input = nil
@@ -480,6 +480,7 @@ private final class CameraFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDe
                 done.resume(returning: result)
             }
         }
+        let (writer, input, first) = taken
         guard let writer, writer.status == .writing else { return (nil, writer?.error) }
         input?.markAsFinished()
         await writer.finishWriting()
