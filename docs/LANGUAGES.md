@@ -1,6 +1,6 @@
 # South African languages
 
-Captions in all eleven spoken official languages. Open it from the globe button in the editor. Scribe (a take spoken in another language) and an optional AI dub come next, once the voice coach's ElevenLabs client is on main; they're designed below. Visual overview and research: [Versions and languages](https://claude.ai/artifact/6ZTgVYocinRVTqByVuU18K).
+Captions in all eleven spoken official languages, a take spoken in another language, and an optional AI dub. Open it from the globe button in the editor. Visual overview and research: [Versions and languages](https://claude.ai/artifact/6ZTgVYocinRVTqByVuU18K).
 
 ## What each engine can do
 
@@ -33,11 +33,11 @@ Also looked at and not used yet: Whisper (Afrikaans only; isiZulu around 93% WER
 
 `captions.json` gains `language`: the language burned into the video (none means as spoken). Every other ready language is written beside the export as `<name>.<code>.srt` and `.vtt`.
 
-## A take spoken in another language (next)
+## A take spoken in another language
 
 Parakeet only knows English. "Spoken in another language" sends the voice (never the screen) to ElevenLabs Scribe (`scribe_v2`, word timestamps) with your own key and replaces `transcript.json`. The Parakeet transcript is kept as `transcript.parakeet.json`.
 
-## Dubbing (next)
+## Dubbing
 
 Made from your newest export, so music and cuts match. Only its sound is sent to ElevenLabs Dubbing; the dubbed audio comes back and is put on the original video without re-encoding it, as `<export>.<code>.mp4`, with the audio kept as `dub.<code>.m4a` in the take folder. Free ElevenLabs plans add a watermark. Not offered for isiXhosa or isiNdebele. The voice is AI-made from yours, and the app says so.
 
