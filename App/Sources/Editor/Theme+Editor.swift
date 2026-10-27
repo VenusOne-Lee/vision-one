@@ -10,10 +10,10 @@ extension Theme {
     static let fillerText = Color(hex: 0x7A4E05)
     static let ringGold = Color(hex: 0xE0A21B)
 
-    /// Source Serif 4 once the fonts are bundled; until then the system
-    /// serif (New York), so the transcript still reads like writing.
+    /// Source Serif 4 (bundled, see FontRegistry); the system serif (New
+    /// York) if it failed to load, so the transcript still reads like writing.
     static func transcriptFont(size: CGFloat) -> NSFont {
-        if let font = NSFont(name: "Source Serif 4", size: size) { return font }
+        if let font = NSFont(name: BundledFont.serifRegular, size: size) { return font }
         let system = NSFont.systemFont(ofSize: size)
         if let serif = system.fontDescriptor.withDesign(.serif) {
             return NSFont(descriptor: serif, size: size) ?? system

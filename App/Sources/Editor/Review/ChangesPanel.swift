@@ -99,31 +99,3 @@ private struct ChangeRow: View {
         }
     }
 }
-
-/// The design's switch: an ink-bordered pill, filled ink when on with a
-/// white knob, white when off with an ink knob. No accent colour.
-struct InkSwitchStyle: ToggleStyle {
-    let label: String
-
-    func makeBody(configuration: Configuration) -> some View {
-        Button {
-            configuration.isOn.toggle()
-        } label: {
-            ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-                Capsule().fill(configuration.isOn ? Theme.text : Theme.paper)
-                Capsule().strokeBorder(Theme.text, lineWidth: 1.5)
-                Circle()
-                    .fill(configuration.isOn ? Theme.paper : Theme.text)
-                    .frame(width: 16, height: 16)
-                    .padding(.horizontal, 4)
-            }
-            .frame(width: 40, height: 24)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue(configuration.isOn ? "On" : "Off")
-        .accessibilityAddTraits(.isToggle)
-    }
-}

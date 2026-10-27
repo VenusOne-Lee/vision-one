@@ -6,8 +6,10 @@ colors:
   paper: "#FFFFFF"
   canvas: "#F4F4F1"
   line: "#E2E1DC"
+  line-strong: "#8A8984"  # control edges (fields, switches off); 3.5:1, meets WCAG 1.4.11
   text: "#121212"
   text-muted: "#5C5B57"
+  text-faint: "#767570"  # placeholders, tertiary text; 4.6:1
   primary: "#121212"
   on-primary: "#FFFFFF"
   tally: "#FF5A1F"
@@ -80,7 +82,7 @@ components:
     dotColor: "{colors.tally}"
     rounded: "{rounded.full}"
   input:
-    borderColor: "#C9C8C3"
+    borderColor: "{colors.line-strong}"
     rounded: "{rounded.sm}"
   panel:
     backgroundColor: "{colors.paper}"
@@ -145,6 +147,18 @@ Pills for buttons, one circle for record, 8px for fields and alerts, 12px for pa
 - Alerts: tint plus bold lead sentence; errors say how to fix (for example the Screen Recording permission path).
 - Every component has empty, loading, error and long-content states before it ships.
 
+## In code
+
+Design system page: https://claude.ai/artifact/NnmfdaiRzynzza5MayyV2M (tokens, type, every component with its states, the app icon options and the shortcut map).
+
+- **Values:** `Sources/VisionOneKit/Design/DesignTokens.swift` holds every colour as hex; `swift test` checks text pairs reach 4.5:1 and control edges and the focus ring 3:1. `App/Sources/Theme.swift` turns them into SwiftUI colours, plus `Space`, `Radius`, `Size`, `Stroke` and `Motion`. Never write a hex value or a `.font(.system(...))` in a view.
+- **Type:** `Text("Export").textStyle(.headline)`. Styles: `display`, `displayLight`, `title`, `headline`, `body`, `bodyStrong`, `label`, `caption`, `mono`, `monoSmall`, `transcript`. Fonts are bundled in `App/Resources/Fonts` (static OFL instances) and registered at launch. View → Bigger Text / Smaller Text (⌘+ / ⌘-) scales every style.
+- **Components** (`App/Sources/DesignSystem/`): `PillButtonStyle` (`.primary`, `.secondary`, `.quiet`, `.destructive`; small, regular, large), `IconButton`, `SegmentedTabs`, `.toggleStyle(.ink)`, `.textFieldStyle(.ink)`, `ListRow`, `.panelStyle()`, `CollapsibleSection`, `SheetScaffold`, `EmptyState`, `Notice`, `Tag`, `StateChip`, `.statusOutline(_:)`, `Mono`, `LiveDot`, `BuilderRing`.
+- **Ease first:** one primary (black) button per view, a sensible default already chosen, Return confirms and Esc cancels every sheet, and no empty screen without its next step.
+- **Accessibility:** every icon-only control has a VoiceOver label and a tooltip (`IconButton` makes both from one title); custom controls draw a 2px selection-blue focus ring; Increase Contrast turns muted text to ink and lines to `line-strong`; Reduce Motion stops the ring turning and the REC dot blinking; hit targets are at least 24pt.
+- **Shortcuts:** `Sources/VisionOneKit/Design/ShortcutMap.swift` is the one list. Bind with `.keyboardShortcut(ShortcutMap.export)` and name it in tooltips with `.help("Export", shortcut: ShortcutMap.export)`. A test fails on two shortcuts sharing keys or on taking a standard macOS shortcut. Help → Keyboard Shortcuts (⌘/) lists them all.
+- **App icon:** `App/Resources/Assets.xcassets/AppIcon.appiconset`, from `docs/icon/b-record-dot.svg`: the builder's ring, dashed turning solid, around the record button's orange dot.
+
 ## Do's and Don'ts
 
 - Do: use orange only while recording; show status with the ring's shape; set every number in tabular mono; keep cut words visible; hide Vision One windows from captures.
@@ -171,4 +185,8 @@ Pills for buttons, one circle for record, 8px for fields and alerts, 12px for pa
 | 2026-10-27 | Prompt any part of a template | Lee: prompting for parts of templates; defaults stay dashed so nobody has to type, edits go solid |
 | 2026-10-27 | Power in three depths + Open in Resolve | Lee: learn from DaVinci Resolve Studio but stay simple; Resolve is the next step, not the rival |
 | 2026-10-27 | Sound effects and punch-in zooms via an Energy dial | Lee asked about SFX and zooms; one control keeps them tasteful and under the voice |
+| 2026-10-27 | Design system in code: tokens in VisionOneKit, components in App/Sources/DesignSystem | One place for every value; contrast and shortcut clashes tested by `swift test` |
+| 2026-10-27 | Added line-strong and text-faint | `line` (1.3:1) and the old input border (1.7:1) are too faint to mark a control; WCAG 1.4.11 asks 3:1 |
+| 2026-10-27 | Bundled static font instances | Bricolage's variable default is 96pt ExtraBold; static opsz 12 text and opsz 96 display instances are predictable |
+| 2026-10-27 | App icon: ring around the record dot (option B; A and C in docs/icon) | The app had none; the icon is the record button itself, so its orange dot keeps meaning "record" |
 | 2026-10-27 | User appearance settings (theme.json) | Lee: customise the app's own look; orange and light-only stay fixed so status and the no-dark rule hold |
