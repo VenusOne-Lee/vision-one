@@ -38,6 +38,7 @@ public struct Cut: Codable, Hashable, Identifiable, Sendable {
         public static let `repeat` = "repeat"   // a retake; the last try wins
         public static let pause = "pause"       // a long pause, shortened
         public static let deadAir = "deadAir"   // silence at the start or end
+        public static let paused = "paused"     // recording was paused; nothing was written
     }
 
     public let id: UUID

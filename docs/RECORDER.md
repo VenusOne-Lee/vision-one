@@ -41,11 +41,20 @@ One `AVCaptureSession` feeds both the preview and `AVAssetWriter`, so camera.mov
 3. `movieFragmentInterval` is 2 seconds, so a crash leaves a playable file missing only the last few seconds.
 4. `CursorLogger` timestamps global mouse events on the same host clock and writes `events.json` when you stop.
 
+## While recording
+
+Mockups and research: https://claude.ai/artifact/XXu8UWfzJvLGZFc1FbebLZ
+
+- **Countdown.** Every record button and ⌘⇧R count down first (3 s by default; Off or 5 s under Home's record button). Click or Space starts at once, Esc or Cancel stops. Ink, not orange, because nothing records yet. The main window steps aside and the app you were in comes back to the front.
+- **Pause** (bar button or ⌥⇧P). Screen frames and camera frames are dropped and sound is written as silence, so nothing from the pause is kept. No clock is rewritten: `PauseLog` keeps the paused stretches on the host clock and, at stop, they go into `edits.json` as accepted cuts with reason `paused`. The editor and export skip them like any cut, and camera.json, events.json and phone.mov stay lined up untouched.
+- **Restart and delete** ask inline in the bar (recording pauses while it asks). The take folder goes to the Bin. Restart counts down again with the same choices; delete brings the main window back and doesn't open the editor.
+- **Mic meter.** `CaptureSink` reads the peak of about fifteen mic buffers a second into `MicLevelMeter` (fast attack, 24 dB/s release). Nothing above −50 dBFS for 6 s shows "Can't hear you · check the mic".
+- **Area shapes.** Free, 16:9, 9:16 or 1:1. Picking one snaps the area to the biggest box of that shape inside it, and drawing and resizing keep it. Arrow keys nudge by a point, Shift-arrow by ten.
+
 ## Not yet
 
 - Showing and moving the bubble in the editor's preview
 - The bubble in short clips
-- A mic level meter
 - Following a window's moves in the cursor log (v1 uses its frame at start)
 - Lower frame rate and resolution on 8 GB Macs
 - Hiding the real cursor and drawing a smooth one (v0.2, needs export)

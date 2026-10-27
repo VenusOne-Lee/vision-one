@@ -10,6 +10,7 @@ struct HomeRecordPane: View {
     @ObservedObject private var devices = CaptureDevices.shared
     @ObservedObject private var microphones = Microphones.shared
     @State private var windows: [WindowCandidate] = []
+    @State private var countdown = Countdown.shared.length
 
     var body: some View {
         VStack(spacing: 14) {
@@ -23,6 +24,7 @@ struct HomeRecordPane: View {
                 Task { await recorder.toggle() }
             }
             .padding(.top, 4)
+            countdownPicker
             status
         }
         .frame(maxWidth: .infinity)
@@ -49,8 +51,12 @@ struct HomeRecordPane: View {
                 // Orange only says "live".
                 TimelineView(.periodic(from: .now, by: 0.5)) { context in
                     HStack(spacing: 6) {
-                        Circle().fill(Theme.tally).frame(width: 8, height: 8)
-                        Text("Recording \(Self.clock(recorder.phase.elapsed(at: context.date) ?? 0))")
+                        if recorder.isPaused {
+                            Circle().strokeBorder(Theme.text, lineWidth: 1.5).frame(width: 8, height: 8)
+                        } else {
+                            Circle().fill(Theme.tally).frame(width: 8, height: 8)
+                        }
+                        Text("\(recorder.isPaused ? "Paused" : "Recording") \(Self.clock(recorder.recordedTime(at: context.date)))")
                             .font(.system(size: 12, weight: .medium, design: .monospaced).monospacedDigit())
                             .foregroundStyle(Theme.text)
                     }
@@ -62,15 +68,48 @@ struct HomeRecordPane: View {
                     .foregroundStyle(Theme.error)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
+            } else if recorder.isCountingDown {
+                Text("Get ready…").font(.system(size: 12)).foregroundStyle(Theme.textMuted)
             } else if recorder.phase == .preparing {
                 Text("Starting…").font(.system(size: 12)).foregroundStyle(Theme.textMuted)
             } else if recorder.phase == .finishing {
                 Text("Saving the take…").font(.system(size: 12)).foregroundStyle(Theme.textMuted)
             }
-            Text("⌘⇧R from anywhere")
+            Text("⌘⇧R record · ⌥⇧P pause")
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Theme.textMuted)
         }
+    }
+
+    /// Off, 3 s or 5 s before recording starts, saved for every record
+    /// button and ⌘⇧R.
+    private var countdownPicker: some View {
+        Menu {
+            ForEach(CountdownLength.allCases, id: \.self) { length in
+                Button {
+                    countdown = length
+                    Countdown.shared.length = length
+                } label: {
+                    checked(length == .off ? "No countdown" : "\(length.rawValue) second countdown", countdown == length)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text("Countdown").foregroundStyle(Theme.textMuted)
+                Text(countdown.title)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Theme.text)
+            }
+            .font(.system(size: 12))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.visible)
+        .fixedSize()
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 1))
+        .help("How long to count down before recording")
     }
 
     /// "04:12", or "1:04:12" past an hour, in tabular mono.
