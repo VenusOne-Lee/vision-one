@@ -130,7 +130,7 @@ Pills for buttons, one circle for record, 8px for fields and alerts, 12px for pa
 ## Components
 
 - **Grammar (v2):** dashed = proposed by the AI or not yet done; solid = accepted or done; orange = live. Applies to rings, AI changes, format shapes and takes.
-- Home launcher: "What are you making?" template cards beside the record pane.
+- New task page: "What should we make?" with a few starting chips and the composer; with no takes yet, one Start recording button. The Library is a plain list of takes.
 - Changes list: each AI change is a row with a switch; dashed until accepted; "Accept all" turns rows solid. Sits in a Changes / Transcript tab pair.
 - Ask bar: one text field at the foot of the editor plus a pen button for drawing feedback on a frame.
 - Format shapes: export formats drawn at their true ratio; suggested ones dashed.
