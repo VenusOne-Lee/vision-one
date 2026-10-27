@@ -89,6 +89,14 @@ final class ScreenRecorder: NSObject, ObservableObject {
             config.sampleRate = 48_000
             config.channelCount = 2
             config.captureMicrophone = withMicrophone
+            // Never the default input blindly: if that's a Bluetooth headset,
+            // recording from it drops the headphones to call quality, and
+            // what you're listening to goes mono and muffled.
+            if withMicrophone {
+                let microphones = Microphones.shared
+                microphones.refresh()
+                config.microphoneCaptureDeviceID = microphones.resolved(for: choice)?.id
+            }
 
             let take = try library.newTake()
             let writer = try TakeWriter(url: take.screenURL, width: target.width, height: target.height,
