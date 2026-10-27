@@ -52,6 +52,8 @@ struct VideoExporter {
     /// They're built here, from the frame-snapped timeline this export
     /// renders, so they stay on the frames where the words are said.
     var captionRingHex: UInt32?
+    /// Captions in this translation instead of the take's choice.
+    var captionLanguage: SALanguage?
     /// Brand intro and outro around the edited video; nil for none.
     var cards: CardMaker?
     /// Draw the take's zooms (zooms.json) and blurs (blurs.json).
@@ -145,7 +147,9 @@ struct VideoExporter {
         }
 
         let effects = try appliesEffects ? Self.effects(for: take, timeline: timeline) : nil
-        let captions = captionRingHex.map { CaptionExport.overlays(for: take, timeline: timeline, ringHex: $0) } ?? []
+        let captions = captionRingHex.map {
+            CaptionExport.overlays(for: take, timeline: timeline, ringHex: $0, language: captionLanguage)
+        } ?? []
         let allOverlays = captions + overlays
         let url = outputURL ?? take.exportURL(for: preset)
 

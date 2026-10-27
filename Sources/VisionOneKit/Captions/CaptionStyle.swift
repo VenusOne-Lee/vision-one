@@ -108,6 +108,9 @@ public struct CaptionSettings: Codable, Equatable, Sendable {
     public var position: Double?
     /// Words on screen at once in the word styles. Nil uses the style's.
     public var wordsAtATime: Int?
+    /// Burn in and write files in this translated language
+    /// (transcript.zu.json). Nil uses the words as spoken.
+    public var language: SALanguage?
 
     public static let sizeRange: ClosedRange<Double> = 0.6...1.8
     public static let positionRange: ClosedRange<Double> = 0.02...0.9
@@ -122,7 +125,8 @@ public struct CaptionSettings: Codable, Equatable, Sendable {
         mzansiSpelling: Bool = true,
         sizeScale: Double = 1,
         position: Double? = nil,
-        wordsAtATime: Int? = nil
+        wordsAtATime: Int? = nil,
+        language: SALanguage? = nil
     ) {
         self.isOn = isOn
         self.style = style
@@ -133,6 +137,7 @@ public struct CaptionSettings: Codable, Equatable, Sendable {
         self.sizeScale = sizeScale
         self.position = position
         self.wordsAtATime = wordsAtATime
+        self.language = language
     }
 
     // Fields added later decode with defaults, so older files still open.
@@ -147,6 +152,7 @@ public struct CaptionSettings: Codable, Equatable, Sendable {
         sizeScale = try c.decodeIfPresent(Double.self, forKey: .sizeScale) ?? 1
         position = try c.decodeIfPresent(Double.self, forKey: .position)
         wordsAtATime = try c.decodeIfPresent(Int.self, forKey: .wordsAtATime)
+        language = try? c.decodeIfPresent(SALanguage.self, forKey: .language)
     }
 
     /// Font size as a fraction of the frame's shorter side.
