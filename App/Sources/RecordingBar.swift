@@ -134,6 +134,7 @@ private final class FirstClickHostingView<Content: View>: NSHostingView<Content>
 private struct RecordingBarView: View {
     @ObservedObject var recorder: ScreenRecorder
     @ObservedObject var mic: MicMonitor
+    @ObservedObject private var agent = AgentSession.shared
     /// Called while the pill is dragged, and once more with `done` on release.
     let onDrag: (CGSize, Bool) -> Void
     let onSize: (CGSize) -> Void
@@ -249,6 +250,16 @@ private struct RecordingBarView: View {
             } else {
                 LiveDot(size: 10)
                 Text("REC").textStyle(.headline)
+            }
+            if agent.isLive {
+                // Who is driving, in ink: orange stays for "live" only.
+                Text("\(agent.agentName ?? "An agent") is driving")
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 1)
+                    .overlay(Capsule().strokeBorder(Theme.text, lineWidth: 1.5))
+                    .accessibilityLabel("\(agent.agentName ?? "An agent") is using this Mac")
             }
         }
     }
