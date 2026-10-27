@@ -137,13 +137,18 @@ public struct SharerAgent: Sendable {
                          posts: posts, launch: draft, provider: provider.rawValue, createdAt: Date())
     }
 
+    /// The outbound request for one post, as the gate records it.
+    public static func postRequest(_ text: String, to destination: String, network: String) -> OutboundRequest {
+        OutboundRequest(
+            kind: .post, provider: AIProviderID("post.\(network)"), providerName: network.capitalized,
+            destination: destination, task: AITask("sharer.post"), summary: "Post to \(network.capitalized)",
+            payload: text)
+    }
+
     /// The gate check before a post goes out. Each post is approved on its
     /// own; "Allow for this session" never covers posts.
     public static func approvePost(_ text: String, to destination: String, network: String,
                                    gate: OutboundGate) async throws {
-        try await gate.check(OutboundRequest(
-            kind: .post, provider: AIProviderID("post.\(network)"), providerName: network.capitalized,
-            destination: destination, task: AITask("sharer.post"), summary: "Post to \(network.capitalized)",
-            payload: text))
+        try await gate.check(postRequest(text, to: destination, network: network))
     }
 }

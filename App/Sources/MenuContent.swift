@@ -64,7 +64,7 @@ struct MenuContent: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !recorder.phase.isLive {
-                    FooterLink("Before you record…", action: MenuPanel.closing { ProducerWindowController.shared.show() })
+                    FooterLink("Before you record…", action: MenuPanel.closing { EditorWindowController.shared.showLibrary() })
                 }
             }
             .padding(.horizontal, Theme.Panel.inset)
@@ -80,9 +80,7 @@ struct MenuContent: View {
 
             HStack(spacing: 14) {
                 FooterLink("All recordings", action: MenuPanel.closing { recorder.revealRecordings() })
-                FooterLink("Brand", action: MenuPanel.closing { BrandWindowController.shared.show() })
-                FooterLink("AI", action: MenuPanel.closing { AISettingsWindowController.shared.show() })
-                FooterLink("Access", action: MenuPanel.closing { recorder.openSetup() })
+                FooterLink("Settings", action: MenuPanel.closing { SettingsWindowController.shared.show() })
                 Spacer(minLength: 0)
                 FooterLink("Quit") { NSApplication.shared.terminate(nil) }
                     .keyboardShortcut("q")

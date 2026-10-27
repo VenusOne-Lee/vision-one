@@ -189,6 +189,16 @@ final class AgentTests: XCTestCase {
         XCTAssertFalse(text.contains("Hook:"))
     }
 
+    func testNextPlanFollowsHome() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "vision-one-next-plan-\(UUID().uuidString)"))
+        XCTAssertNil(TakePlan.next(in: defaults))
+        defaults.set("tutorial", forKey: TakePlan.nextPurposeKey)
+        XCTAssertEqual(TakePlan.next(in: defaults)?.energy, Purpose.tutorial.energy)
+        defaults.set("viral", forKey: TakePlan.nextEnergyKey)
+        XCTAssertEqual(TakePlan.next(in: defaults)?.purposeID, "tutorial")
+        XCTAssertEqual(TakePlan.next(in: defaults)?.energy, .viral)
+    }
+
     func testTakePlanRoundTrip() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

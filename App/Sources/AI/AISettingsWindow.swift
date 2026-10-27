@@ -195,26 +195,12 @@ extension AIProviderID: Identifiable {
     public var id: String { rawValue }
 }
 
-/// Opens Settings → AI as its own window.
+/// AI lives in the Settings window; this keeps the old entry point.
 @MainActor
 final class AISettingsWindowController {
     static let shared = AISettingsWindowController()
-    private var window: NSWindow?
 
     func show() {
-        if window == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 640),
-                                  styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-            window.title = "AI"
-            window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
-            window.sharingType = .none
-            window.setFrameAutosaveName("VisionOneAISettings")
-            window.contentViewController = NSHostingController(rootView: AISettingsView())
-            window.center()
-            self.window = window
-        }
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
+        SettingsWindowController.shared.show(.ai)
     }
 }

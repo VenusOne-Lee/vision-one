@@ -98,6 +98,15 @@ public actor OutboundGate {
         }
     }
 
+    /// Records a post the user approved on a card that showed its exact
+    /// words and where it goes (the export sheet's share card), so it
+    /// isn't asked a second time. Only posts: model requests always come
+    /// through `check`.
+    public func approvedInPlace(_ request: OutboundRequest) {
+        guard request.kind == .post else { return }
+        history.append(Record(request: request, decision: .allowOnce, at: Date()))
+    }
+
     /// Forget every "Allow for this session".
     public func reset() {
         allowed.removeAll()

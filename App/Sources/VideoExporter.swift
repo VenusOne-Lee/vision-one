@@ -62,6 +62,14 @@ struct VideoExporter {
     /// Colour of the ring around the camera bubble (the builder's ring).
     var ring: RingColour = .black
 
+    /// The part of the screen an export shows.
+    enum Crop {
+        /// One window for the whole export (a clip).
+        case fixed(NormalisedRect)
+        /// A window that moves, planned on the recording's clock.
+        case follow(ReframePlan)
+    }
+
     /// What a finished export made, and what's needed to line other files
     /// (subtitles) up with it.
     struct Output {
@@ -110,10 +118,20 @@ struct VideoExporter {
         } catch let error as ExportPlanError {
             throw Failure.plan(error)
         }
-        let crop = clip.map { clip in
-            ClipFrame.rect(format: clip.format,
-                           sourceAspect: naturalSize.height > 0 ? Double(naturalSize.width / naturalSize.height) : 0,
-                           framing: clip.framing)
+        // A clip shows one fixed window; vertical and square exports of
+        // the whole video follow the cursor (events.json) through it.
+        let crop: Crop?
+        if let clip {
+            crop = .fixed(ClipFrame.rect(format: clip.format,
+                                         sourceAspect: naturalSize.height > 0 ? Double(naturalSize.width / naturalSize.height) : 0,
+                                         framing: clip.framing))
+        } else if let format = preset.format {
+            let focus = (try? EventLog.read(from: take.eventsURL)).map { ReframePlanner.focus(from: $0) } ?? []
+            crop = .follow(ReframePlanner.plan(format: format, mode: .follow,
+                                               sourceWidth: Int(naturalSize.width), sourceHeight: Int(naturalSize.height),
+                                               duration: assetDuration.seconds, focus: focus))
+        } else {
+            crop = nil
         }
 
         // Cards are drawn once at the export's size, then reused if the
@@ -195,7 +213,7 @@ struct VideoExporter {
     private func render(timeline: ExportTimeline, plan: TemplatePlan, cards: BrandCardSet,
                         sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
                         overlays: [ExportOverlay], effects: FrameEffects?, settings: ExportSettings,
-                        crop: NormalisedRect?, to url: URL,
+                        crop: Crop?, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
@@ -260,17 +278,24 @@ struct VideoExporter {
         let videoStart = cards.intro != nil ? bodyStart : .zero
         let videoEnd = cards.intro != nil ? bodyEnd : Self.time(timeline.duration)
         let cropAt: (@Sendable (Double) -> NormalisedRect?)?
-        if let crop {
-            cropAt = { @Sendable _ in crop }
-        } else {
+        switch crop {
+        case let .fixed(rect)?:
+            cropAt = { @Sendable _ in rect }
+        case let .follow(reframe)?:
+            // The compositor asks on the edited clock; the plan is on the
+            // recording's.
+            cropAt = { @Sendable t in reframe.crop(at: timeline.sourceTime(forOutput: t) ?? t) }
+        case nil:
             cropAt = nil
         }
+        var isFit = false
+        if case let .fixed(rect)? = crop, rect == .full { isFit = true }
         instructions.append(FrameInstruction(timeRange: CMTimeRange(start: videoStart, end: videoEnd),
                                              trackID: video.trackID, overlays: overlays,
                                              overlayTimeOffset: videoStart.seconds, effects: effects,
                                              crop: cropAt,
                                              // "Fit" clips sit on the canvas, ink on paper.
-                                             background: crop == .full
+                                             background: isFit
                                                 ? CIColor(red: 0xF4 / 255.0, green: 0xF4 / 255.0, blue: 0xF1 / 255.0)
                                                 : .black,
                                              camera: cameraTrack.flatMap { track in

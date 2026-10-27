@@ -120,6 +120,22 @@ final class ExportPlannerTests: XCTestCase {
         XCTAssertNil(ExportPlanner.maxDuration(for: .original))
         XCTAssertEqual(ExportPreset.allCases.compactMap(\.sizeLimitBytes), [16_000_000])
     }
+
+    func testVerticalAndSquareTakeTheirShape() throws {
+        let vertical = try ExportPlanner.settings(for: .vertical, source: retina, duration: 60)
+        XCTAssertEqual([vertical.width, vertical.height], [1080, 1920])
+        XCTAssertLessThanOrEqual(vertical.frameRate, 30)
+        let square = try ExportPlanner.settings(for: .square, source: retina, duration: 60)
+        XCTAssertEqual([square.width, square.height], [1080, 1080])
+        XCTAssertNil(ExportPreset.hd1080.format)
+        XCTAssertEqual(ExportPreset.vertical.format, .vertical)
+    }
+
+    func testPurposePicksItsFormats() {
+        XCTAssertEqual(ExportPreset.suggested(for: .launch), [.hd1080, .vertical, .square])
+        XCTAssertEqual(ExportPreset.suggested(for: .short), [.vertical])
+        XCTAssertEqual(ExportPreset.suggested(for: .tutorial), [.hd1080])
+    }
 }
 
 final class ExportNamingTests: XCTestCase {
