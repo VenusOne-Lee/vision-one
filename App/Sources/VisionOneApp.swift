@@ -53,6 +53,7 @@ struct AppCommands: Commands {
             Button("Show Library") { EditorWindowController.shared.showLibrary() }
                 .keyboardShortcut(ShortcutMap.library)
             Button("Copy a Style…") { CopyStyleWindowController.shared.show() }
+            Button("Autopilot…") { AutopilotWindowController.shared.show() }
         }
         CommandGroup(after: .appSettings) {
             Button("Settings…") { SettingsWindowController.shared.show() }
@@ -98,6 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Updater.shared.start()
         CameraBubble.shared.start()
         RecordingBarController.shared.start()
+        // Re-record demos tied to a repo when it ships a release.
+        ReleaseWatcher.shared.start()
         // Finish any transcript a quit left undone.
         Task { @MainActor in Transcriber.shared.catchUp(in: ScreenRecorder.shared.library) }
         // Claude Code, Codex and other agents connect through here.
@@ -110,6 +113,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SetupWindowController.shared.show()
         } else {
             EditorWindowController.shared.showLibrary()
+        }
+    }
+
+    /// visionone://demo/rerecord?name=…&release=… from the rerecord-demos
+    /// GitHub Action (or any script): Autopilot records the demo again.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            if let request = RerecordRequest(url: url) {
+                AutopilotService.shared.rerecord(request)
+            }
         }
     }
 
