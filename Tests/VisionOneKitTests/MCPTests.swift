@@ -44,6 +44,20 @@ actor FakeMCPHost: VisionOneMCPHost {
         return take
     }
 
+    private(set) var agentStarts: [(agent: String, task: String?, app: String?)] = []
+    private(set) var agentSteps: [String] = []
+
+    func startAgentRecording(agent: String, task: String?, app: String?) async throws -> Take {
+        agentStarts.append((agent, task, app))
+        return try await startRecording()
+    }
+
+    func logAgentStep(_ text: String, x: Double?, y: Double?) async -> Bool {
+        guard recording, !agentStarts.isEmpty else { return false }
+        agentSteps.append(text)
+        return true
+    }
+
     func stopRecording() async throws -> Take {
         recording = false
         guard let take = library.takes().first else { throw MCPHostError("No take") }
@@ -458,6 +472,57 @@ final class MCPTests: XCTestCase {
 
         let unknown = await call(mcp, "start_recording", ["for": "wedding"])
         XCTAssertTrue(unknown.isError)
+    }
+
+    func testAgentRecordingAsksLogsStepsAndProposesWaits() async throws {
+        let (mcp, host) = server()
+        let early = await call(mcp, "log_step", ["say": "Open the page"])
+        XCTAssertTrue(early.isError, "no agent recording yet")
+
+        let started = await call(mcp, "start_agent_recording", ["task": "Sign up on staging", "app": "Safari"])
+        XCTAssertFalse(started.isError, started.text)
+        let question = await host.questions.last
+        XCTAssertEqual(question?.action, .record)
+        XCTAssertEqual(question?.title, "Record Claude Code using your Mac?")
+        XCTAssertTrue(question?.details.contains { $0.label == "Records" && $0.value == "The Safari window" } == true)
+        let starts = await host.agentStarts
+        XCTAssertEqual(starts.first?.agent, "Claude Code")
+        XCTAssertEqual(starts.first?.app, "Safari")
+        let take = try XCTUnwrap(library.takes().first)
+        XCTAssertEqual(take.customTitle(), "Sign up on staging")
+
+        let empty = await call(mcp, "log_step", ["say": "  "])
+        XCTAssertTrue(empty.isError)
+        let logged = await call(mcp, "log_step", ["say": "Open the signup page"])
+        XCTAssertFalse(logged.isError, logged.text)
+        let steps = await host.agentSteps
+        XCTAssertEqual(steps, ["Open the signup page"])
+
+        // What the app writes at stop: a click, 30 s of thinking, a click.
+        try AgentActionLog(agent: "Claude Code", actions: [
+            AgentAction(kind: .click, t: 2, x: 10, y: 10),
+            AgentAction(kind: .click, t: 32, x: 20, y: 20),
+        ]).write(for: take)
+        try Transcript(language: "en", engine: "test", duration: 40, segments: []).write(to: take.transcriptURL)
+        let stopped = await call(mcp, "stop_recording")
+        XCTAssertFalse(stopped.isError, stopped.text)
+        XCTAssertTrue(stopped.text.contains("2 actions"), stopped.text)
+        XCTAssertTrue(stopped.text.contains("waiting"), stopped.text)
+        let edits = try EditList.read(from: take.editsURL)
+        let waits = edits.cuts.filter { $0.reason == Cut.Reason.waiting }
+        XCTAssertEqual(waits.count, 2, "the think in the middle and the tail after the last click")
+        XCTAssertTrue(waits.allSatisfy { $0.state == .proposed })
+        let job = await mcp.board.jobs.first { $0.takeFolder != nil }
+        XCTAssertEqual(job?.state, .needsReview, "the proposed skips wait for the user")
+        XCTAssertEqual(job?.changes.count, 2, "keep_changes on the task keeps the skips")
+    }
+
+    func testAgentRecordingNoStopsIt() async throws {
+        let (mcp, host) = server(answer: .no)
+        let refused = await call(mcp, "start_agent_recording", ["task": "Book a flight"])
+        XCTAssertTrue(refused.isError)
+        let starts = await host.agentStarts
+        XCTAssertTrue(starts.isEmpty)
     }
 
     func testRecordingStartsAndStops() async throws {

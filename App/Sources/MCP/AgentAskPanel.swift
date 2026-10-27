@@ -30,6 +30,12 @@ final class AgentAskCenter: ObservableObject {
     }
 
     func answer(_ decision: OutboundDecision) {
+        // An agent driving the Mac can't say yes for you: only a "no"
+        // counts from posted clicks and keys.
+        if decision != .deny, !PersonInput.pressedByPerson() {
+            NSSound.beep()
+            return
+        }
         let note = decision == .deny ? self.note : ""
         finish(MCPAnswer(decision, note: note))
     }

@@ -116,6 +116,13 @@ public protocol VisionOneMCPHost: Sendable {
     func startRecording() async throws -> Take
     /// Stops and saves; the app transcribes the take after.
     func stopRecording() async throws -> Take
+    /// Records an agent using this Mac: like `startRecording`, and the
+    /// agent's own clicks and typing (never the person's) go into
+    /// actions.json. With `app`, only that app's window is recorded.
+    func startAgentRecording(agent: String, task: String?, app: String?) async throws -> Take
+    /// Adds an agent's note ("Open the pricing page") to the take being
+    /// recorded. False when no agent recording is live.
+    func logAgentStep(_ text: String, x: Double?, y: Double?) async -> Bool
     /// The app's agents, on its AI ladder and approval gate.
     func runner() async -> AgentRunner
     func plan(for take: Take) async -> TakePlan
@@ -140,6 +147,14 @@ extension VisionOneMCPHost {
 public extension VisionOneMCPHost {
     /// Hosts without a window always show the card.
     func showsCard(for question: MCPQuestion) async -> Bool { true }
+}
+
+extension VisionOneMCPHost {
+    public func startAgentRecording(agent: String, task: String?, app: String?) async throws -> Take {
+        try await startRecording()
+    }
+
+    public func logAgentStep(_ text: String, x: Double?, y: Double?) async -> Bool { false }
 }
 
 /// A plain message from the app for the agent ("Pick an area first").

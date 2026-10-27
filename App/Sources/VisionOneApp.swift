@@ -71,6 +71,16 @@ struct AppCommands: Commands {
                 recorder.togglePause()
             }
             .disabled(!recorder.phase.isLive)
+            Button("Record an Agent…") {
+                // Counts down like any take, which gives time to start the
+                // agent. Only the agent's clicks and typing are marked.
+                AgentSession.shared.arm(agent: nil, task: nil)
+                Task {
+                    await recorder.record()
+                    if !recorder.phase.isLive { AgentSession.shared.disarm() }
+                }
+            }
+            .disabled(recorder.phase.isBusy || recorder.phase.isLive)
             Button("Show Library") { EditorWindowController.shared.showLibrary() }
                 .keyboardShortcut(ShortcutMap.library)
             Button("Copy a Style…") { CopyStyleWindowController.shared.show() }
@@ -138,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in Transcriber.shared.catchUp(in: ScreenRecorder.shared.library) }
         // Claude Code, Codex and other agents connect through here.
         MCPService.shared.start()
+        AgentWatcher.shared.start()
         // Opened in the background by an agent: stay out of the way, and
         // get a Dock icon back once the person opens a real window.
         if CommandLine.arguments.contains(MCPService.backgroundFlag) {

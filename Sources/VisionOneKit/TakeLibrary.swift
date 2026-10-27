@@ -6,6 +6,7 @@ import Foundation
 ///     Vision One 2026-10-27 at 10.53.12/
 ///       screen.mov    video + system sound track + mic track (fragmented)
 ///       events.json   cursor moves and clicks, timed from the first frame
+///       actions.json  an AI agent's clicks, typing and notes, when an agent was recorded
 ///       audio-tracks.json  which source each audio track in screen.mov holds
 ///       transcript.json  word-timed transcript of the mic track
 ///       transcript-failed.json  only when the take can never be transcribed (no sound)
