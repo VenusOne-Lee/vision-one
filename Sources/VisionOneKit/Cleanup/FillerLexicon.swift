@@ -5,7 +5,7 @@ public struct FillerEntry: Equatable, Sendable {
     public enum Strength: String, Sendable {
         /// Never a real word (um, uh). Always proposed.
         case sure
-        /// Also a real word (like, so, ja). Only proposed when it stands
+        /// Also a real word (like, so, eish). Only proposed when it stands
         /// on its own, between pauses or punctuation.
         case maybe
     }
@@ -33,7 +33,8 @@ public struct FillerEntry: Equatable, Sendable {
 /// captions can add isiZulu and Afrikaans fillers later without code.
 ///
 /// Left out on purpose because they carry meaning in South African
-/// English: "now now", "just now", "shame", "is it".
+/// English: "now now", "just now", "shame", "is it", and "ja" / "yeah",
+/// which mostly mean yes.
 public struct FillerLexicon: Sendable {
     public var entries: [FillerEntry]
 
@@ -60,10 +61,8 @@ public struct FillerLexicon: Sendable {
         FillerEntry("right", .maybe),
         FillerEntry("okay", .maybe),
         FillerEntry("ok", .maybe),
-        // South African English. Whisper often writes ja as yeah or yah.
-        FillerEntry("ja", .maybe),
-        FillerEntry("yah", .maybe),
-        FillerEntry("yeah", .maybe),
+        // South African English. Ja, yah and yeah are left out: they
+        // usually mean yes, and cutting them changes what was said.
         FillerEntry("ag", .maybe),
         FillerEntry("eish", .maybe),
         FillerEntry("yoh", .maybe),

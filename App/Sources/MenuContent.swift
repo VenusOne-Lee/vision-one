@@ -45,6 +45,12 @@ struct MenuContent: View {
                 RecordBar(phase: recorder.phase, title: idleTitle) {
                     Task { await recorder.toggle() }
                 }
+                ForEach(recorder.trackNotes, id: \.self) { note in
+                    Text(note)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(.horizontal, Theme.Panel.inset)
             .padding(.top, 4)
@@ -59,6 +65,7 @@ struct MenuContent: View {
 
             HStack(spacing: 14) {
                 FooterLink("All recordings") { recorder.revealRecordings() }
+                FooterLink("Brand") { BrandWindowController.shared.show() }
                 FooterLink("Access") { recorder.openSetup() }
                 Spacer(minLength: 0)
                 FooterLink("Quit") { NSApplication.shared.terminate(nil) }
@@ -490,11 +497,11 @@ private extension CaptureMode {
     }
 }
 
-/// Mic and system sound, each naming what it records. Camera joins this
-/// list with the bubble (recorder.choice.camera).
+/// Mic, system sound and iPhone screen, each naming what it records.
 struct SourcesList: View {
     @EnvironmentObject private var recorder: ScreenRecorder
     @ObservedObject private var microphones = Microphones.shared
+    @ObservedObject private var devices = CaptureDevices.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -515,6 +522,8 @@ struct SourcesList: View {
                 Text("What's playing on the Mac")
                     .foregroundStyle(Theme.textMuted)
             }
+            // iPhone screen over USB, from the device tracks work.
+            SourcesRow(devices: devices)
         }
         .onAppear { microphones.refresh() }
     }
@@ -756,8 +765,11 @@ struct ExportMenu: View {
         Menu("Export") {
             ForEach(ExportPreset.allCases) { preset in
                 Button("\(preset.title) · \(preset.detail)") {
+                    let brand = BrandStore.shared
                     CaptionExport.writeFiles(for: take, preset: preset)
-                    exports.export(take, preset: preset, keep: keep, overlays: CaptionExport.overlays(for: take))
+                    exports.export(take, preset: preset, keep: keep,
+                                   overlays: CaptionExport.overlays(for: take, ringHex: brand.kit.ring.hex) + brand.overlays(),
+                                   cards: brand.cardMaker())
                 }
             }
         }
