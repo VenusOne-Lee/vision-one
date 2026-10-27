@@ -111,6 +111,19 @@ final class EffectsModel: ObservableObject {
         isAdjusting = true
     }
 
+    /// A zoom on a box drawn over the video (with the Zoom tool, a pen
+    /// circle or by voice), for `span`.
+    func addZoom(span: TimeSpan, viewport: FrameRect, state: ProposalState = .accepted,
+                 actionName: String = "Add Zoom") {
+        var zoom = Zoom(span: span, scale: 2, centerX: viewport.midX, centerY: viewport.midY,
+                        reason: Zoom.Reason.manual, state: state)
+        zoom.setViewport(viewport)
+        var next = zooms
+        next.zooms.removeAll { $0.span.overlaps(span) && $0.state == .rejected }
+        next.zooms.append(zoom)
+        apply(zooms: next, actionName: actionName)
+    }
+
     func setZoom(_ zoom: Zoom, actionName: String = "Adjust Zoom") {
         var next = zooms
         next.update(zoom)
@@ -172,6 +185,14 @@ final class EffectsModel: ObservableObject {
                       kind: nil, reason: Blur.Reason.manual, state: .accepted))
         apply(blurs: next, actionName: "Add Blur")
         isAdjusting = true
+    }
+
+    /// A blur over a box drawn on the video, for `span`.
+    func addBlur(span: TimeSpan, rect: FrameRect, state: ProposalState = .accepted,
+                 actionName: String = "Add Blur") {
+        var next = blurs
+        next.add(Blur(span: span, rect: rect.clamped, kind: nil, reason: Blur.Reason.manual, state: state))
+        apply(blurs: next, actionName: actionName)
     }
 
     func setBlur(_ blur: Blur, actionName: String = "Adjust Blur") {

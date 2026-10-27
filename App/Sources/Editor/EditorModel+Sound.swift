@@ -121,4 +121,9 @@ enum EffectAudition {
             next.play()
         }
     }
+
+    static func stop() {
+        player?.stop()
+        player = nil
+    }
 }

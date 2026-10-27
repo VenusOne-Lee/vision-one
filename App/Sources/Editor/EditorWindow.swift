@@ -2,118 +2,47 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
-/// The editor: takes sidebar, stage (video, transport, timeline, Ask) and
-/// the side pane, with the transcript first. The video takes centre
-/// stage. Every divider drags, the timeline grows or shrinks from the bar
-/// above it, the takes and side pane fold away, "Focus video" hides them
-/// both, and the side pane can sit on either side.
-/// Narrow windows drop the sidebar; very narrow ones stack the panes.
+/// The editor window's content until the Codex frame hosts the full
+/// modes: a slim toolbar (back to the Library, the take, Editor or
+/// Sound, Agents and Export) over the editor or sound full mode.
 struct EditorView: View {
     @ObservedObject var model: EditorModel
     @ObservedObject var clips: ClipsModel
     @ObservedObject var thumbnail: ThumbnailModel
     @ObservedObject private var exports = ExportController.shared
-    @StateObject private var filmstrip: FilmstripModel
-    let open: (Take) -> Void
-    /// Read again whenever the window comes forward or a take finishes,
-    /// so a new recording shows up in the sidebar.
-    @State private var takes: [Take] = TakeLibrary.standard.takes()
 
-    @AppStorage("editor.showTakes") private var showTakes = true
-    @AppStorage("editor.showTranscript") private var showSide = true
-    @AppStorage("editor.transcriptOnLeft") private var sideOnLeft = false
-    /// A new key, so everyone starts on the transcript once.
-    @AppStorage("editor.sidePane") private var sidePaneRaw = SidePane.transcript.rawValue
-    @AppStorage("editor.timelineHeight") private var timelineHeight = 172.0
+    @AppStorage("editor.mode") private var modeRaw = Mode.editor.rawValue
     @AppStorage("editor.lane.waveform") private var showWaveform = true
-    @AppStorage("editor.lane.effects") private var showEffectsLane = true
-    @AppStorage("editor.lane.sound") private var showSoundLane = true
-    /// How far the timeline is zoomed in; 1 shows the whole take.
-    @State private var zoom = 1.0
-    @State private var resizeStart: Double?
     /// An export of this take exists: the ring before its name goes solid.
     @State private var isExported = false
     @State private var showExport = false
+    @State private var showShortcuts = false
 
-    init(model: EditorModel, clips: ClipsModel, thumbnail: ThumbnailModel, open: @escaping (Take) -> Void) {
-        self.model = model
-        self.clips = clips
-        self.thumbnail = thumbnail
-        self.open = open
-        _filmstrip = StateObject(wrappedValue: FilmstripModel(url: model.take.screenURL))
+    enum Mode: String, CaseIterable {
+        case editor, sound
+        var title: String { self == .editor ? "Editor" : "Sound" }
     }
 
-    /// What the pane beside the video shows.
-    enum SidePane: String, CaseIterable, Identifiable {
-        case transcript, changes, sound, clips, thumbnail
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .transcript: return "Transcript"
-            case .changes: return "Changes"
-            case .sound: return "Sound"
-            case .clips: return "Clips"
-            case .thumbnail: return "Thumbnail"
-            }
-        }
-
-        var systemImage: String {
-            switch self {
-            case .transcript: return "text.alignleft"
-            case .changes: return "checklist"
-            case .sound: return "music.note"
-            case .clips: return "film.stack"
-            case .thumbnail: return "photo"
-            }
-        }
-    }
-
-    private var sidePane: SidePane { SidePane(rawValue: sidePaneRaw) ?? .transcript }
+    private var mode: Mode { Mode(rawValue: modeRaw) ?? .editor }
 
     var body: some View {
         VStack(spacing: 0) {
             toolbar
             Divider().overlay(Theme.line)
-            GeometryReader { geometry in
-                let width = geometry.size.width
-                if width < 640 {
-                    VSplitView {
-                        stage.frame(minHeight: 320)
-                        if showSide { sidePanel.frame(minHeight: 160) }
-                    }
-                } else {
-                    HSplitView {
-                        if showTakes && width >= 1000 {
-                            TakesSidebar(takes: takes, current: model.take, open: open)
-                                .frame(minWidth: 160, idealWidth: 200, maxWidth: 320)
-                        }
-                        if sideOnLeft && showSide {
-                            sidePanel.frame(minWidth: 280, idealWidth: 360, maxWidth: 640)
-                        }
-                        stage
-                            .frame(minWidth: 420, maxWidth: .infinity)
-                            .layoutPriority(1)
-                        if !sideOnLeft && showSide {
-                            sidePanel.frame(minWidth: 280, idealWidth: 360, maxWidth: 640)
-                        }
-                    }
+            switch mode {
+            case .editor:
+                EditorFullMode(model: model, clips: clips, thumbnail: thumbnail) {
+                    EditorWindowController.shared.showLibrary()
                 }
+            case .sound:
+                SoundFullMode(model: model) { modeRaw = Mode.editor.rawValue }
             }
         }
         .frame(minWidth: 520, minHeight: 480)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
         .environment(\.colorScheme, .light) // light only, always
-        .task(id: model.take.folder) {
-            await model.load()
-            await clips.load()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            refreshTakes()
-        }
-        .onReceive(ScreenRecorder.shared.$lastTake) { _ in refreshTakes() }
         .onReceive(exports.$phase) { _ in refreshExported() }
-        .onDisappear { filmstrip.cancel() }
     }
 
     private func refreshExported() {
@@ -124,15 +53,9 @@ struct EditorView: View {
         if exported != isExported { isExported = exported }
     }
 
-    private func refreshTakes() {
-        let latest = TakeLibrary.standard.takes()
-        if latest != takes { takes = latest }
-    }
-
     // MARK: Toolbar (44 px)
 
-    /// One black pill (Export); everything else is quieter: undo and the
-    /// panels as icon groups, rare things in the ⋯ menu.
+    /// One black pill (Export); everything else is quieter.
     private var toolbar: some View {
         HStack(spacing: 10) {
             // Back to every take; the editor and Library share one window.
@@ -146,9 +69,6 @@ struct EditorView: View {
             }
             .buttonStyle(.plain)
             .help("Back to all your recordings (⇧⌘L)")
-            ToolbarIcon(systemImage: "sidebar.left", help: showTakes ? "Hide takes (⌘1)" : "Show takes (⌘1)",
-                        isOn: showTakes) { showTakes.toggle() }
-                .keyboardShortcut("1", modifiers: .command)
             HStack(spacing: 6) {
                 // Dashed until this take has been exported, then solid.
                 Circle()
@@ -161,20 +81,12 @@ struct EditorView: View {
                     .truncationMode(.middle)
             }
             .layoutPriority(-1)
+            SegmentedTabs(selection: Binding(get: { mode }, set: { modeRaw = $0.rawValue }),
+                          options: Mode.allCases) { $0.title }
             Spacer(minLength: Theme.Space.sm)
             if model.phase == .ready {
                 EditorExportStatus(exports: exports)
-                if model.proposedChangeCount > 0 && !(showSide && sidePane == .changes) { suggestions }
-            }
-            IconGroup {
-                ToolbarIcon(systemImage: "arrow.uturn.backward", help: undoHelp) { model.undoManager.undo() }
-                    .disabled(!model.undoManager.canUndo)
-                    .keyboardShortcut("z", modifiers: .command)
-                ToolbarIcon(systemImage: "arrow.uturn.forward", help: "Redo (⇧⌘Z)") { model.undoManager.redo() }
-                    .disabled(!model.undoManager.canRedo)
-                    .keyboardShortcut("z", modifiers: [.command, .shift])
-            }
-            if model.phase == .ready {
+                if model.proposedChangeCount > 0 { suggestions }
                 Button("Agents") { AgentsWindowController.shared.show(for: model.take) }
                     .buttonStyle(PillButtonStyle(kind: .secondary))
                     .fixedSize()
@@ -191,37 +103,12 @@ struct EditorView: View {
                         }
                     }
             }
-            IconGroup {
-                ToolbarIcon(systemImage: focusVideo ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
-                            help: focusVideo ? "Show the panels again (⌘0)" : "Focus video: hide the takes and side pane (⌘0)",
-                            isOn: focusVideo) {
-                    let show = focusVideo
-                    showTakes = show
-                    showSide = show
-                }
-                .keyboardShortcut("0", modifiers: .command)
-                ToolbarIcon(systemImage: "arrow.left.arrow.right", help: "Move the side pane to the other side of the video") {
-                    sideOnLeft.toggle()
-                }
-                ToolbarIcon(systemImage: sideOnLeft ? "sidebar.left" : "sidebar.right",
-                            help: showSide ? "Hide the side pane (⌘2)" : "Show the side pane (⌘2)", isOn: showSide) {
-                    showSide.toggle()
-                }
-                .keyboardShortcut("2", modifiers: .command)
-            }
             moreMenu
         }
         .padding(.horizontal, 14)
         .frame(height: 44)
         .background(Theme.paper)
     }
-
-    private var undoHelp: String {
-        let name = model.undoManager.undoActionName
-        return name.isEmpty ? "Undo (⌘Z)" : "Undo \(name) (⌘Z)"
-    }
-
-    private var focusVideo: Bool { !showTakes && !showSide }
 
     /// Rare and destructive things live here, out of the way.
     private var moreMenu: some View {
@@ -230,12 +117,7 @@ struct EditorView: View {
                 .disabled(!model.canUndoAll)
                 .help("Back to the take as you recorded it: your cuts go and every suggestion is turned off. Blurs stay. ⌘Z brings it all back.")
             Divider()
-            Section("Timeline") {
-                Toggle("Waveform", isOn: $showWaveform)
-                Toggle("Zooms and blurs", isOn: $showEffectsLane)
-                Toggle("Music and sound effects", isOn: $showSoundLane)
-                Button("Show the whole take") { zoom = 1 }
-            }
+            Toggle("Waveform on the timeline", isOn: $showWaveform)
             Divider()
             Button("Keyboard shortcuts") { showShortcuts = true }
         } label: {
@@ -250,22 +132,15 @@ struct EditorView: View {
         .popover(isPresented: $showShortcuts, arrowEdge: .bottom) { ShortcutsCard() }
     }
 
-    @State private var showShortcuts = false
-
-    /// The suggestions, compact, in the toolbar while Changes isn't open.
-    /// Dashed, like the suggestions themselves, until you decide.
+    /// The suggestions, compact, in the toolbar. Dashed, like the
+    /// suggestions themselves, until you decide.
     private var suggestions: some View {
         HStack(spacing: 6) {
-            Button("\(model.proposedChangeCount) suggested") {
-                sidePaneRaw = SidePane.changes.rawValue
-                showSide = true
-            }
-            .buttonStyle(.plain)
-            .font(.system(size: 12).monospacedDigit())
-            .foregroundStyle(Theme.textMuted)
-            .lineLimit(1)
-            .fixedSize()
-            .help("See each suggestion in Changes")
+            Text("\(model.proposedChangeCount) suggested")
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundStyle(Theme.textMuted)
+                .lineLimit(1)
+                .fixedSize()
             Button("Accept all") { model.acceptAllChanges() }
                 .buttonStyle(PillButtonStyle(kind: .secondary))
                 .fixedSize()
@@ -274,169 +149,7 @@ struct EditorView: View {
         .padding(.trailing, 4)
         .padding(.vertical, 3)
         .overlay(Capsule().strokeBorder(Theme.textMuted, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
-        .help("Dashed until you decide. ⌘Z undoes Accept all.")
-    }
-
-    // MARK: Stage
-
-    @ViewBuilder
-    private var stage: some View {
-        VStack(spacing: 0) {
-            switch model.phase {
-            case .loading:
-                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
-            case let .failed(message):
-                EditorNotice(title: "Can't open this take", message: message, isError: true)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .ready:
-                video
-                    .padding([.horizontal, .top], 12)
-                TransportBar(model: model, zoom: $zoom)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                timelineResizeBar
-                EditorTimeline(model: model, effects: model.effects, filmstrip: filmstrip, zoom: $zoom,
-                               showWaveform: showWaveform, showEffects: showEffectsLane, showSound: showSoundLane)
-                    .frame(height: timelineHeight)
-                    .padding(.horizontal, 12)
-                AskBar(model: model)
-                    .padding(12)
-            }
-            if let saveError = model.saveError {
-                EditorNotice(title: "Edits not saved", message: saveError, isError: true)
-                    .padding([.horizontal, .bottom], 12)
-            }
-        }
-        .background(Theme.canvas)
-    }
-
-    private var video: some View {
-        PlayerSurface(player: model.player)
-            .overlay { CaptionLayer(model: model) }
-            .background(Theme.text)
-            .onTapGesture { model.togglePlay() }
-            .overlay { EffectsLayer(model: model, effects: model.effects) }
-            .overlay {
-                // The selected clip's window, draggable to reframe.
-                if showSide, sidePane == .clips, let clip = clips.selected, clip.format != .landscape {
-                    ClipWindowOverlay(model: clips, clip: clip)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .frame(minHeight: 160)
-            .layoutPriority(1)
-    }
-
-    /// Drag up for a taller timeline, down for a bigger video.
-    private var timelineResizeBar: some View {
-        Capsule()
-            .fill(Theme.line)
-            .frame(width: 36, height: 4)
-            .frame(maxWidth: .infinity)
-            .frame(height: 12)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        if resizeStart == nil { resizeStart = timelineHeight }
-                        timelineHeight = min(420, max(96, (resizeStart ?? timelineHeight) - value.translation.height))
-                    }
-                    .onEnded { _ in resizeStart = nil }
-            )
-            .onHover { inside in
-                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
-            }
-            .help("Drag to resize the timeline")
-            .accessibilityLabel("Timeline height")
-    }
-
-    // MARK: Side pane
-
-    /// Transcript, Changes, Sound, Clips and Thumbnail share the pane
-    /// beside the video. Tabs never wrap: when the pane is narrow they
-    /// become icons.
-    private var sidePanel: some View {
-        VStack(spacing: 0) {
-            ViewThatFits(in: .horizontal) {
-                tabs(icons: false)
-                tabs(icons: true)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            Divider().overlay(Theme.line)
-            switch sidePane {
-            case .transcript: transcriptPane
-            case .changes: ChangesPanel(model: model, effects: model.effects)
-            case .sound:
-                ScrollView {
-                    SoundPanel(model: model)
-                        .padding(14)
-                }
-            case .clips: ClipsPane(model: clips)
-            case .thumbnail:
-                ThumbnailPane(model: thumbnail)
-                    .task { await thumbnail.loadIfNeeded() }
-            }
-        }
-        .background(Theme.paper)
-    }
-
-    private func tabs(icons: Bool) -> some View {
-        HStack(spacing: 2) {
-            ForEach(SidePane.allCases) { pane in
-                Button { sidePaneRaw = pane.rawValue } label: {
-                    HStack(spacing: 4) {
-                        if icons {
-                            Image(systemName: pane.systemImage)
-                        } else {
-                            Text(pane.title)
-                        }
-                        if pane == .changes, model.proposedChangeCount > 0 {
-                            Text("\(model.proposedChangeCount)")
-                                .font(.system(size: 10, design: .monospaced).monospacedDigit())
-                                .opacity(0.75)
-                        }
-                    }
-                    .lineLimit(1)
-                    .fixedSize()
-                }
-                .buttonStyle(TabPillStyle(isOn: pane == sidePane))
-                .help(pane.title)
-                .accessibilityLabel(pane.title)
-                .accessibilityAddTraits(pane == sidePane ? .isSelected : [])
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    // MARK: Transcript
-
-    private var transcriptPane: some View {
-        VStack(spacing: 0) {
-            switch model.transcriptState {
-            case .loading:
-                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .waiting:
-                EditorNotice(title: "Transcript on its way",
-                             message: "Vision One is writing out what you said. The words appear here as soon as it's done, and you can play the take meanwhile.",
-                             isError: false)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case let .failed(message):
-                EditorNotice(title: "Transcript unavailable", message: message, isError: true)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .ready:
-                if model.words.isEmpty {
-                    EditorNotice(title: "No words found",
-                                 message: "Nothing was said in this take, or the mic was off. You can still play it and export it as it is.",
-                                 isError: false)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    TranscriptTextView(model: model)
-                }
-            }
-        }
-        .background(Theme.paper)
+        .help("Dashed until you decide. Each one is in Changes. ⌘Z undoes Accept all.")
     }
 }
 
@@ -484,9 +197,12 @@ struct IconGroup<Content: View>: View {
 /// Play and step through the take, see where you are and how long it'll
 /// be, and zoom the timeline. Times are of the edited video, so they
 /// match the export.
-struct TransportBar: View {
+struct TransportBar<Accessory: View>: View {
     @ObservedObject var model: EditorModel
     @Binding var zoom: Double
+    var showsZoom = true
+    /// Extra controls at the right end, such as Show tracks.
+    @ViewBuilder var accessory: () -> Accessory
 
     var body: some View {
         HStack(spacing: Theme.Space.sm) {
@@ -521,10 +237,13 @@ struct TransportBar: View {
                     .help("Cut the stretch you picked on the timeline (Delete)")
             }
             Spacer(minLength: 0)
-            ViewThatFits(in: .horizontal) {
-                zoomControls(slider: true)
-                zoomControls(slider: false)
+            if showsZoom {
+                ViewThatFits(in: .horizontal) {
+                    zoomControls(slider: true)
+                    zoomControls(slider: false)
+                }
             }
+            accessory()
         }
         .frame(height: 36)
     }
@@ -602,6 +321,12 @@ struct TransportBar: View {
     }
 }
 
+extension TransportBar where Accessory == EmptyView {
+    init(model: EditorModel, zoom: Binding<Double>) {
+        self.init(model: model, zoom: zoom) { EmptyView() }
+    }
+}
+
 /// The keys, for the ⋯ menu.
 private struct ShortcutsCard: View {
     private let rows: [(String, String)] = [
@@ -613,8 +338,8 @@ private struct ShortcutsCard: View {
         ("⌫", "Cut the selected words or stretch"),
         ("⌘+  ⌘−", "Zoom the timeline"),
         ("⌘Z  ⇧⌘Z", "Undo and redo"),
-        ("⌘0", "Focus video"),
-        ("⌘1  ⌘2", "Takes and side pane"),
+        ("V  C  Z  B", "Select, Cut, Zoom and Blur tools"),
+        ("⌘2", "Side pane"),
     ]
 
     var body: some View {
@@ -629,53 +354,6 @@ private struct ShortcutsCard: View {
         .padding(16)
         .background(Theme.paper)
         .environment(\.colorScheme, .light)
-    }
-}
-
-struct TakesSidebar: View {
-    let takes: [Take]
-    let current: Take
-    let open: (Take) -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("TAKES")
-                    .font(.system(size: 11, weight: .medium))
-                    .tracking(0.6)
-                    .foregroundStyle(Theme.textMuted)
-                    .padding(.horizontal, 6)
-                    .padding(.bottom, 4)
-                if takes.isEmpty {
-                    Text("Recordings you make show up here.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.textMuted)
-                        .padding(6)
-                }
-                ForEach(takes, id: \.folder) { take in
-                    Button { open(take) } label: {
-                        HStack(spacing: Theme.Space.sm) {
-                            // Dashed until exported, the app's one grammar.
-                            Circle()
-                                .strokeBorder(Theme.text, style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
-                                .frame(width: 18, height: 18)
-                            Text(take.name.replacingOccurrences(of: "Vision One ", with: ""))
-                                .font(.system(size: 12))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(6)
-                        .background(take == current ? Theme.canvas : .clear,
-                                    in: RoundedRectangle(cornerRadius: Theme.Radius.md))
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(Theme.Space.sm)
-        }
-        .background(Theme.paper)
     }
 }
 
@@ -745,9 +423,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         let thumbnail = ThumbnailModel(take: take, editor: model, clips: clips)
         self.model = model
         self.clips = clips
-        let view = EditorView(model: model, clips: clips, thumbnail: thumbnail) { [weak self] next in
-            self?.open(next)
-        }
+        let view = EditorView(model: model, clips: clips, thumbnail: thumbnail)
         present(NSHostingController(rootView: view), subtitle: take.name)
     }
 
