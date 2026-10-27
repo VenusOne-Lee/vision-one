@@ -3,11 +3,10 @@ import SwiftUI
 import VisionOneKit
 
 /// Where a take's share link comes from. Nil until the share page is
-/// published, and the link row stays hidden until then. The share page
-/// work sets `lookup` to its `ShareLinkStore.link(for:)`.
+/// published, and the link row stays hidden until then.
 @MainActor
 enum ShareLinks {
-    static var lookup: (Take) -> URL? = { _ in nil }
+    static var lookup: (Take) -> URL? = { ShareLinkStore.link(for: $0) }
     static func link(for take: Take) -> URL? { lookup(take) }
 }
 
