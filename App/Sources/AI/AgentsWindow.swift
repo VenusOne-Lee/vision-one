@@ -196,7 +196,7 @@ struct AgentsView: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     sectionLabel("ENERGY")
-                    EnergyDial(energy: $model.plan.energy)
+                    EnergyPicker(energy: $model.plan.energy)
                     Text(model.plan.energy.blurb).font(.system(size: 12)).foregroundStyle(Theme.textMuted)
                 }
                 Divider().overlay(Theme.line)
@@ -398,7 +398,7 @@ struct PurposePicker: View {
 }
 
 /// Calm / Lively / Viral as a three-way pill.
-struct EnergyDial: View {
+struct EnergyPicker: View {
     @Binding var energy: Energy
 
     var body: some View {
