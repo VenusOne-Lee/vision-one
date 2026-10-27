@@ -13,6 +13,8 @@ import Foundation
 ///       zooms.json       zooms, proposed from clicks or added by hand
 ///       blurs.json       blurs over secrets found on screen or drawn by hand
 ///       sound.json       music and sound effects over the edit
+///       clips.json       short clips suggested or kept for social apps
+///       thumbnails/      thumbnail.json and the saved thumbnail images
 ///       camera.mov    (next) camera, drawn in the ring bubble at export
 ///       phone.mov     iPhone screen + sound over USB, when one was recorded
 ///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
@@ -34,6 +36,26 @@ public struct Take: Equatable, Sendable {
     /// Written when a take can never be transcribed, so launches skip it.
     public var transcriptFailedURL: URL { folder.appendingPathComponent("transcript-failed.json") }
     public var editsURL: URL { folder.appendingPathComponent("edits.json") }
+    public var clipsURL: URL { folder.appendingPathComponent("clips.json") }
+    public var thumbnailsFolder: URL { folder.appendingPathComponent("thumbnails", isDirectory: true) }
+    public var thumbnailDesignURL: URL { thumbnailsFolder.appendingPathComponent("thumbnail.json") }
+
+    public func thumbnailURL(for size: ThumbnailSize) -> URL {
+        thumbnailsFolder.appendingPathComponent(size.fileName)
+    }
+
+    /// "Vision One 2026-10-27 at 10.53.12 - Ship your first beta (vertical).mp4"
+    public func clipURL(for clip: Clip) -> URL {
+        let unsafe = CharacterSet(charactersIn: "/:\\?%*|\"<>").union(.newlines)
+        let words = clip.title
+            .components(separatedBy: unsafe).joined()
+            .replacingOccurrences(of: "…", with: "")
+            .split(separator: " ")
+            .prefix(6)
+            .joined(separator: " ")
+        let label = words.isEmpty ? "Clip" : words
+        return folder.appendingPathComponent("\(name) - \(label) (\(clip.format.fileSuffix)).mp4")
+    }
 
     /// Exports sit next to the recording, named after the take, so they
     /// read well once dragged out of the folder.

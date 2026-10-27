@@ -116,3 +116,19 @@ public struct ClipperAgent: Sendable {
         }
     }
 }
+
+extension ClipCandidate {
+    /// A window the clips feature's on-device finder already liked.
+    public init(_ candidate: ClipFinder.Candidate) {
+        self.init(span: candidate.span, text: candidate.sentences.map(\.text).joined(separator: " "))
+    }
+}
+
+extension ClipPick {
+    /// The pick as a proposed clip for clips.json, so it shows dashed in
+    /// the editor's Clips tab.
+    public var clip: Clip {
+        Clip(title: title, hook: hook, span: span, score: score, reason: "Picked by the Clipper",
+             origin: Clip.Origin.agent, state: .proposed, format: ClipFormat(rawValue: format) ?? .vertical)
+    }
+}

@@ -194,17 +194,3 @@ final class ExportRetryTests: XCTestCase {
         XCTAssertEqual(ExportPhase.stillTooBig(limitBytes: 16_000_000), "Still over 16 MB. Cut it shorter or pick 720p.")
     }
 }
-
-final class ExportTailTests: XCTestCase {
-    func testKeepsTheVideoPastAShorterStoredLength() {
-        // edits.json stored the mic's 9.6 s; the screen runs 10 s.
-        let keep = ExportTimeline.keepingTail([0..<2, 4..<9.6], storedEnd: 9.6, sourceDuration: 10)
-        let timeline = ExportTimeline(keep: keep, sourceDuration: 10, frameRate: 30)
-        XCTAssertEqual(timeline.segments.map(\.source), [0..<2, 4..<10])
-    }
-
-    func testLeavesSpansAloneWhenTheLengthsAgree() {
-        XCTAssertEqual(ExportTimeline.keepingTail([0..<5], storedEnd: 10, sourceDuration: 10), [0..<5])
-        XCTAssertEqual(ExportTimeline.keepingTail([0..<5], storedEnd: 0, sourceDuration: 10), [0..<5])
-    }
-}

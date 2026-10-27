@@ -72,16 +72,6 @@ public struct ExportTimeline: Equatable, Sendable {
                   sourceDuration: edits.sourceDuration, frameRate: frameRate)
     }
 
-    /// Kept spans for a recording that runs past the end an edit list
-    /// stored (auto clean can store the mic's length, a little shorter
-    /// than the screen). The extra tail is kept, as the edit list would
-    /// keep it with the recording's real length, so export never trims
-    /// the end of the video.
-    public static func keepingTail(_ keep: [Range<Double>], storedEnd: Double, sourceDuration: Double) -> [Range<Double>] {
-        guard storedEnd > 0, sourceDuration > storedEnd else { return keep }
-        return keep + [storedEnd..<sourceDuration]
-    }
-
     /// Where a moment of the recording ends up in the export, or nil if
     /// it was cut.
     public func outputTime(forSource t: Double) -> Double? {

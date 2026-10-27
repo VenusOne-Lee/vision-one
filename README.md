@@ -79,6 +79,7 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | `docs/BRAND.md` | Brand kit, intro and outro cards, and what's not wired yet (templates, formats) |
 | `docs/EFFECTS.md` | Auto zoom and secret blur |
 | `docs/AI.md` | The AI ladder (on device, ChatGPT plan, Decisions API, your own key), the approval gate, and the Producer, Editor, Clipper and Sharer agents |
+| `docs/CLIPS.md` | Short clips and thumbnails: finding, framing, rendering |
 | `docs/IPHONE.md` | Recording a plugged-in iPhone's screen, and the iPhone as a camera |
 | `docs/PRESETS.md` | Prompt presets: the file format and how a prompt is put together |
 | `docs/RELEASING.md` | Signing, notarised DMG, Sparkle updates, Homebrew, and the one-time setup |

@@ -137,6 +137,16 @@ final class AgentTests: XCTestCase {
         XCTAssertFalse(picks[0].span.overlaps(picks[1].span))
     }
 
+    func testClipPickBecomesProposedAgentClip() {
+        let clip = ClipPick(start: 2, end: 20, score: 0.8, title: "T", hook: "H", format: "square").clip
+        XCTAssertEqual(clip.origin, Clip.Origin.agent)
+        XCTAssertEqual(clip.state, .proposed)
+        XCTAssertEqual(clip.format, .square)
+        var list = ClipList()
+        XCTAssertEqual(list.propose([clip], sourceDuration: 30).count, 1)
+        XCTAssertTrue(list.propose([clip], sourceDuration: 30).isEmpty)
+    }
+
     // MARK: Sharer
 
     func testSharerMapsChaptersToEditedTime() async throws {
@@ -186,5 +196,22 @@ final class AgentTests: XCTestCase {
         try TakePlan(purpose: .short).write(for: take)
         XCTAssertEqual(TakePlan.load(for: take)?.energy, .viral)
         XCTAssertEqual(TakePlan.load(for: take)?.targetSeconds, 59)
+    }
+}
+
+final class PurposePromptTests: XCTestCase {
+    func testBriefFillsVariablesAndLayersPreset() {
+        let preset = PromptPreset(name: "Mine", prompts: [.title: "Title for {product}, five words.", .houseStyle: "Dry and short."])
+        let brief = Purpose.launch.brief(preset: preset, variables: PromptVariables(product: "Vision One"))
+        XCTAssertEqual(brief.parts["title"], "Title for Vision One, five words.")
+        XCTAssertEqual(brief.houseStyle, "Dry and short.")
+        XCTAssertTrue(brief.parts["hook"]!.contains("Vision One"))
+        XCTAssertFalse(brief.parts.values.contains { $0.contains("{") })
+    }
+
+    func testBriefWithoutListingUsesPlainWords() {
+        let brief = Purpose.launch.brief(preset: nil)
+        XCTAssertTrue(brief.parts["outro"]!.hasPrefix("End on where to try it: the link."))
+        XCTAssertNil(brief.houseStyle)
     }
 }

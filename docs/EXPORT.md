@@ -27,7 +27,7 @@ WhatsApp works out the bitrate from the edited length. It uses the largest size 
 
 Exports sit in the take folder, named after the take: `Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4`.
 
-The recording's own length always sets where the video ends. `edits.json` can store a slightly shorter length (auto clean saves the mic's), and export keeps the tail past it rather than trimming the end.
+The recording's own length always sets where the video ends. Export and the editor both use screen.mov's length, even if an older `edits.json` stored a shorter one (the mic's), so the end of the video is never trimmed.
 
 ### Captions
 
@@ -38,4 +38,4 @@ With **Also save .srt and .vtt** on in the caption controls, subtitle files go n
 ## Not yet
 
 - Camera bubble overlay (needs `camera.mov`)
-- Vertical and square exports: `VideoFormat` and `ReframePlanner` are in (see [BRAND.md](BRAND.md)); the compositor crop comes with clips
+- Vertical and square clips: see [CLIPS.md](CLIPS.md). `VideoFormat` and `ReframePlanner` are in (see [BRAND.md](BRAND.md)); full-length vertical exports and a window that moves with the cursor come next

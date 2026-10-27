@@ -9,6 +9,8 @@ import VisionOneKit
 /// Narrow windows drop the sidebar; very narrow ones stack the panes.
 struct EditorView: View {
     @ObservedObject var model: EditorModel
+    @ObservedObject var clips: ClipsModel
+    @ObservedObject var thumbnail: ThumbnailModel
     @ObservedObject private var exports = ExportController.shared
     let open: (Take) -> Void
     /// Read again whenever the window comes forward or a take finishes,
@@ -19,6 +21,22 @@ struct EditorView: View {
     @AppStorage("editor.showTranscript") private var showTranscript = true
     @AppStorage("editor.transcriptOnLeft") private var transcriptOnLeft = false
     @AppStorage("editor.showSound") private var showSound = true
+    @AppStorage("editor.sidePane") private var sidePaneRaw = SidePane.transcript.rawValue
+
+    /// What the pane beside the video shows.
+    enum SidePane: String, CaseIterable, Identifiable {
+        case transcript, clips, thumbnail
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .transcript: return "Transcript"
+            case .clips: return "Clips"
+            case .thumbnail: return "Thumbnail"
+            }
+        }
+    }
+
+    private var sidePane: SidePane { SidePane(rawValue: sidePaneRaw) ?? .transcript }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,7 +47,7 @@ struct EditorView: View {
                 if width < 640 {
                     VSplitView {
                         stage.frame(minHeight: 220)
-                        if showTranscript { transcriptPane.frame(minHeight: 160) }
+                        if showTranscript { sidePanel.frame(minHeight: 160) }
                     }
                 } else {
                     HSplitView {
@@ -38,13 +56,13 @@ struct EditorView: View {
                                 .frame(minWidth: 160, idealWidth: 200, maxWidth: 320)
                         }
                         if transcriptOnLeft && showTranscript {
-                            transcriptPane.frame(minWidth: 280, idealWidth: 420, maxWidth: .infinity)
+                            sidePanel.frame(minWidth: 300, idealWidth: 420, maxWidth: .infinity)
                         }
                         stage
                             .frame(minWidth: 320, maxWidth: .infinity)
                             .layoutPriority(1)
                         if !transcriptOnLeft && showTranscript {
-                            transcriptPane.frame(minWidth: 280, idealWidth: 420, maxWidth: .infinity)
+                            sidePanel.frame(minWidth: 300, idealWidth: 420, maxWidth: .infinity)
                         }
                     }
                 }
@@ -54,7 +72,10 @@ struct EditorView: View {
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
         .environment(\.colorScheme, .light) // light only, always
-        .task(id: model.take.folder) { await model.load() }
+        .task(id: model.take.folder) {
+            await model.load()
+            await clips.load()
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             refreshTakes()
         }
@@ -84,6 +105,9 @@ struct EditorView: View {
                     .help("Length of the take → length after your cuts")
                 if model.proposedCount > 0 { suggestions }
                 EditorExportStatus(exports: exports)
+                Button("Agents") { AgentsWindowController.shared.show(for: model.take) }
+                    .buttonStyle(PillButtonStyle(kind: .secondary))
+                    .help("Pick what it's for, ask for a length, find clips, and write a title and posts")
                 // Exports exactly what's on screen, even if saving failed.
                 ExportMenu(take: model.take,
                            keep: model.edits.keptSpans.map { $0.start..<$0.end },
@@ -163,10 +187,16 @@ struct EditorView: View {
                 PlayerSurface(player: model.player)
                     .overlay { CaptionLayer(model: model) }
                     .background(Theme.text)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onTapGesture { model.togglePlay() }
                     .overlay { EffectsLayer(model: model, effects: model.effects) }
+                    .overlay {
+                        // The selected clip's window, draggable to reframe.
+                        if showTranscript, sidePane == .clips, let clip = clips.selected, clip.format != .landscape {
+                            ClipWindowOverlay(model: clips, clip: clip)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 EditorTimeline(model: model)
                 EffectsLane(model: model, effects: model.effects)
                 if showSound { SoundLane(model: model) }
@@ -179,6 +209,33 @@ struct EditorView: View {
         }
         .padding(Theme.Space.md)
         .background(Theme.canvas)
+    }
+
+    // MARK: Side pane
+
+    /// Transcript, Clips and Thumbnail share the pane beside the video.
+    private var sidePanel: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                ForEach(SidePane.allCases) { pane in
+                    Button(pane.title) { sidePaneRaw = pane.rawValue }
+                        .buttonStyle(TabPillStyle(isOn: pane == sidePane))
+                        .accessibilityAddTraits(pane == sidePane ? .isSelected : [])
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            Divider().overlay(Theme.line)
+            switch sidePane {
+            case .transcript: transcriptPane
+            case .clips: ClipsPane(model: clips)
+            case .thumbnail:
+                ThumbnailPane(model: thumbnail)
+                    .task { await thumbnail.loadIfNeeded() }
+            }
+        }
+        .background(Theme.paper)
     }
 
     // MARK: Transcript
@@ -208,6 +265,22 @@ struct EditorView: View {
             }
         }
         .background(Theme.paper)
+    }
+}
+
+/// A tab in the side pane: ink outline when selected, muted text when not.
+private struct TabPillStyle: ButtonStyle {
+    let isOn: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: isOn ? .medium : .regular))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .foregroundStyle(isOn ? Theme.text : Theme.textMuted)
+            .overlay(Capsule().strokeBorder(isOn ? Theme.text : .clear, lineWidth: 1))
+            .contentShape(Capsule())
+            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 
@@ -322,6 +395,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     static let shared = EditorWindowController()
     private var window: NSWindow?
     private var model: EditorModel?
+    private var clips: ClipsModel?
 
     /// Opens the newest take. With none, there's nothing to open: the
     /// menu only offers Review once a take exists.
@@ -332,9 +406,13 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
 
     func open(_ take: Take) {
         model?.close()
+        clips?.close()
         let model = EditorModel(take: take)
+        let clips = ClipsModel(take: take, editor: model)
+        let thumbnail = ThumbnailModel(take: take, editor: model, clips: clips)
         self.model = model
-        let view = EditorView(model: model) { [weak self] next in
+        self.clips = clips
+        let view = EditorView(model: model, clips: clips, thumbnail: thumbnail) { [weak self] next in
             self?.open(next)
         }
         if window == nil {
@@ -363,7 +441,9 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         model?.close()
+        clips?.close()
         model = nil
+        clips = nil
     }
 }
 
