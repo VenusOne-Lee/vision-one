@@ -71,6 +71,10 @@ struct MenuContent: View {
                 Button("Show recordings") { recorder.revealRecordings() }
                     .buttonStyle(PillButtonStyle(kind: .secondary))
                 Spacer()
+                Button("Brand") { BrandWindowController.shared.show() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
                 Button("Access") { recorder.openSetup() }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
@@ -373,8 +377,11 @@ struct ExportMenu: View {
         Menu("Export") {
             ForEach(ExportPreset.allCases) { preset in
                 Button("\(preset.title) · \(preset.detail)") {
+                    let brand = BrandStore.shared
                     CaptionExport.writeFiles(for: take, preset: preset)
-                    exports.export(take, preset: preset, keep: keep, overlays: CaptionExport.overlays(for: take))
+                    exports.export(take, preset: preset, keep: keep,
+                                   overlays: CaptionExport.overlays(for: take, ringHex: brand.kit.ring.hex) + brand.overlays(),
+                                   cards: brand.cardMaker())
                 }
             }
         }

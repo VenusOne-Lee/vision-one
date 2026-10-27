@@ -41,6 +41,8 @@ struct VideoExporter {
     var keep: [Range<Double>]?
     let preset: ExportPreset
     var overlays: [ExportOverlay] = []
+    /// Brand intro and outro around the edited video; nil for none.
+    var cards: CardMaker?
 
     /// Exports and returns the file's URL and size. `progress` is called
     /// from a background queue with 0...1.
@@ -62,16 +64,29 @@ struct VideoExporter {
             edits.sourceDuration = min(edits.sourceDuration, assetDuration.seconds)
             timeline = ExportTimeline(edits: edits, frameRate: Double(frameRate))
         }
+        let plan = cards?.plan(bodyDuration: timeline.duration)
+            ?? TemplatePlan(introDuration: nil, bodyDuration: timeline.duration, outroDuration: nil)
         let source = ExportSource(width: Int(naturalSize.width), height: Int(naturalSize.height), frameRate: Double(frameRate))
         var settings: ExportSettings
         do {
-            settings = try ExportPlanner.settings(for: preset, source: source, duration: timeline.duration)
+            settings = try ExportPlanner.settings(for: preset, source: source, duration: plan.duration)
         } catch let error as ExportPlanError {
             throw Failure.plan(error)
         }
 
+        // Cards are drawn once at the export's size, then reused if the
+        // export has to go again.
+        var cardSet = BrandCardSet.empty
+        if plan.hasCards, let cards {
+            cardSet = await cards.make(plan: plan,
+                                       size: CGSize(width: settings.width, height: settings.height),
+                                       frameRate: settings.frameRate)
+            try Task.checkCancellation()
+        }
+
         let url = outputURL ?? take.exportURL(for: preset)
-        var bytes = try await render(timeline: timeline, sourceVideo: sourceVideo, sourceAudio: sourceAudio,
+        var bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
+                                     sourceVideo: sourceVideo, sourceAudio: sourceAudio,
                                      settings: settings, to: url, progress: progress)
 
         // A single-pass encoder only roughly meets its average bitrate.
@@ -79,7 +94,8 @@ struct VideoExporter {
         if let limit = preset.sizeLimitBytes, bytes > limit {
             let scale = Double(limit) * 0.85 / Double(bytes)
             settings.videoBitRate = Int(Double(settings.videoBitRate) * scale)
-            bytes = try await render(timeline: timeline, sourceVideo: sourceVideo, sourceAudio: sourceAudio,
+            bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
+                                     sourceVideo: sourceVideo, sourceAudio: sourceAudio,
                                      settings: settings, to: url, progress: progress)
         }
         return (url, bytes)
@@ -87,7 +103,8 @@ struct VideoExporter {
 
     // MARK: - Composition
 
-    private func render(timeline: ExportTimeline, sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
+    private func render(timeline: ExportTimeline, plan: TemplatePlan, cards: BrandCardSet,
+                        sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
                         settings: ExportSettings, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
         let composition = AVMutableComposition()
@@ -117,25 +134,54 @@ struct VideoExporter {
             }
         }
 
-        // Music and sound effects from sound.json go on their own tracks.
+        // Room for the cards: a gap after the video for the outro, then a
+        // gap at the start of every track for the intro, which pushes the
+        // video and sound along. The compositor draws the cards in them.
+        let bodyStart = Self.time(plan.body.lowerBound)
+        let bodyEnd = Self.time(plan.body.upperBound)
+        if let outro = plan.outro, cards.outro != nil {
+            video.insertEmptyTimeRange(CMTimeRange(start: video.timeRange.end,
+                                                   duration: Self.time(outro.upperBound - outro.lowerBound)))
+        }
+        if plan.intro != nil, cards.intro != nil {
+            composition.insertEmptyTimeRange(CMTimeRange(start: .zero, duration: bodyStart))
+        }
+
+        var instructions: [FrameInstruction] = []
+        if let intro = cards.intro, plan.intro != nil {
+            instructions.append(FrameInstruction(timeRange: CMTimeRange(start: .zero, end: bodyStart), card: intro))
+        }
+        let videoStart = cards.intro != nil ? bodyStart : .zero
+        let videoEnd = cards.intro != nil ? bodyEnd : Self.time(timeline.duration)
+        instructions.append(FrameInstruction(timeRange: CMTimeRange(start: videoStart, end: videoEnd),
+                                             trackID: video.trackID, overlays: overlays,
+                                             overlayTimeOffset: videoStart.seconds))
+        if let outro = cards.outro, let range = plan.outro {
+            // Cover the composition to its very end, whatever rounding did.
+            let end = CMTimeMaximum(videoEnd + Self.time(range.upperBound - range.lowerBound), composition.duration)
+            instructions.append(FrameInstruction(timeRange: CMTimeRange(start: videoEnd, end: end), card: outro))
+        }
+        let duration = instructions.last.map { $0.timeRange.end } ?? Self.time(timeline.duration)
+        // Joins move along with the intro.
+        let joinOffset = videoStart.seconds
+
+        // Music and sound effects from sound.json go on their own tracks,
+        // after the intro so they start with the video.
         let sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
         let words: [TimeSpan] = sound.isEmpty ? [] : ((try? Transcript.read(from: take.transcriptURL))?.words.map(\.span) ?? [])
-        let soundTracks = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition)
+        let soundTracks = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition,
+                                                  offset: joinOffset)
 
-        let duration = Self.time(timeline.duration)
         let videoComposition = AVMutableVideoComposition()
         videoComposition.customVideoCompositorClass = FrameCompositor.self
         videoComposition.renderSize = CGSize(width: settings.width, height: settings.height)
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(settings.frameRate))
-        videoComposition.instructions = [
-            FrameInstruction(timeRange: CMTimeRange(start: .zero, duration: duration),
-                             trackID: video.trackID, overlays: overlays),
-        ]
+        videoComposition.instructions = instructions
 
         let audioMix = AVMutableAudioMix()
         let recorded: [AVMutableAudioMixInputParameters] = audio.map { track in
             let parameters = AVMutableAudioMixInputParameters(track: track)
-            for join in timeline.joins {
+            for join in timeline.joins.map({ $0 + joinOffset }) {
                 let fade = Self.time(Self.joinFade)
                 let t = Self.time(join)
                 parameters.setVolumeRamp(fromStartVolume: 1, toEndVolume: 0, timeRange: CMTimeRange(start: t - fade, duration: fade))
@@ -147,7 +193,7 @@ struct VideoExporter {
 
         return try await encode(composition: composition, video: video, audio: audio + soundTracks.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
-                                duration: timeline.duration, settings: settings, to: url, progress: progress)
+                                duration: duration.seconds, settings: settings, to: url, progress: progress)
     }
 
     // MARK: - Encoding
