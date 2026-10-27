@@ -407,6 +407,30 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// The window on New task with the cursor in the composer: where
+    /// launch, the end of setup and ⌘N land.
+    func showNewTask() {
+        model.mode = .tasks
+        model.page = .newTask
+        model.focusComposer += 1
+        present()
+    }
+
+    /// ⌘B: folds the projects sidebar, when this window is in front on
+    /// Tasks. HarnessView reads the same key with @AppStorage.
+    func toggleSidebar() {
+        guard window?.isKeyWindow == true, model.mode == .tasks else { return }
+        let key = "harness.showSidebar"
+        let shown = UserDefaults.standard.object(forKey: key) as? Bool ?? true
+        UserDefaults.standard.set(!shown, forKey: key)
+    }
+
+    /// ⌥⌘B: folds the panel beside the thread, when this window is in front.
+    func togglePanel() {
+        guard window?.isKeyWindow == true, model.mode == .tasks else { return }
+        model.updateLayout { $0.isHidden.toggle() }
+    }
+
     /// Every take, to search and pick from.
     func showLibrary() {
         model.mode = .tasks

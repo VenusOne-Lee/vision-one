@@ -11,6 +11,8 @@ struct HarnessSidebar: View {
     @State private var renaming: UUID?
     @State private var draft = ""
     @FocusState private var nameFocused: Bool
+    @State private var hoveredProject: UUID?
+    @State private var settingsProject: DeskProject?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -49,7 +51,8 @@ struct HarnessSidebar: View {
                             }
                             ForEach(tasks) { task in
                                 TaskRow(title: task.title, status: model.snapshot.status(of: task),
-                                        line: model.snapshot.statusLine(of: task),
+                                        line: model.snapshot.statusLine(of: task)
+                                            + (task.requestedBy.map { " · from \($0)" } ?? ""),
                                         isSelected: model.page.taskID == task.id)
                                     .onTapGesture { model.open(task.id) }
                                     .draggable(task.id.uuidString)
@@ -85,6 +88,9 @@ struct HarnessSidebar: View {
             .frame(height: Theme.Size.toolbar)
         }
         .background(Theme.canvas)
+        .sheet(item: $settingsProject) { project in
+            ProjectSettingsSheet(project: project) { settingsProject = nil }
+        }
     }
 
     // MARK: Projects
@@ -124,12 +130,18 @@ struct HarnessSidebar: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            if hoveredProject == project.id && renaming != project.id {
+                IconButton("Project settings", systemImage: "gearshape") { settingsProject = project }
+            }
         }
         .padding(.horizontal, Theme.Space.sm)
         .frame(height: 28)
         .background(model.currentProject?.id == project.id && model.page == .newTask ? Theme.paper : .clear,
                     in: RoundedRectangle(cornerRadius: Theme.Radius.md))
         .contentShape(Rectangle())
+        .onHover { inside in
+            if inside { hoveredProject = project.id } else if hoveredProject == project.id { hoveredProject = nil }
+        }
         .onTapGesture {
             toggle(project.id)
             model.project = project.id
@@ -144,10 +156,12 @@ struct HarnessSidebar: View {
                 model.page = .newTask
             }
             Button("Rename…") { startRenaming(project) }
+            Button("Project settings…") { settingsProject = project }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityHint(isOpen ? "Folds the project" : "Shows the project's tasks")
+        .accessibilityAction(named: "Project settings") { settingsProject = project }
     }
 
     private func startRenaming(_ project: DeskProject) {

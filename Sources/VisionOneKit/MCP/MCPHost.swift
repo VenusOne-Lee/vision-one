@@ -104,6 +104,10 @@ public protocol VisionOneMCPHost: Sendable {
     func ask(_ question: MCPQuestion) async -> MCPAnswer
     /// Takes the card away when the user answered on the task instead.
     func dismiss(_ questionID: UUID) async
+    /// For a question on a task: whether the floating card asks too. No
+    /// when the task's card is in view (the main window is in front), so
+    /// the user is asked once (`ApprovalSurface`).
+    func showsCard(for question: MCPQuestion) async -> Bool
     /// An agent connected (for Settings › Agents).
     func connected(_ client: MCPClient) async
     func isRecording() async -> Bool
@@ -112,6 +116,13 @@ public protocol VisionOneMCPHost: Sendable {
     func startRecording() async throws -> Take
     /// Stops and saves; the app transcribes the take after.
     func stopRecording() async throws -> Take
+    /// Records an agent using this Mac: like `startRecording`, and the
+    /// agent's own clicks and typing (never the person's) go into
+    /// actions.json. With `app`, only that app's window is recorded.
+    func startAgentRecording(agent: String, task: String?, app: String?) async throws -> Take
+    /// Adds an agent's note ("Open the pricing page") to the take being
+    /// recorded. False when no agent recording is live.
+    func logAgentStep(_ text: String, x: Double?, y: Double?) async -> Bool
     /// The app's agents, on its AI ladder and approval gate.
     func runner() async -> AgentRunner
     func plan(for take: Take) async -> TakePlan
@@ -120,6 +131,30 @@ public protocol VisionOneMCPHost: Sendable {
     func export(_ take: Take, preset: ExportPreset) async throws -> URL
     /// Shows the file, copies the words and opens the post. The user posts.
     func share(_ file: URL, text: String?, to target: ShareTarget) async throws
+    /// The Autopilot demos on this Mac and in linked repos.
+    func demos() async -> [DemoFile]
+    /// Starts Autopilot on the demo called `name` and returns its job id
+    /// on the board, or nil when there's no such demo. Autopilot asks the
+    /// user itself unless they let these steps run on their own.
+    func rerecordDemo(_ name: String, release: String?, requestedBy: String) async -> UUID?
+}
+
+extension VisionOneMCPHost {
+    public func demos() async -> [DemoFile] { [] }
+    public func rerecordDemo(_ name: String, release: String?, requestedBy: String) async -> UUID? { nil }
+}
+
+public extension VisionOneMCPHost {
+    /// Hosts without a window always show the card.
+    func showsCard(for question: MCPQuestion) async -> Bool { true }
+}
+
+extension VisionOneMCPHost {
+    public func startAgentRecording(agent: String, task: String?, app: String?) async throws -> Take {
+        try await startRecording()
+    }
+
+    public func logAgentStep(_ text: String, x: Double?, y: Double?) async -> Bool { false }
 }
 
 /// A plain message from the app for the agent ("Pick an area first").
@@ -158,5 +193,7 @@ extension AgentJob.Approval {
         characters = text.count
         estimatedRand = nil
         fromPlan = false
+        askedBy = question.client.displayName
+        canRemember = question.canRemember
     }
 }

@@ -98,8 +98,9 @@ final class AutopilotService: ObservableObject {
                        personIsHere: Bool) -> UUID {
         let demo = file.demo
         let title = release.map { "Re-record “\(demo.name)” for \($0)" } ?? "Record “\(demo.name)”"
-        let job = AgentJob(agent: .autopilot, title: title, ask: requestedBy.map { "From \($0)" },
+        var job = AgentJob(agent: .autopilot, title: title, ask: requestedBy.map { "From \($0)" },
                            steps: demo.steps.map { StepWords.line(for: $0) })
+        job.requestedBy = requestedBy
         let board = AIServices.shared.jobs
         let ask = !personIsHere && !state.mayRunAlone(demo)
         Task {

@@ -176,6 +176,13 @@ struct AppMCPHost: VisionOneMCPHost {
         await AgentAskCenter.shared.dismiss(questionID)
     }
 
+    /// The floating card asks only when the task's card is out of view.
+    func showsCard(for question: MCPQuestion) async -> Bool {
+        guard let jobID = question.jobID else { return true }
+        let desk = await MainActor.run { AIServices.shared.desk }
+        return await ApprovalPlacement.panelAsks(jobID: jobID, desk: desk)
+    }
+
     func connected(_ client: MCPClient) async {
         await MCPService.shared.connected(client)
     }
@@ -190,6 +197,17 @@ struct AppMCPHost: VisionOneMCPHost {
 
     func stopRecording() async throws -> Take {
         try await Self.stop()
+    }
+
+    func startAgentRecording(agent: String, task: String?, app: String?) async throws -> Take {
+        try await Self.startAgent(agent, task: task, app: app)
+    }
+
+    func logAgentStep(_ text: String, x: Double?, y: Double?) async -> Bool {
+        await MainActor.run {
+            let point = x.flatMap { x in y.map { CGPoint(x: x, y: $0) } }
+            return AgentSession.shared.logStep(text, point: point)
+        }
     }
 
     func runner() async -> AgentRunner {
@@ -212,6 +230,14 @@ struct AppMCPHost: VisionOneMCPHost {
         await Self.share(file, text: text, to: target)
     }
 
+    func demos() async -> [DemoFile] {
+        await MainActor.run { AutopilotService.shared.library.all() }
+    }
+
+    func rerecordDemo(_ name: String, release: String?, requestedBy: String) async -> UUID? {
+        await MainActor.run { AutopilotService.shared.rerecord(name: name, release: release, requestedBy: requestedBy) }
+    }
+
     @MainActor
     private static func start() async throws -> Take {
         let recorder = ScreenRecorder.shared
@@ -220,6 +246,34 @@ struct AppMCPHost: VisionOneMCPHost {
         if case let .failed(message) = recorder.phase { throw MCPHostError(message) }
         // Setup is missing, or Area mode wants an area dragged first:
         // Vision One is showing that now.
+        throw MCPHostError("Vision One needs something from the user before it can record (Screen Recording access, or an area to drag). It's showing that now; try again once it's done.")
+    }
+
+    /// Records an agent: its app's window when it names one, else the
+    /// person's usual choice. No countdown, since the agent starts at once.
+    @MainActor
+    private static func startAgent(_ agent: String, task: String?, app: String?) async throws -> Take {
+        let recorder = ScreenRecorder.shared
+        var override: CaptureChoice?
+        if let app {
+            let wanted = app.lowercased()
+            let windows = await recorder.pickableWindows()
+            let match = windows.filter { $0.appName.lowercased() == wanted }.first
+                ?? windows.filter { $0.appName.lowercased().contains(wanted) }.first
+            guard let window = match else {
+                throw MCPHostError("There's no \(app) window to record. Open \(app) first, or leave out app to record the screen.")
+            }
+            var choice = recorder.choice
+            choice.mode = .window
+            choice.windowID = window.id
+            override = choice
+        }
+        let session = AgentSession.shared
+        session.arm(agent: agent, task: task)
+        await recorder.start(choosing: override)
+        if let take = recorder.currentTake { return take }
+        session.disarm()
+        if case let .failed(message) = recorder.phase { throw MCPHostError(message) }
         throw MCPHostError("Vision One needs something from the user before it can record (Screen Recording access, or an area to drag). It's showing that now; try again once it's done.")
     }
 

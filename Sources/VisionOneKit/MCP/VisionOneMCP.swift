@@ -51,6 +51,8 @@ public final class VisionOneMCP: Sendable {
             case "recording_status": return await recordingStatus()
             case "start_recording": return try await startRecording(args, client: client)
             case "stop_recording": return try await stopRecording()
+            case "start_agent_recording": return try await startAgentRecording(args, client: client)
+            case "log_step": return try await logStep(args)
             case "clean_up": return try await cleanUp(args, client: client)
             case "cut_to_length": return try await cutToLength(args, client: client)
             case "cut_part": return try await cutPart(args, client: client)
@@ -62,6 +64,8 @@ public final class VisionOneMCP: Sendable {
             case "export_video": return try await exportVideo(args, client: client)
             case "share_video": return try await shareVideo(args, client: client)
             case "rename_take": return try renameTake(args)
+            case "list_demos": return await listDemos(args)
+            case "rerecord_demo": return try await rerecordDemo(args, client: client)
             default: return .failed("Vision One has no tool called \(name).")
             }
         } catch let failure as Failure {
@@ -237,11 +241,98 @@ public final class VisionOneMCP: Sendable {
         let ready = await waitForTranscript(take)
         let transcript = try? Transcript.read(from: take.transcriptURL)
         let length = transcript.map { " (\(AgentReceipt.duration($0.duration)))" } ?? ""
-        if let job { await board.finish(job.id, receipt: "Recorded “\(take.displayTitle())”\(length).", changes: []) }
-        let text = ready
+        let agent = agentSummary(take, transcript: transcript)
+        if let job {
+            await board.finish(job.id, receipt: "Recorded “\(take.displayTitle())”\(length).\(agent.receipt)",
+                               changes: agent.waiting.map { AgentJob.Change.cut($0.id) })
+        }
+        var text = ready
             ? "Saved “\(take.displayTitle())”\(length). The transcript is ready."
             : "Saved “\(take.displayTitle())”. Vision One is transcribing it on this Mac; get_take shows when it's ready."
-        return .done(text, summary(take))
+        text += agent.receipt
+        if !agent.waiting.isEmpty, let job {
+            text += " Call keep_changes with task_id \(job.id.uuidString) to skip the waiting."
+        }
+        var data = summary(take)
+        if let job, case var .object(fields) = data {
+            fields["task_id"] = .string(job.id.uuidString)
+            data = .object(fields)
+        }
+        return .done(text, data)
+    }
+
+    /// For a take with actions.json: what the agent did, and the waits
+    /// proposed as cuts (dashed until kept).
+    func agentSummary(_ take: Take, transcript: Transcript?) -> (receipt: String, waiting: [Cut]) {
+        guard let log = AgentActionLog.load(for: take) else { return ("", []) }
+        // The app proposes these after transcribing; doing it here too is
+        // harmless, since a cut already in the list is never added twice.
+        // Without a transcript the video's length isn't known here, so the
+        // app's own pass is left to do it.
+        if let transcript {
+            _ = try? AgentWaiting.propose(on: take, transcript: transcript, sourceDuration: transcript.duration)
+        }
+        let edits = try? EditList.read(from: take.editsURL)
+        let waiting = (edits?.cuts ?? []).filter { $0.reason == Cut.Reason.waiting && $0.state == .proposed }
+        var receipt = " \(log.summary)."
+        if !waiting.isEmpty {
+            receipt += " Proposed skipping \(AgentReceipt.duration(AgentWaiting.total(waiting))) of waiting."
+        }
+        return (receipt, waiting)
+    }
+
+    func startAgentRecording(_ args: [String: JSONValue], client: MCPClient) async throws -> MCPToolResult {
+        guard !(await host.isRecording()) else {
+            throw Failure("Vision One is already recording. Call stop_recording first.")
+        }
+        func clean(_ key: String) -> String? {
+            let value = args[key]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return value.isEmpty ? nil : value
+        }
+        let task = clean("task")
+        let app = clean("app")
+        let named = clean("title") ?? task
+        let job = await addJob(AgentJob(agent: .producer, title: "Record \(client.displayName)" + (task.map { ": \($0)" } ?? ""),
+                                        ask: task, steps: ["Ask you", "Record", "Transcribe"]), client)
+        await board.step(job.id, 0)
+        var details: [MCPQuestion.Detail] = []
+        if let task { details.append(MCPQuestion.Detail("Doing", task)) }
+        details.append(MCPQuestion.Detail("Records", app.map { "The \($0) window" } ?? "Your screen, as you last set it"))
+        details.append(MCPQuestion.Detail("Marks", "\(client.displayName)'s clicks and typing, never yours. Passwords hidden."))
+        details.append(MCPQuestion.Detail("Stops", "When you press Stop, or \(client.displayName) asks"))
+        let question = MCPQuestion(action: .record, client: client,
+                                   title: "Record \(client.displayName) using your Mac?",
+                                   details: details, jobID: job.id)
+        let answer = await permit(question, destination: "This Mac")
+        guard answer.allowed else { return refused(answer) }
+        do {
+            let take = try await host.startAgentRecording(agent: client.displayName, task: task, app: app)
+            if let named { try? take.setTitle(named) }
+            // Agent recordings are walkthroughs.
+            try? TakePlan(purpose: .demo).write(for: take)
+            await board.update(job.id) { $0.takeFolder = take.folder }
+            if let desk, let deskTask = await desk.tasks.first(where: { $0.jobIDs.contains(job.id) }) {
+                await desk.addTake(take, to: deskTask.id)
+            }
+            await board.step(job.id, 1)
+            return .done("Recording “\(named ?? take.name)”. Go ahead: your clicks and typing are being marked. "
+                         + "Call log_step with a few words before each part (\"Open the pricing page\"), "
+                         + "and stop_recording when you're done.",
+                         ["take": .string(take.name), "task_id": .string(job.id.uuidString)])
+        } catch {
+            await board.fail(job.id, error.localizedDescription)
+            throw Failure(error.localizedDescription)
+        }
+    }
+
+    func logStep(_ args: [String: JSONValue]) async throws -> MCPToolResult {
+        let say = args["say"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !say.isEmpty else { throw Failure("Say what you're about to do, in a few words.") }
+        let logged = await host.logAgentStep(String(say.prefix(200)), x: args["x"]?.doubleValue, y: args["y"]?.doubleValue)
+        guard logged else {
+            throw Failure("No agent recording is running. Call start_agent_recording first.")
+        }
+        return .done("Noted.", ["logged": true])
     }
 
     /// True once the take has a transcript or can't have one.
@@ -681,26 +772,33 @@ public final class VisionOneMCP: Sendable {
 
     // MARK: Approvals
 
-    /// Asks the user, unless they allowed this agent until quit. The
-    /// task shows it's waiting while the card is up.
     /// Asks the user, unless they allowed this agent until quit. With a
-    /// task, the question is a card on it as well as the floating card;
-    /// whichever the user answers first counts and the other goes away.
+    /// task, the question is a card on it, waiting on the job board. The
+    /// floating card asks too only when the host says the task's card is
+    /// out of view; then whichever the user answers counts and the other
+    /// goes away. A "no" note comes back from either.
     func permit(_ question: MCPQuestion, destination: String, onTask: Bool = true) async -> MCPAnswer {
         if await permissions.allows(question.client, question.action) { return MCPAnswer(.allowForSession) }
         let answer: MCPAnswer
         if onTask, let jobID = question.jobID {
             let floating = AnswerBox()
             let host = self.host
-            let decision = await board.requestApproval(jobID: jobID,
-                                                       approval: AgentJob.Approval(question, destination: destination)) {
-                let reply = await host.ask(question)
-                await floating.set(reply)
-                return reply.decision
+            let showsCard = await host.showsCard(for: question)
+            var alsoAsk: (@Sendable () async -> OutboundDecision)?
+            if showsCard {
+                alsoAsk = {
+                    let reply = await host.ask(question)
+                    await floating.set(reply)
+                    return reply.decision
+                }
             }
-            await host.dismiss(question.id)
-            let note = await floating.answer?.note
-            answer = MCPAnswer(decision, note: decision == .deny ? note : nil)
+            let decision = await board.requestApproval(jobID: jobID,
+                                                       approval: AgentJob.Approval(question, destination: destination),
+                                                       alsoAsk: alsoAsk)
+            if showsCard { await host.dismiss(question.id) }
+            let fromTask = await board.takeNote(jobID: jobID)
+            let fromCard = await floating.answer?.note
+            answer = MCPAnswer(decision, note: decision == .deny ? (fromTask ?? fromCard) : nil)
         } else {
             answer = await host.ask(question)
         }
@@ -717,6 +815,55 @@ public final class VisionOneMCP: Sendable {
     // MARK: Formatting
 
     /// "1:05".
+    // MARK: Autopilot demos
+
+    func listDemos(_ args: [String: JSONValue]) async -> MCPToolResult {
+        var demos = await host.demos()
+        if let search = args["search"]?.stringValue?.trimmingCharacters(in: .whitespaces), !search.isEmpty {
+            demos = demos.filter {
+                $0.demo.name.localizedCaseInsensitiveContains(search)
+                    || $0.demo.app.displayName.localizedCaseInsensitiveContains(search)
+            }
+        }
+        let list: [JSONValue] = demos.map { file in
+            var item: [String: JSONValue] = [
+                "name": .string(file.demo.name),
+                "app": .string(file.demo.app.displayName),
+                "steps": .number(Double(file.demo.steps.count)),
+                "about_seconds": .number(Self.rounded(file.demo.estimatedSeconds)),
+                "rerecords_on_release": .bool(file.demo.rerecordOnRelease),
+            ]
+            if let repo = file.demo.repo { item["repo"] = .string(repo) }
+            return .object(item)
+        }
+        let text = demos.isEmpty
+            ? "No demos yet. The user makes them in Vision One (Autopilot), or adds .visionone/demos/*.json to a linked repo."
+            : "\(demos.count) \(demos.count == 1 ? "demo" : "demos")."
+        return .done(text, ["demos": .array(list)])
+    }
+
+    func rerecordDemo(_ args: [String: JSONValue], client: MCPClient) async throws -> MCPToolResult {
+        guard let name = args["demo"]?.stringValue?.trimmingCharacters(in: .whitespaces), !name.isEmpty else {
+            throw Failure("Say which demo. list_demos shows them.")
+        }
+        let release = args["release"]?.stringValue?.trimmingCharacters(in: .whitespaces)
+        guard let id = await host.rerecordDemo(name, release: (release?.isEmpty == false) ? release : nil,
+                                               requestedBy: client.displayName) else {
+            let names = await host.demos().map(\.demo.name)
+            throw Failure("There's no demo called “\(name)”."
+                + (names.isEmpty ? "" : " Demos: " + names.joined(separator: ", ") + "."))
+        }
+        if let desk, let taskID = await deskTask(for: nil, title: "Re-record “\(name)”", client: client) {
+            await desk.attach(jobID: id, to: taskID)
+        }
+        // A run takes a minute or more; answer quickly with the id.
+        guard let job = await settle(id, within: min(patience, 5)) else {
+            return .done("Autopilot is starting “\(name)”. Call wait_for_task to follow it.",
+                         ["task_id": .string(id.uuidString), "state": "running"])
+        }
+        return describe(job)
+    }
+
     /// The same folder, even when one path goes through /var and the other /private/var.
     static func same(_ a: URL?, _ b: URL) -> Bool {
         guard let a else { return false }

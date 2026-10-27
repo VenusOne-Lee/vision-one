@@ -4,8 +4,9 @@ import VisionOneKit
 
 /// The floating card an agent's request waits on: "Record your screen for
 /// Claude Code?". One at a time, kept out of recordings like every Vision
-/// One window. The same question also sits on the task in the Agent Desk;
-/// answering either one closes both.
+/// One window. The question always sits on its task's card; this card only
+/// shows when the main window is out of view (or there's no task), and
+/// answering either one closes both (`ApprovalPlacement`).
 @MainActor
 final class AgentAskCenter: ObservableObject {
     static let shared = AgentAskCenter()
@@ -29,6 +30,12 @@ final class AgentAskCenter: ObservableObject {
     }
 
     func answer(_ decision: OutboundDecision) {
+        // An agent driving the Mac can't say yes for you: only a "no"
+        // counts from posted clicks and keys.
+        if decision != .deny, !PersonInput.pressedByPerson() {
+            NSSound.beep()
+            return
+        }
         let note = decision == .deny ? self.note : ""
         finish(MCPAnswer(decision, note: note))
     }

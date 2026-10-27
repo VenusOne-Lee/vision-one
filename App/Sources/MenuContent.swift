@@ -67,7 +67,7 @@ struct MenuContent: View {
                 }
                 if !recorder.phase.isLive {
                     PanelAskBox(feed: desk)
-                    FooterLink("Before you record…", action: MenuPanel.closing { EditorWindowController.shared.showLibrary() })
+                    FooterLink("Before you record…", action: MenuPanel.closing { EditorWindowController.shared.showNewTask() })
                 }
             }
             .padding(.horizontal, Theme.Panel.inset)

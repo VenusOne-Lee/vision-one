@@ -113,6 +113,9 @@ final class Transcriber: ObservableObject {
                                     sourceDuration: audio.videoDuration ?? transcript.duration)
             try? AutoClean.run(on: take, transcript: transcript, sourceDuration: audio.videoDuration,
                                loudness: loudness)
+            // An agent recording: propose skipping the long waits.
+            try? AgentWaiting.propose(on: take, transcript: transcript,
+                                      sourceDuration: audio.videoDuration ?? transcript.duration)
             activity = .idle
             AIServices.shared.transcriptReady(for: take)
         } catch {
@@ -121,6 +124,11 @@ final class Transcriber: ObservableObject {
                 // Recording again is the only fix, so don't try it again on
                 // every launch. Retry in the menu still works.
                 try? TranscriptFailure(reason: .noAudio, message: message).write(to: take.transcriptFailedURL)
+                // Agent recordings often have no sound; the waits can
+                // still be skipped.
+                if let seconds = try? await AVURLAsset(url: take.screenURL).load(.duration).seconds, seconds > 0 {
+                    try? AgentWaiting.propose(on: take, transcript: nil, sourceDuration: seconds)
+                }
             }
             failedTakes[take.name] = take
             failures.record(message, for: take.name)

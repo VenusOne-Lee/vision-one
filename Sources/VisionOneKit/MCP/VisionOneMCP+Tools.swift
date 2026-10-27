@@ -8,7 +8,10 @@ extension VisionOneMCP {
     Edits are proposals until kept: they show dashed in Vision One, and keep_changes asks the user before they count. \
     Exports only include kept cuts. \
     start_recording, keep_changes and share_video wait for the user to say yes in Vision One; if they say no, the reply says why. \
-    Jobs that take longer than about 40 seconds return a task_id: call wait_for_task with it.
+    Jobs that take longer than about 40 seconds return a task_id: call wait_for_task with it. \
+    To record yourself using this Mac (computer use, a browser agent), call start_agent_recording before you start, \
+    log_step with a few words before each part, and stop_recording when you're done. \
+    list_demos and rerecord_demo re-record Autopilot demos (scripted click-throughs of an app).
     """
 
     // Small schema builders keep the tool list readable and quick to compile.
@@ -91,6 +94,22 @@ extension VisionOneMCP {
         MCPTool("stop_recording", title: "Stop recording",
                 description: "Stops and saves the take, then transcribes it on this Mac. Waits for the transcript when it's quick."),
 
+        MCPTool("start_agent_recording", title: "Record yourself using this Mac",
+                description: "Records the screen while you (the agent) use this Mac: computer use, a browser, any app. Your clicks and typing are marked on the video, never the user's, and passwords are hidden. Asks the user in Vision One first. Call log_step before each part, and stop_recording when done; long waits are then proposed as cuts.",
+                input: [
+                    "task": text("What you're about to do, in a few words (\"Sign up on staging\")."),
+                    "app": text("Record only this app's window, by its name (\"Safari\"). Leave out for the user's usual screen."),
+                    "title": text("A name for the take. The task if left out."),
+                ]),
+        MCPTool("log_step", title: "Log a step",
+                description: "While an agent recording runs: a short note on what you're doing next. Notes become chapters, and they're the only record of clicks the Mac can't see (inside a browser tab driven by Chrome DevTools or Playwright).",
+                input: [
+                    "say": text("A few words, like \"Open the pricing page\"."),
+                    "x": number("Where you'll click, in screen points from the top left of the main display, if you know it."),
+                    "y": number("Where you'll click, in screen points from the top left of the main display, if you know it."),
+                ],
+                required: ["say"]),
+
         // Editing (proposals)
         MCPTool("clean_up", title: "Clean up",
                 description: "Proposes cuts for ums, repeats, long pauses and dead air. Runs on this Mac. Proposals stay dashed until kept.",
@@ -153,5 +172,18 @@ extension VisionOneMCP {
                 description: "Gives a take a title. An empty title goes back to the date.",
                 input: ["take": takeArg, "title": text("The new title.")],
                 required: ["title"], idempotent: true),
+
+        // Autopilot demos
+        MCPTool("list_demos", title: "List demos",
+                description: "The Autopilot demos Vision One can record on its own: name, app, steps and roughly how long.",
+                input: ["search": text("Words in the demo's name or app.")],
+                readOnly: true, idempotent: true),
+        MCPTool("rerecord_demo", title: "Re-record a demo",
+                description: "Autopilot opens the demo's app, records its window and clicks through the steps. Vision One asks the user first unless they already let these steps run on their own. Returns a task_id; the run takes a while, so call wait_for_task.",
+                input: [
+                    "demo": text("The demo's name, from list_demos."),
+                    "release": text("The release it's for, like v1.4.0."),
+                ],
+                required: ["demo"]),
     ]
 }

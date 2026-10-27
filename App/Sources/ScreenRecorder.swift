@@ -100,9 +100,12 @@ final class ScreenRecorder: NSObject, ObservableObject {
         }
     }
 
-    /// Starts recording straight away, without the countdown.
-    func start() async {
+    /// Starts recording straight away, without the countdown. `override`
+    /// records something else this once (an agent's app window) without
+    /// changing the saved choice.
+    func start(choosing override: CaptureChoice? = nil) async {
         guard !phase.isBusy, !phase.isLive else { return }
+        let choice = override ?? self.choice
 
         // Area mode with no area yet: drag one first, then record.
         if choice.missingStep == .dragArea {
@@ -171,6 +174,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
             let sink = CaptureSink(writer: writer, meterMicrophone: withMicrophone) { [weak cursor] firstFrame in
                 Task { @MainActor in
                     cursor?.setOrigin(firstFrame.seconds)
+                    AgentSession.shared.setOrigin(firstFrame.seconds)
                     CameraBubble.shared.screenStarted(at: firstFrame.seconds)
                 }
             }
@@ -190,6 +194,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
             // Only once capture is running, so a failed start doesn't
             // leave the global mouse monitor behind.
             cursor.start()
+            // Recording an agent: mark its clicks and typing too.
+            AgentSession.shared.begin(captureFrame: target.captureFrame)
             let deviceNotes = await deviceTracks.start(for: take, devices: .shared)
             trackNotes = notes + deviceNotes
             if let cameraNote { trackNotes.append(cameraNote) }
@@ -339,6 +345,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
         CameraBubble.shared.setPaused(false)
         await CameraBubble.shared.stopRecording()
         cursor?.stop(writingTo: take.eventsURL)
+        AgentSession.shared.end(writingTo: take)
         MicMonitor.shared.end()
         Teleprompter.shared.hide()
         let saved = await sink.finish()
@@ -377,6 +384,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
 
     private func fail(_ error: Error) {
         if let take { cursor?.stop(writingTo: take.eventsURL) }
+        AgentSession.shared.cancel()
         MicMonitor.shared.end()
         Teleprompter.shared.hide()
         pauses = PauseLog()
