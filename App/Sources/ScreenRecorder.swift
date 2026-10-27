@@ -165,6 +165,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
         let saved = await sink.finish()
         if saved {
             lastTake = take
+            Transcriber.shared.transcribe(take)
             phase = .idle
         } else {
             phase = .failed(message: sink.writerError?.localizedDescription
