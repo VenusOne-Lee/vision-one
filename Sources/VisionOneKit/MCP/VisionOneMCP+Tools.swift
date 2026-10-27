@@ -9,7 +9,7 @@ extension VisionOneMCP {
     Exports only include kept cuts. \
     start_recording, keep_changes and share_video wait for the user to say yes in Vision One; if they say no, the reply says why. \
     Jobs that take longer than about 40 seconds return a task_id: call wait_for_task with it. \
-list_demos and rerecord_demo re-record Autopilot demos (scripted click-throughs of an app).
+    list_demos and rerecord_demo re-record Autopilot demos (scripted click-throughs of an app).
     """
 
     // Small schema builders keep the tool list readable and quick to compile.
