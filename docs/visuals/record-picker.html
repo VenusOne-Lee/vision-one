@@ -102,6 +102,9 @@ hr.div { border: 0; border-top: 1px solid var(--line); margin: 0; }
   box-shadow: 0 0 0 9999px var(--dim); border: 2px dashed var(--paper);
 }
 .area.live { box-shadow: none; border: 2px solid var(--tally); }
+.area b { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--paper); border: 1.5px solid var(--text); transform: translate(-50%, -50%); }
+.bubble .grip { position: absolute; right: 4%; bottom: 4%; width: 22%; aspect-ratio: 1; border-radius: 50%; background: var(--paper); border: 1.5px solid var(--text); }
+.bubble { cursor: grab; }
 .ctrl { position: absolute; left: 22%; top: calc(72% + 8px); background: var(--paper); border-radius: 999px; padding: 4px 6px 4px 12px; display: flex; gap: 6px; align-items: center; font-size: 10px; }
 .ctrl .pill { padding: 3px 9px; font-size: 10px; }
 .hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--paper); border-radius: 999px; padding: 6px 8px 6px 14px; display: flex; gap: 8px; align-items: center; font-size: 11px; white-space: nowrap; }
@@ -133,7 +136,7 @@ code { font-family: var(--mono); font-size: 12px; }
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">Vision One · v0.1 · picker built, camera proposed</div>
+    <div class="eyebrow">Vision One · v0.1 · picker built, camera proposed · everything movable and resizable</div>
     <h1>Choose <b>what</b> you record</h1>
     <p class="lead">The menu bar panel gains a Screen, Window or Area switch and two sound switches. Your choice is remembered, so ⌘⇧R records the same way next time. The camera bubble comes in the next PR.</p>
     <div class="legend">
@@ -196,7 +199,7 @@ code { font-family: var(--mono); font-size: 12px; }
           <div class="win" style="left:8%;top:16%;width:56%;height:62%"><div class="lines"><i style="width:60%"></i><i></i><i style="width:80%"></i><i style="width:40%"></i></div></div>
           <div class="win" style="left:52%;top:30%;width:42%;height:56%"><div class="lines"><i></i><i style="width:70%"></i></div></div>
           <div class="dimmer"></div>
-          <div class="hint">Drag to choose the area to record.<span class="pill">Cancel</span></div>
+          <div class="hint">Drag to choose the area to record. Move or resize it after.<span class="pill">Cancel</span></div>
         </div>
         <div class="cap"><b>1. Overlay.</b> The screen dims. Esc cancels.</div>
       </div>
@@ -205,10 +208,10 @@ code { font-family: var(--mono); font-size: 12px; }
           <div class="menubar">Finder<span class="ring"></span></div>
           <div class="win" style="left:8%;top:16%;width:56%;height:62%"><div class="lines"><i style="width:60%"></i><i></i><i style="width:80%"></i><i style="width:40%"></i></div></div>
           <div class="win" style="left:52%;top:30%;width:42%;height:56%"><div class="lines"><i></i><i style="width:70%"></i></div></div>
-          <div class="area"></div>
+          <div class="area"><b style="left:0%;top:0%"></b><b style="left:50%;top:0%"></b><b style="left:100%;top:0%"></b><b style="left:0%;top:50%"></b><b style="left:100%;top:50%"></b><b style="left:0%;top:100%"></b><b style="left:50%;top:100%"></b><b style="left:100%;top:100%"></b></div>
           <div class="ctrl"><span class="mono" style="font-size:10px;color:var(--muted)">1280 × 720</span><span class="pill">Cancel</span><span class="pill primary">Record this area</span></div>
         </div>
-        <div class="cap"><b>2. Drag.</b> The area stays dashed while you're choosing it. Return accepts. Anything under 64 points a side is too small, so the button stays off.</div>
+        <div class="cap"><b>2. Adjust.</b> Drag inside the area to move it, or pull any of the eight handles to resize it. It stays on screen and never shrinks below 64 points a side. It stays dashed until you accept with the button or Return. Next time it opens where you left it.</div>
       </div>
       <div class="shot">
         <div class="screen" aria-label="Area recording, orange outline">
@@ -296,9 +299,9 @@ code { font-family: var(--mono); font-size: 12px; }
           <div class="screen" aria-label="Recording with a camera bubble">
             <div class="menubar">Safari<span class="ring live"></span></div>
             <div class="win" style="left:6%;top:14%;width:88%;height:78%"><div class="lines"><i style="width:40%"></i><i></i><i style="width:85%"></i><i style="width:65%"></i><i style="width:75%"></i></div></div>
-            <div class="bubble"><i></i></div>
+            <div class="bubble"><i></i><span class="grip"></span></div>
           </div>
-          <div class="cap"><b>While recording.</b> A round camera preview in your Version One ring floats over your screen. It's off by default, with a Camera switch next to Mic.</div>
+          <div class="cap"><b>While recording.</b> A round camera preview in your Version One ring floats over your screen. Drag it anywhere, and pull its handle to make it bigger or smaller. It remembers where you left it. It's off by default, with a Camera switch next to Mic.</div>
         </div>
         <div class="shot" style="justify-content:center">
           <p>The camera saves to its own <code>camera.mov</code> in the take folder rather than being burned into the screen video. In the editor you can then move, resize or hide the bubble, or go full-camera for a section. Screen Studio and Tella work the same way.</p>

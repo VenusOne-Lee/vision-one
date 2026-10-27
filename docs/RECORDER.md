@@ -18,7 +18,7 @@ The menu bar panel picks Screen, Window or Area, plus Mic and System sound. The 
 
 - **Screen:** the chosen display, minus Vision One's own windows.
 - **Window:** `SCContentFilter(desktopIndependentWindow:)`, which follows the window when it's moved or covered.
-- **Area:** the display filter with `sourceRect` set to the dragged rectangle. Sides are rounded down to even pixels for HEVC. A thin orange frame marks the area while live; it isn't recorded.
+- **Area:** the display filter with `sourceRect` set to the chosen rectangle. You draw it, then move it or resize it from eight handles; it stays on screen and at least 64 points a side. Sides are rounded down to even pixels for HEVC. A thin orange frame marks the area while live; it isn't recorded.
 
 ## Pipeline
 

@@ -47,6 +47,37 @@ public struct CaptureRect: Codable, Equatable, Sendable {
         return CaptureRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
 
+    /// Which edges a resize handle drags. A corner moves two edges, a
+    /// side handle one.
+    public struct Edges: OptionSet, Sendable {
+        public let rawValue: Int
+        public init(rawValue: Int) { self.rawValue = rawValue }
+        public static let left = Edges(rawValue: 1)
+        public static let right = Edges(rawValue: 2)
+        public static let top = Edges(rawValue: 4)
+        public static let bottom = Edges(rawValue: 8)
+    }
+
+    /// The rectangle dragged by `dx`, `dy`, kept wholly inside `bounds`.
+    public func moved(dx: Double, dy: Double, within bounds: CaptureRect) -> CaptureRect {
+        let x = min(max(self.x + dx, bounds.x), bounds.x + bounds.width - width)
+        let y = min(max(self.y + dy, bounds.y), bounds.y + bounds.height - height)
+        return CaptureRect(x: x, y: y, width: width, height: height)
+    }
+
+    /// The rectangle with `edges` dragged by `dx`, `dy`. Edges stop inside
+    /// `bounds` and can't cross the opposite edge, so the area never gets
+    /// smaller than the minimum.
+    public func resized(_ edges: Edges, dx: Double, dy: Double, within bounds: CaptureRect) -> CaptureRect {
+        var minX = x, maxX = x + width, minY = y, maxY = y + height
+        let side = Self.minimumSide
+        if edges.contains(.left) { minX = min(max(minX + dx, bounds.x), maxX - side) }
+        if edges.contains(.right) { maxX = max(min(maxX + dx, bounds.x + bounds.width), minX + side) }
+        if edges.contains(.top) { minY = min(max(minY + dy, bounds.y), maxY - side) }
+        if edges.contains(.bottom) { maxY = max(min(maxY + dy, bounds.y + bounds.height), minY + side) }
+        return CaptureRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
     public var isBigEnough: Bool {
         width >= Self.minimumSide && height >= Self.minimumSide
     }

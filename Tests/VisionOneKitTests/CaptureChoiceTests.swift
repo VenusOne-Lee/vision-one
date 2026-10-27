@@ -19,6 +19,30 @@ final class CaptureRectTests: XCTestCase {
         XCTAssertTrue(CaptureRect(x: 0, y: 0, width: 64, height: 64).isBigEnough)
     }
 
+    func testMoveStaysOnScreen() {
+        let display = CaptureRect(x: 0, y: 0, width: 1000, height: 800)
+        let rect = CaptureRect(x: 100, y: 100, width: 400, height: 300)
+        XCTAssertEqual(rect.moved(dx: 50, dy: -20, within: display), CaptureRect(x: 150, y: 80, width: 400, height: 300))
+        XCTAssertEqual(rect.moved(dx: 900, dy: -500, within: display), CaptureRect(x: 600, y: 0, width: 400, height: 300))
+    }
+
+    func testResizeFromACorner() {
+        let display = CaptureRect(x: 0, y: 0, width: 1000, height: 800)
+        let rect = CaptureRect(x: 100, y: 100, width: 400, height: 300)
+        XCTAssertEqual(rect.resized([.right, .bottom], dx: 100, dy: 50, within: display),
+                       CaptureRect(x: 100, y: 100, width: 500, height: 350))
+        XCTAssertEqual(rect.resized([.left, .top], dx: -200, dy: -200, within: display),
+                       CaptureRect(x: 0, y: 0, width: 500, height: 400))
+    }
+
+    func testResizeNeverFlipsOrShrinksBelowMinimum() {
+        let display = CaptureRect(x: 0, y: 0, width: 1000, height: 800)
+        let rect = CaptureRect(x: 100, y: 100, width: 400, height: 300)
+        let squashed = rect.resized(.left, dx: 1000, dy: 0, within: display)
+        XCTAssertEqual(squashed, CaptureRect(x: 436, y: 100, width: 64, height: 300))
+        XCTAssertEqual(rect.resized(.bottom, dx: 0, dy: 900, within: display).height, 700)
+    }
+
     func testPixelSizeIsEven() {
         let size = CaptureRect(x: 0, y: 0, width: 640.75, height: 360.5).pixelSize(scale: 2)
         XCTAssertEqual(size.width, 1280)
