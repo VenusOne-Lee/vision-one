@@ -13,6 +13,7 @@ struct MenuContent: View {
     @ObservedObject private var transcriber = Transcriber.shared
     @ObservedObject private var updater = Updater.shared
     @ObservedObject private var microphones = Microphones.shared
+    @ObservedObject private var hotKey = GlobalHotKey.shared
     @AppStorage("panel.recordOpen") private var recordOpen = true
     @AppStorage("panel.sourcesOpen") private var sourcesOpen = true
     @AppStorage("panel.takeOpen") private var takeOpen = true
@@ -44,6 +45,13 @@ struct MenuContent: View {
                 }
                 RecordBar(phase: recorder.phase, title: idleTitle) {
                     Task { await recorder.toggle() }
+                }
+                .help(hotKey.isRegistered ? "" : "⌘⇧R is taken by another app")
+                if !hotKey.isRegistered {
+                    Text("⌘⇧R is taken by another app. Use this button to record.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(recorder.trackNotes, id: \.self) { note in
                     Text(note)
@@ -607,7 +615,7 @@ private struct SourceRow<Detail: View>: View {
     }
 }
 
-/// The newest take: a thumbnail, when it was made, then Edit, Export and
+/// The newest take: a thumbnail, when it was made, then Review, Export and
 /// Show in Finder. Export progress and the transcript line sit below.
 struct LastTakeCard: View {
     let take: Take
@@ -633,9 +641,10 @@ struct LastTakeCard: View {
             }
 
             HStack(spacing: 6) {
-                Button("Edit") { EditorWindowController.shared.open(take) }
+                Button("Review take") { EditorWindowController.shared.open(take) }
                     .buttonStyle(PillButtonStyle(kind: .primary))
                     .disabled(isBusy)
+                    .help("Play it back, read the transcript and decide on the suggested cuts")
                 ExportMenu(take: take, exports: exports, kind: .secondary)
                 Spacer(minLength: 0)
                 if case .exporting = exports.phase {

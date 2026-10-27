@@ -55,6 +55,9 @@ final class EditorModel: ObservableObject {
     /// (auto-clean runs right after transcription) can be told apart
     /// from cuts the user removed here.
     private var knownCutIDs = Set<UUID>()
+    /// Cuts merged in from outside while this editor was open. Undo and
+    /// redo keep the ones that arrived after the step they go back to.
+    private var outsideCutIDs = Set<UUID>()
     /// The preview as last built, so zooms and blurs can be redrawn
     /// without rebuilding it.
     private var preview: (composition: AVComposition, trackID: CMPersistentTrackID, renderSize: CGSize)?
@@ -76,6 +79,9 @@ final class EditorModel: ObservableObject {
             }
             self.asset = asset
             edits = try EditList.load(from: take.editsURL, sourceDuration: duration)
+            // Always the video's own length: auto-clean may have written
+            // the shorter mic length, which would trim the end off.
+            edits.sourceDuration = duration
             knownCutIDs = Set(edits.cuts.map(\.id))
             // A damaged sound.json shouldn't stop the take opening.
             sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
@@ -115,6 +121,7 @@ final class EditorModel: ObservableObject {
         guard !new.isEmpty else { return false }
         edits.cuts += new
         knownCutIDs.formUnion(new.map(\.id))
+        outsideCutIDs.formUnion(new.map(\.id))
         return true
     }
 
@@ -168,20 +175,60 @@ final class EditorModel: ObservableObject {
         apply(next, actionName: "Accept All")
     }
 
+    /// "Reject all": the words stay. Rejected cuts stay in the list so
+    /// auto-clean doesn't suggest them again.
+    func rejectAllProposed() {
+        var next = edits
+        for i in next.cuts.indices where next.cuts[i].state == .proposed {
+            next.cuts[i].state = .rejected
+        }
+        apply(next, actionName: "Reject All")
+    }
+
+    /// Accepts or rejects one suggested cut. Does nothing once it's been
+    /// decided, so a stale menu can't flip it back.
+    func decide(_ id: UUID, accept: Bool) {
+        guard edits.cuts.contains(where: { $0.id == id && $0.state == .proposed }) else { return }
+        var next = edits
+        next.setState(accept ? .accepted : .rejected, for: id)
+        apply(next, actionName: accept ? "Accept Cut" : "Keep Words")
+    }
+
+    /// The suggested cut covering moment `t` of the take, if any.
+    func proposedCut(at t: Double) -> Cut? {
+        edits.cuts.first { $0.state == .proposed && $0.span.contains(t) }
+    }
+
     var proposedCount: Int {
         edits.cuts.filter { $0.state == .proposed }.count
     }
 
     private func apply(_ next: EditList, actionName: String) {
         let previous = edits
+        let seen = outsideCutIDs
         undoManager.registerUndo(withTarget: self) { model in
-            MainActor.assumeIsolated { model.apply(previous, actionName: actionName) }
+            MainActor.assumeIsolated {
+                model.apply(model.keepingLateOutsideCuts(in: previous, seen: seen), actionName: actionName)
+            }
         }
         undoManager.setActionName(actionName)
         edits = next
         knownCutIDs.formUnion(next.cuts.map(\.id))
         save()
         scheduleRebuild()
+    }
+
+    /// `snapshot` plus any outside cuts that arrived after it was taken
+    /// (not in `seen`), so undo doesn't throw away auto-clean's
+    /// suggestions. One the user removed since isn't in `edits`, so it
+    /// stays gone.
+    private func keepingLateOutsideCuts(in snapshot: EditList, seen: Set<UUID>) -> EditList {
+        var result = snapshot
+        let ids = Set(snapshot.cuts.map(\.id))
+        result.cuts += edits.cuts.filter {
+            outsideCutIDs.contains($0.id) && !seen.contains($0.id) && !ids.contains($0.id)
+        }
+        return result
     }
 
     private func save() {
