@@ -201,6 +201,9 @@ final class ScreenRecorder: NSObject, ObservableObject {
         cursor?.stop(writingTo: take.eventsURL)
         let saved = await sink.finish()
         if saved {
+            // Remember what it's for now, so a later pick on Home
+            // doesn't change what this take is.
+            try? TakePlan.stamp(take, purposeID: UserDefaults.standard.string(forKey: "ai.nextPurpose"))
             lastTake = take
             Transcriber.shared.transcribe(take)
             phase = .idle
