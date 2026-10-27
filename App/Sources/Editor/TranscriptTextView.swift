@@ -150,7 +150,7 @@ enum TranscriptRenderer {
         let text = NSMutableAttributedString()
         var ranges: [NSRange] = []
         guard let transcript = model.transcript else { return (text, ranges) }
-        let marks = model.edits.marks(for: model.wordSpans)
+        let marks = model.wordMarks
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineHeightMultiple = 1.5
