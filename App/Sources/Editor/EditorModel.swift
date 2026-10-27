@@ -42,7 +42,11 @@ final class EditorModel: ObservableObject {
     private var asset: AVURLAsset?
     private var timeObserver: Any?
     private var rebuildTask: Task<Void, Never>?
-    private var transcriptWatch: Task<Void, Never>?
+    private var watch: Task<Void, Never>?
+    /// Every cut id this editor has seen, so cuts written by someone else
+    /// (auto-clean runs right after transcription) can be told apart
+    /// from cuts the user removed here.
+    private var knownCutIDs = Set<UUID>()
 
     init(take: Take) {
         self.take = take
@@ -60,6 +64,7 @@ final class EditorModel: ObservableObject {
             }
             self.asset = asset
             edits = try EditList.load(from: take.editsURL, sourceDuration: duration)
+            knownCutIDs = Set(edits.cuts.map(\.id))
         } catch {
             phase = .failed("Couldn't open this take: \(error.localizedDescription)")
             return
@@ -68,22 +73,38 @@ final class EditorModel: ObservableObject {
         await rebuildPlayer()
         phase = .ready
         loadTranscript()
+        startWatching()
+    }
+
+    /// Every two seconds: pick up the transcript when it lands, and any
+    /// cuts auto-clean has written since.
+    private func startWatching() {
+        watch?.cancel()
+        watch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, !Task.isCancelled else { return }
+                if self.transcriptState == .waiting { self.loadTranscript() }
+                if self.mergeOutsideCuts() { self.scheduleRebuild() }
+            }
+        }
+    }
+
+    /// Adds cuts in edits.json that this editor has never seen. Returns
+    /// true if any were added.
+    @discardableResult
+    private func mergeOutsideCuts() -> Bool {
+        guard let disk = try? EditList.read(from: take.editsURL) else { return false }
+        let new = disk.cuts.filter { !knownCutIDs.contains($0.id) }
+        guard !new.isEmpty else { return false }
+        edits.cuts += new
+        knownCutIDs.formUnion(new.map(\.id))
+        return true
     }
 
     private func loadTranscript() {
-        transcriptWatch?.cancel()
         guard FileManager.default.fileExists(atPath: take.transcriptURL.path) else {
             transcriptState = .waiting
-            transcriptWatch = Task { [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(2))
-                    guard let self, !Task.isCancelled else { return }
-                    if FileManager.default.fileExists(atPath: self.take.transcriptURL.path) {
-                        self.loadTranscript()
-                        return
-                    }
-                }
-            }
             return
         }
         do {
@@ -102,7 +123,7 @@ final class EditorModel: ObservableObject {
         if let timeObserver { player.removeTimeObserver(timeObserver) }
         timeObserver = nil
         rebuildTask?.cancel()
-        transcriptWatch?.cancel()
+        watch?.cancel()
     }
 
     // MARK: Editing
@@ -139,11 +160,15 @@ final class EditorModel: ObservableObject {
         }
         undoManager.setActionName(actionName)
         edits = next
+        knownCutIDs.formUnion(next.cuts.map(\.id))
         save()
         scheduleRebuild()
     }
 
     private func save() {
+        // Keep cuts auto-clean wrote since the last look, instead of
+        // writing over them.
+        mergeOutsideCuts()
         do {
             try edits.write(to: take.editsURL)
             saveError = nil
