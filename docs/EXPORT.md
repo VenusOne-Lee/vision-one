@@ -49,6 +49,14 @@ Once the batch is done, the sheet becomes the share step (`FinishedPanel`):
 - **WhatsApp, LinkedIn, X, YouTube** (`ShareTarget`, VisionOneKit) each pick the file that suits them (WhatsApp the ≤16 MB one, LinkedIn Square, X and YouTube 1080p, falling back to whatever was exported) and the Sharer's words for that network from share.json. YouTube gets the title, description and chapters.
 - Tapping one opens a dashed post card with those words, editable, and "Draft with Sharer" when there's no draft yet. **Approve and open** turns it solid, records the approval with `OutboundGate.approvedInPlace` (the card showed the exact words and destination, so it isn't asked twice), copies the words, shows the file in Finder and opens the network's composer. Nothing posts until you press Post there. Posting straight through each network's API comes with the MCP server.
 
+### Ready to share and the Post panel
+
+Stop opens **Ready to share** (`App/Sources/Share/ReadyToShareView.swift`), after Loom: the take, a checklist (saved, transcript, Sharer draft, export), **Copy video** (⇧⌘C) and **Edit** (⇧⌘E). Copy video exports the take's first suggested format if it isn't there yet, then puts the file on the clipboard. "After Stop, open" at the bottom switches Stop back to the editor.
+
+Beside it is the **Post panel** (`PostPanel(take:)`), the same view the task window's Post tab embeds: the Version One draft (Approve and post, Edit), then WhatsApp, LinkedIn, X and YouTube with the Sharer's words and the file each one takes (or Export first). Approving goes through a Codex-style card (`ApprovalCard`): 1 Yes, post it · 2 Yes, and don't ask again for *product* posts · 3 No, and tell the Sharer what to do differently. ↑↓, Return, 1 to 3, Esc to decide later. Option 3 writes the draft again with your note.
+
+"Don't ask again" is a rule per product (the brand kit's name) and place, saved in `~/Library/Application Support/Vision One/post-rules.json` (`PostRules`). It only skips the card: the words are still copied and the place to post still opens, where you press post yourself. Each rule shows **Ask every time** to undo it. The link row appears once the share page is published (`ShareLinks.lookup`). Every colour comes from `Theme`, so preset looks apply.
+
 ## Not yet
 
 - The camera bubble in short clips, and moving or hiding it in the editor
