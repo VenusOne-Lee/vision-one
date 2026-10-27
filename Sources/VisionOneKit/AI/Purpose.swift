@@ -198,3 +198,41 @@ extension Take {
     /// The Sharer's drafts (SharePack).
     public var shareURL: URL { folder.appendingPathComponent("share.json") }
 }
+
+extension Purpose {
+    /// The purpose's default prompts as a template prompts.md, so the
+    /// prompt presets' resolver can layer a preset or a moment over them.
+    public var promptDocument: PromptDocument {
+        PromptDocument(sections: PromptSlot.allCases.compactMap { slot in
+            guard let text = prompts[slot.agentKey], !text.isEmpty else { return nil }
+            return PromptDocument.Section(heading: slot.heading, text: text)
+        })
+    }
+
+    /// Words used when the builder's listing hasn't filled a variable, so a
+    /// model never sees a bare "{product}".
+    static let fallbackVariables = ["product": "the product", "audience": "the viewers",
+                                    "site": "the link", "cta": "", "ring": ""]
+
+    /// The brief for an agent: each part resolved through `PromptResolver`
+    /// (preset over these defaults), with variables filled.
+    public func brief(preset: PromptPreset?, variables: PromptVariables = PromptVariables()) -> AgentBrief {
+        var values = Self.fallbackVariables
+        values.merge(variables.values) { $1 }
+        let filled = PromptVariables(product: values["product"], audience: values["audience"], site: values["site"],
+                                     cta: values["cta"], ring: values["ring"])
+        var parts: [String: String] = [:]
+        var house: String?
+        for slot in PromptSlot.allCases {
+            let resolved = PromptResolver.resolve(slot: slot, template: promptDocument, preset: preset, variables: filled)
+            house = house ?? resolved.system
+            if slot != .houseStyle, let text = resolved.instruction {
+                // Empty fallbacks ({cta}) can leave a stray brace pair.
+                parts[slot.agentKey] = text.replacingOccurrences(of: "{cta}", with: "")
+                    .replacingOccurrences(of: "{ring}", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return AgentBrief(purpose: title, parts: parts, houseStyle: house)
+    }
+}
