@@ -53,7 +53,7 @@ struct HarnessView: View {
     private var topBar: some View {
         HStack(spacing: Theme.Space.sm) {
             IconButton(showSidebar ? "Hide sidebar" : "Show sidebar", systemImage: "sidebar.left",
-                       shortcut: "⌘B", isOn: showSidebar) { showSidebar.toggle() }
+                       shortcut: ShortcutMap.toggleSidebar.display, isOn: showSidebar) { showSidebar.toggle() }
                 .disabled(model.mode != .tasks)
             breadcrumb
                 .layoutPriority(-1)
@@ -69,7 +69,7 @@ struct HarnessView: View {
             }
             if model.mode == .tasks, model.workspace != nil {
                 IconButton(model.layout.isHidden ? "Show panel" : "Hide panel", systemImage: "sidebar.right",
-                           shortcut: "⌥⌘B", isOn: !model.layout.isHidden) {
+                           shortcut: ShortcutMap.togglePanel.display, isOn: !model.layout.isHidden) {
                     model.updateLayout { $0.isHidden.toggle() }
                 }
             }
@@ -185,16 +185,11 @@ struct HarnessView: View {
 
     // MARK: Keys
 
-    /// ⌘N new task, ⌘B sidebar, ⌥⌘B panel, Esc back to Tasks (or stop
-    /// the agent that's working).
+    /// Esc back to Tasks (or stop the agent that's working). ⌘N, ⌘B and
+    /// ⌥⌘B are menu commands (AppCommands in VisionOneApp.swift), routed
+    /// through EditorWindowController.
     private var shortcuts: some View {
         ZStack {
-            Button("New task") { model.page = .newTask; model.mode = .tasks }
-                .keyboardShortcut("n", modifiers: .command)
-            Button("Sidebar") { showSidebar.toggle() }
-                .keyboardShortcut("b", modifiers: .command)
-            Button("Panel") { model.updateLayout { $0.isHidden.toggle() } }
-                .keyboardShortcut("b", modifiers: [.command, .option])
             Button("Back") { escape() }
                 .keyboardShortcut(.escape, modifiers: [])
         }

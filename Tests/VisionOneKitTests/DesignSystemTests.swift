@@ -64,4 +64,16 @@ final class ShortcutMapTests: XCTestCase {
         }
         XCTAssertEqual(ShortcutMap.spec("export"), ShortcutMap.export)
     }
+
+    func testHarnessShortcutsAreListed() {
+        XCTAssertEqual(ShortcutMap.newTask.display, "⌘N")
+        XCTAssertEqual(ShortcutMap.newTask.menu, "File")
+        XCTAssertEqual(ShortcutMap.toggleSidebar.display, "⌘B")
+        XCTAssertEqual(ShortcutMap.togglePanel.display, "⌥⌘B")
+        for spec in [ShortcutMap.newTask, ShortcutMap.toggleSidebar, ShortcutMap.togglePanel] {
+            XCTAssertTrue(ShortcutMap.all.contains(spec), spec.id)
+        }
+        // ⌘N is File › New in every app: New task there is its usual meaning.
+        XCTAssertEqual(ShortcutMap.reservedClashes(in: [ShortcutMap.newTask]), [])
+    }
 }

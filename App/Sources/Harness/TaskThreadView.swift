@@ -96,6 +96,8 @@ struct DashedChipStyle: ButtonStyle {
 /// next take.
 struct NewTaskView: View {
     @ObservedObject var model: HarnessModel
+    @ObservedObject private var recorder = ScreenRecorder.shared
+    @ObservedObject private var hotKey = GlobalHotKey.shared
 
     var body: some View {
         VStack(spacing: Theme.Space.lg) {
@@ -105,6 +107,9 @@ struct NewTaskView: View {
                 .foregroundStyle(Theme.text)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
+            if model.takes.isEmpty, !recorder.phase.isLive {
+                firstRecording
+            }
             FlowChips(chips: ["/record", "Clips from my last video", "/style",
                               "Write this week's update"]) { chip in
                 start(chip)
@@ -116,6 +121,23 @@ struct NewTaskView: View {
         .padding(.horizontal, Theme.Space.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.canvas)
+    }
+
+    /// Nothing recorded yet (the first run lands here): one clear way in.
+    private var firstRecording: some View {
+        VStack(spacing: Theme.Space.xs) {
+            Button("Start recording") {
+                Task { await recorder.toggle() }
+            }
+            .buttonStyle(PillButtonStyle(kind: .primary, size: .large))
+            .disabled(recorder.phase.isBusy)
+            .help("Record your screen", shortcut: ShortcutMap.record)
+            if hotKey.isRegistered {
+                Text("or press \(ShortcutMap.record.display) from any app")
+                    .textStyle(.caption)
+                    .foregroundStyle(Theme.textMuted)
+            }
+        }
     }
 
     private var projectSuffix: String {

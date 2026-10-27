@@ -3,9 +3,10 @@ import SwiftUI
 import VisionOneKit
 
 /// Vision One is a regular Mac app with a Dock icon and one main window
-/// (the Library, and the editor once a take is open), plus a menu bar
-/// panel for quick recording, like Loom. The menu bar icon is the
-/// builder's ring: dashed when idle, filled while live.
+/// (the harness: New task, tasks, the Library and the editor), plus a
+/// menu bar panel for quick recording, like Loom. The menu bar icon is
+/// the builder's ring: dashed when idle, filled while live, with an ink
+/// mark when a task needs you or an agent is working.
 /// Started from main.swift, which runs the MCP bridge instead when the
 /// app is launched as `Vision One --mcp`.
 struct VisionOneApp: App {
@@ -23,11 +24,25 @@ struct VisionOneApp: App {
             MenuContent()
                 .environmentObject(recorder)
         } label: {
-            Image(systemName: recorder.phase.isLive ? "record.circle.fill" : "circle.dashed")
-                .accessibilityLabel(recorder.phase.isLive ? "Vision One, recording" : "Vision One")
+            MenuBarLabel(recorder: recorder)
         }
         .menuBarExtraStyle(.window)
         .commands { AppCommands(recorder: recorder) }
+    }
+}
+
+/// The menu bar icon: the filled record ring while live, as before;
+/// otherwise a mark when a task needs you or an agent is working, and
+/// the dashed ring when all is quiet (MenuBarMark). Template SF Symbols,
+/// so ink only.
+struct MenuBarLabel: View {
+    @ObservedObject var recorder: ScreenRecorder
+    @ObservedObject private var desk = DeskFeed.shared
+
+    var body: some View {
+        let mark = MenuBarMark.current(isLive: recorder.phase.isLive, statuses: desk.snapshot.openStatuses)
+        Image(systemName: mark.systemImage)
+            .accessibilityLabel(mark.accessibilityLabel)
     }
 }
 
@@ -39,6 +54,12 @@ struct AppCommands: Commands {
     @ObservedObject var recorder: ScreenRecorder
 
     var body: some Commands {
+        // File › New is a new task. The main window's ⌘B and ⌥⌘B live
+        // here too, so they show in the menus and never fire twice.
+        CommandGroup(replacing: .newItem) {
+            Button("New Task") { EditorWindowController.shared.showNewTask() }
+                .keyboardShortcut(ShortcutMap.newTask)
+        }
         CommandGroup(after: .newItem) {
             Button(recorder.phase.isLive ? "Stop Recording  \(ShortcutMap.record.display)"
                                          : "Start Recording  \(ShortcutMap.record.display)") {
@@ -62,6 +83,11 @@ struct AppCommands: Commands {
             Button("Access…") { SettingsWindowController.shared.show(.access) }
         }
         CommandGroup(after: .toolbar) {
+            Button("Toggle Sidebar") { EditorWindowController.shared.toggleSidebar() }
+                .keyboardShortcut(ShortcutMap.toggleSidebar)
+            Button("Toggle Panel") { EditorWindowController.shared.togglePanel() }
+                .keyboardShortcut(ShortcutMap.togglePanel)
+            Divider()
             Button("Bigger Text") { TextSize.step(1) }
                 .keyboardShortcut(ShortcutMap.textBigger)
             Button("Smaller Text") { TextSize.step(-1) }
@@ -69,6 +95,11 @@ struct AppCommands: Commands {
             Button("Actual Text Size") {
                 UserDefaults.standard.set(TextSize.medium.rawValue, forKey: TextSize.storageKey)
             }
+            Divider()
+        }
+        // Brings the main window back, even once it's been closed.
+        CommandGroup(before: .windowList) {
+            Button("Vision One") { EditorWindowController.shared.show() }
             Divider()
         }
         CommandGroup(replacing: .help) {
@@ -105,15 +136,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Opened in the background by an agent: stay out of the way.
         if CommandLine.arguments.contains(MCPService.backgroundFlag) { return }
         // First launch, or access was turned off: show only what's
-        // missing. Otherwise open on the Library.
+        // missing, then New task once it's done. Otherwise open straight
+        // on New task, ready to record or ask.
         if !AccessCenter.shared.checklist.canRecord {
+            SetupWindowController.shared.opensHarnessWhenDone = true
             SetupWindowController.shared.show()
         } else {
-            EditorWindowController.shared.showLibrary()
+            EditorWindowController.shared.showNewTask()
         }
     }
 
-    /// Clicking the Dock icon with no window open brings the main window back.
+    /// Clicking the Dock icon with no window open brings the main window
+    /// back, on New task (closing it ends the open task).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag { EditorWindowController.shared.show() }
         return true
