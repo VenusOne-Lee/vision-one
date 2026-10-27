@@ -3,7 +3,8 @@ import SwiftUI
 import VisionOneKit
 
 /// Every South African language in one list: what's ready, how good it
-/// will be, and one button each.
+/// will be, and one button each. Dubbing and Scribe sit below, folded
+/// away until someone wants them.
 struct LanguagesView: View {
     @ObservedObject var model: LanguagesModel
 
@@ -13,6 +14,7 @@ struct LanguagesView: View {
                 VStack(alignment: .leading, spacing: Theme.Space.lg) {
                     spokenSection
                     captionsSection
+                    dubSection
                 }
                 .padding(Theme.Space.lg)
                 .frame(maxWidth: 720, alignment: .leading)
@@ -34,6 +36,19 @@ struct LanguagesView: View {
             HStack(spacing: Theme.Space.sm) {
                 Text(model.spoken.name).textStyle(.headline).foregroundStyle(Theme.text)
                 QualityChip(quality: model.spoken.support.transcribe.quality)
+                Spacer()
+                Menu("Spoken in another language") {
+                    ForEach(SALanguage.allCases.filter { $0 != model.spoken && $0.support.transcribeCloud.quality.isAvailable }) { language in
+                        Button("\(language.name) · ElevenLabs Scribe") { model.transcribe(in: language) }
+                    }
+                    Divider()
+                    Text("Sesotho, Setswana, Xitsonga, siSwati, Tshivenḓa and isiNdebele can't be transcribed yet")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .disabled(model.work.isBusy || !model.hasElevenLabs)
+                .help(model.hasElevenLabs ? "Send the voice to ElevenLabs Scribe for words in another language. Asks first."
+                      : "Add your ElevenLabs key under Dub to use Scribe")
             }
             Text(model.spoken.support.transcribe.note.isEmpty ? model.spoken.support.transcribe.engine
                  : "\(model.spoken.support.transcribe.engine) · \(model.spoken.support.transcribe.note)")
@@ -73,17 +88,67 @@ struct LanguagesView: View {
         }
     }
 
+    // MARK: Dub
+
+    private var dubSection: some View {
+        CollapsibleSection("Dub with your voice", id: "languages.dub", summary: "ElevenLabs · optional", openByDefault: false) {
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                Text("Makes a copy of your newest export in another language, in a voice made from yours. Only the sound is sent, never your screen. Uses your own ElevenLabs account, and asks before sending.")
+                    .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: Theme.Space.sm) {
+                    SecureField("ElevenLabs API key", text: $model.elevenLabsKey)
+                        .textFieldStyle(.ink)
+                        .onSubmit { model.saveKey() }
+                    Button(model.hasElevenLabs ? "Save" : "Add key") { model.saveKey() }
+                        .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
+                }
+                HStack(spacing: Theme.Space.sm) {
+                    Picker("Into", selection: $model.dubTarget) {
+                        ForEach(model.dubTargets) { language in
+                            Text(language.name).tag(language)
+                        }
+                    }
+                    .fixedSize()
+                    QualityChip(quality: model.dubTarget.support.dub.quality)
+                    Spacer()
+                    Button("Dub into \(model.dubTarget.name)") { model.dub() }
+                        .buttonStyle(PillButtonStyle(kind: .secondary))
+                        .disabled(!model.hasElevenLabs || model.work.isBusy)
+                }
+                Text("Not offered for isiXhosa or isiNdebele yet. Free ElevenLabs plans add a watermark to the dub.")
+                    .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                ForEach(SALanguage.allCases.filter { model.dubs[$0] != nil }) { language in
+                    HStack {
+                        StateChip(.accepted, "\(language.name) dub")
+                        Text(model.dubs[language]?.lastPathComponent ?? "").textStyle(.caption).foregroundStyle(Theme.textMuted)
+                            .lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        Button("Show") { if let url = model.dubs[language] { model.reveal(url) } }
+                            .buttonStyle(PillButtonStyle(kind: .quiet, size: .small))
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: Status
 
     private var status: some View {
         HStack(spacing: Theme.Space.sm) {
             switch model.work {
             case .idle:
-                Text("Captions use your AI rung, which asks before sending.")
+                Text("Captions use your AI rung. Dub and Scribe use your ElevenLabs key. Each asks before sending.")
                     .textStyle(.caption).foregroundStyle(Theme.textMuted)
             case let .translating(language, progress):
                 ProgressView(value: progress).tint(Theme.text).frame(width: 120)
                 Text("Translating into \(language.name)…").textStyle(.caption).foregroundStyle(Theme.text)
+            case let .transcribing(language):
+                ProgressView().controlSize(.small).tint(Theme.text)
+                Text("Scribe is transcribing in \(language.name)…").textStyle(.caption).foregroundStyle(Theme.text)
+            case let .dubbing(_, step):
+                ProgressView().controlSize(.small).tint(Theme.text)
+                Text(step).textStyle(.caption).foregroundStyle(Theme.text)
             case let .failed(message):
                 Text(message).textStyle(.caption).foregroundStyle(Theme.error)
                     .fixedSize(horizontal: false, vertical: true)
