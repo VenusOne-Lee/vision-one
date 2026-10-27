@@ -57,11 +57,29 @@ public struct ViewerInbox: Codable, Equatable, Sendable {
     public var events: [ViewerEvent]
     /// The last pull; the next one asks only for what's newer.
     public var pulledAt: Date?
+    /// The host's id for the last event pulled, so none come twice.
+    public var eventCursor: Int?
+    /// Notes already filed as Desk asks, so each is filed once.
+    public var filedNoteIDs: [String]?
 
-    public init(notes: [ViewerNote] = [], events: [ViewerEvent] = [], pulledAt: Date? = nil) {
+    public init(notes: [ViewerNote] = [], events: [ViewerEvent] = [], pulledAt: Date? = nil, eventCursor: Int? = nil) {
         self.notes = notes
         self.events = events
         self.pulledAt = pulledAt
+        self.eventCursor = eventCursor
+    }
+
+    /// Notes not yet filed on the Desk, oldest first. Call `markFiled`
+    /// once each is.
+    public var unfiledNotes: [ViewerNote] {
+        let filed = Set(filedNoteIDs ?? [])
+        return notes.filter { !filed.contains($0.id) }.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    public mutating func markFiled(_ id: String) {
+        var filed = filedNoteIDs ?? []
+        if !filed.contains(id) { filed.append(id) }
+        filedNoteIDs = filed
     }
 
     /// Notes the creator hasn't handled, newest first.

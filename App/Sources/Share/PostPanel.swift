@@ -71,6 +71,7 @@ struct PostPanel: View {
                 if let link = ShareLinks.link(for: take) {
                     LinkRow(link: link)
                 }
+                SharePageSection(take: take)
             }
             .padding(Theme.Space.md)
         }
