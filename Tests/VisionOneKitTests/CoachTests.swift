@@ -114,8 +114,10 @@ final class RehearsalTests: XCTestCase {
 
     func testEnergyIsLowForAFlatVoiceAndHighForAMovingOne() throws {
         let flat = (0..<40).map { VoiceFrame(time: Double($0) * 0.05, levelDB: -20, pitchHz: 150) }
-        let moving = (0..<40).map { i in
-            VoiceFrame(time: Double(i) * 0.05, levelDB: i % 2 == 0 ? -12 : -28, pitchHz: i % 3 == 0 ? 120 : 220)
+        let moving: [VoiceFrame] = (0..<40).map { (i: Int) -> VoiceFrame in
+            let level: Float = i % 2 == 0 ? -12 : -28
+            let pitch: Double = i % 3 == 0 ? 120 : 220
+            return VoiceFrame(time: Double(i) * 0.05, levelDB: level, pitchHz: pitch)
         }
         XCTAssertLessThan(try XCTUnwrap(RehearsalMonitor.energy(flat)), 0.1)
         XCTAssertGreaterThan(try XCTUnwrap(RehearsalMonitor.energy(moving)), 0.8)
