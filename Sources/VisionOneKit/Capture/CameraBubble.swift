@@ -149,6 +149,16 @@ public struct CameraTrack: Codable, Equatable, Sendable {
         }
     }
 
+    /// The bubble's square on a frame showing the recording, in that
+    /// frame's pixels with the origin at the bottom left (Core Image and
+    /// Core Graphics), kept whole inside the frame.
+    public static func outputRect(for placement: Placement, in frame: CaptureRect) -> CaptureRect {
+        let side = min(max(placement.size * frame.width, 16), min(frame.width, frame.height))
+        let left = min(max(frame.x + placement.x * frame.width, frame.x), frame.x + frame.width - side)
+        let top = min(max(placement.y * frame.height, 0), frame.height - side)
+        return CaptureRect(x: left, y: frame.y + frame.height - top - side, width: side, height: side)
+    }
+
     /// Adds a placement, skipping it when the bubble hasn't really moved,
     /// and replacing the last one when it's from the same instant.
     public mutating func record(_ placement: Placement) {
@@ -167,6 +177,18 @@ public struct CameraTrack: Codable, Equatable, Sendable {
     /// Where the bubble was at `t` seconds into the recording.
     public func placement(at t: Double) -> Placement? {
         placements.last { $0.t <= t } ?? placements.first
+    }
+
+    /// The moment of camera.mov that matches `t` seconds into screen.mov.
+    public func cameraTime(forScreen t: Double) -> Double { t - startOffset }
+
+    /// Where the bubble sits at a moment of an export, following the
+    /// recording's clock through the cuts.
+    public func placement(atOutput t: Double, timeline: ExportTimeline) -> Placement? {
+        let source = timeline.sourceTime(forOutput: t)
+            ?? timeline.segments.last(where: { $0.outputStart <= t })?.source.upperBound
+            ?? 0
+        return placement(at: source)
     }
 
     public func write(to url: URL) throws {

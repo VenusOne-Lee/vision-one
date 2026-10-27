@@ -11,7 +11,7 @@ final class ExportController: ObservableObject {
 
     /// Exports `take`. `keep` overrides the kept spans in source seconds;
     /// nil exports what the editor kept in edits.json. `overlays` draw on every frame
-    /// (the corner logo, later the camera bubble). `captionRingHex` burns
+    /// (the corner logo); the camera bubble comes from the take itself. `captionRingHex` burns
     /// in the take's captions with keywords in that colour. `cards` adds
     /// the brand intro and outro. Subtitle files are written next to the
     /// video only once it's done, timed to match it.
@@ -19,8 +19,9 @@ final class ExportController: ObservableObject {
                 captionRingHex: UInt32? = nil, cards: CardMaker? = nil) {
         guard !phase.isBusy else { return }
         phase = .exporting(preset: preset, progress: 0)
-        let exporter = VideoExporter(take: take, keep: keep, preset: preset, overlays: overlays,
+        var exporter = VideoExporter(take: take, keep: keep, preset: preset, overlays: overlays,
                                      captionRingHex: captionRingHex, cards: cards)
+        exporter.ring = BrandStore.shared.kit.ring
 
         task = Task {
             do {

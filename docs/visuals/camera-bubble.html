@@ -110,7 +110,7 @@ section { display: flex; flex-direction: column; gap: 18px; }
   <header>
     <span class="eyebrow">Vision One · Recorder · Camera bubble</span>
     <h1>You, in your <b>ring</b>, anywhere on screen</h1>
-    <p class="lead">Switch on Camera in Sources and a round live preview floats over everything, framed in your ring colour from Brand. Drag it, resize it, and it stays where you left it. The camera records to its own file, so the editor and export decide where it ends up.</p>
+    <p class="lead">Switch on Camera in Sources and a round live preview floats over everything, framed in your ring colour from Brand. Drag it, resize it, and it stays where you left it. The camera records to its own file, and export draws it back in your ring where you left it.</p>
     <div class="legend">
       <span><i class="sw"></i>Solid: built in this PR</span>
       <span><i class="sw dash"></i>Dashed: proposed, not built yet</span>
@@ -237,10 +237,28 @@ section { display: flex; flex-direction: column; gap: 18px; }
   </section>
 
   <section>
+    <h2>In the export</h2>
+    <div class="screens">
+      <div class="shot">
+        <div class="screen" aria-label="Exported frame with the camera in its ring at the bottom left">
+          <div class="win" style="left:0;top:0;width:100%;height:100%;border-radius:0"><div class="lines"><i style="width:40%"></i><i></i><i style="width:85%"></i><i style="width:65%"></i><i style="width:75%"></i></div></div>
+          <div class="bubble" style="left:2%;bottom:4%;width:15%"><div class="face"></div></div>
+        </div>
+        <div class="cap"><b>Exported.</b> camera.mov is drawn as a circle in your ring, at the spot you left it, the same share of the frame as on your screen.</div>
+      </div>
+      <div class="list">
+        <div><h3>Follows your moves</h3><p>If you dragged the bubble while recording, it jumps to each new spot at the moment you moved it.</p></div>
+        <div><h3>Cut with the screen</h3><p>The camera is cut exactly where the screen is, using camera.json's offset, so your lips stay in sync after every cut.</p></div>
+        <div><h3>Not in clips yet</h3><p>Short 9:16 and 1:1 clips leave the bubble out for now, since their crop would slice it.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
     <h2>Next</h2>
     <div class="proposed">
       <span class="tag">Proposed</span>
-      <p><b>Draw the bubble in exports.</b> Export reads camera.json and draws camera.mov in a ring in the same spot, following your moves, on the edited clock so cuts stay in sync.</p>
+      <p><b>The bubble in clips.</b> Placed inside the clip's window, so vertical videos show you too.</p>
       <p><b>Move it in the editor.</b> Drag the bubble on the preview, hide it for a section, or switch to full camera.</p>
       <p><b>Rounded square.</b> The bubble shape from Appearance (circle or rounded square).</p>
     </div>

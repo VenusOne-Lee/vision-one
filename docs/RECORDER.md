@@ -29,7 +29,7 @@ Switch on Camera in Sources and a round live preview in your ring colour (from B
 - **Move:** drag it anywhere, across displays too. It stays whole and 16 points from the screen's edges.
 - **Resize:** hover to show the handle at the bottom right, then drag it. 96 points up to half the screen's shorter side. Right-click for Small, Medium or Large.
 - **Remembered:** where you left it, as a share of the screen, so it keeps its corner when the resolution changes.
-- **While recording:** a small orange dot shows it's live. It never lands in screen.mov, because Vision One's windows are left out of the capture. Moves are logged in camera.json, so export can draw the camera where you saw it.
+- **While recording:** a small orange dot shows it's live. It never lands in screen.mov, because Vision One's windows are left out of the capture. Moves are logged in camera.json, and export draws the camera where you saw it (see [EXPORT.md](EXPORT.md)).
 - **Which camera:** Automatic follows macOS, so an iPhone on a stand (Continuity Camera) takes over by itself. Or pick one from the row's menu. The choice lives in `CaptureDevices`.
 
 One `AVCaptureSession` feeds both the preview and `AVAssetWriter`, so camera.mov's first frame is known on the host clock that screen.mov uses (`CameraBubble.swift`). The camera starts just before the screen, so `startOffset` is usually a little negative.
@@ -43,7 +43,8 @@ One `AVCaptureSession` feeds both the preview and `AVAssetWriter`, so camera.mov
 
 ## Not yet
 
-- Drawing camera.mov in the ring bubble at export (next PR), and moving it in the editor
+- Showing and moving the bubble in the editor's preview
+- The bubble in short clips
 - A mic level meter
 - Following a window's moves in the cursor log (v1 uses its frame at start)
 - Lower frame rate and resolution on 8 GB Macs

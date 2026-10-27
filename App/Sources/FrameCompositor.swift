@@ -29,10 +29,13 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     let crop: (@Sendable (Double) -> NormalisedRect?)?
     /// Fills the space around a frame that doesn't match the output shape.
     let background: CIColor
+    /// camera.mov's track and where to draw it, when the take has one.
+    let camera: CameraLayer?
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], overlayTimeOffset: Double = 0,
          effects: FrameEffects? = nil,
-         crop: (@Sendable (Double) -> NormalisedRect?)? = nil, background: CIColor = .black) {
+         crop: (@Sendable (Double) -> NormalisedRect?)? = nil, background: CIColor = .black,
+         camera: CameraLayer? = nil) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
@@ -40,8 +43,9 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         self.effects = effects
         self.crop = crop
         self.background = background
+        self.camera = camera
         card = nil
-        requiredSourceTrackIDs = [NSNumber(value: trackID)]
+        requiredSourceTrackIDs = [NSNumber(value: trackID)] + (camera.map { [NSNumber(value: $0.trackID)] } ?? [])
     }
 
     init(timeRange: CMTimeRange, card: any CardSource) {
@@ -52,6 +56,7 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         effects = nil
         crop = nil
         background = .white
+        camera = nil
         self.card = card
         requiredSourceTrackIDs = []
     }
@@ -115,16 +120,54 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         // reframing to 9:16 and 1:1 arrives.
         let x = (size.width - scaled.extent.width) / 2
         let y = (size.height - scaled.extent.height) / 2
-        let placed = scaled
+        var placed = scaled
             .transformed(by: CGAffineTransform(translationX: x, y: y))
             .composited(over: CIImage(color: instruction.background).cropped(to: CGRect(origin: .zero, size: size)))
+
+        // The camera bubble, where it sat over the recording. A frame with
+        // no camera (it started late, or a gap) just shows the screen.
+        let outputTime = request.compositionTime.seconds - instruction.overlayTimeOffset
+        var ring: (rect: CGRect, layer: CameraLayer)?
+        if let camera = instruction.camera, let frame = request.sourceFrame(byTrackID: camera.trackID),
+           let placement = camera.track.placement(atOutput: outputTime, timeline: camera.timeline) {
+            let screen = CaptureRect(x: x, y: y, width: scaled.extent.width, height: scaled.extent.height)
+            let r = CameraTrack.outputRect(for: placement, in: screen)
+            let rect = CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
+            placed = Self.bubble(CIImage(cvPixelBuffer: frame), in: rect).composited(over: placed)
+            ring = (rect, camera)
+        }
         context.render(placed, to: output, bounds: CGRect(origin: .zero, size: size), colorSpace: colorSpace)
 
-        if !instruction.overlays.isEmpty {
-            draw(instruction.overlays, on: output, size: size,
-                 at: request.compositionTime.seconds - instruction.overlayTimeOffset)
+        if ring != nil || !instruction.overlays.isEmpty {
+            draw(instruction.overlays, ring: ring, on: output, size: size, at: outputTime)
         }
         request.finish(withComposedVideoFrame: output)
+    }
+
+    /// The middle square of a camera frame, filling `rect`, cut to a circle.
+    static func bubble(_ camera: CIImage, in rect: CGRect) -> CIImage {
+        let e = camera.extent
+        let side = min(e.width, e.height)
+        guard side > 0, rect.width > 0 else { return CIImage.empty() }
+        let square = camera
+            .cropped(to: CGRect(x: e.midX - side / 2, y: e.midY - side / 2, width: side, height: side))
+        let scale = rect.width / side
+        let fitted = square
+            .transformed(by: CGAffineTransform(translationX: -square.extent.minX, y: -square.extent.minY))
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .transformed(by: CGAffineTransform(translationX: rect.minX, y: rect.minY))
+        let radius = rect.width / 2
+        let mask = CIFilter(name: "CIRadialGradient", parameters: [
+            "inputCenter": CIVector(x: rect.midX, y: rect.midY),
+            "inputRadius0": max(0, radius - 1),
+            "inputRadius1": radius,
+            "inputColor0": CIColor.white,
+            "inputColor1": CIColor.clear,
+        ])?.outputImage?.cropped(to: rect) ?? CIImage.empty()
+        return fitted.applyingFilter("CIBlendWithAlphaMask", parameters: [
+            kCIInputBackgroundImageKey: CIImage.empty(),
+            kCIInputMaskImageKey: mask,
+        ])
     }
 
     /// Cuts `rect` (normalized, origin top left) out of the image and
@@ -157,7 +200,8 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         card.draw(in: context, size: size, at: max(0, time))
     }
 
-    private func draw(_ overlays: [ExportOverlay], on buffer: CVPixelBuffer, size: CGSize, at time: Double) {
+    private func draw(_ overlays: [ExportOverlay], ring: (rect: CGRect, layer: CameraLayer)?,
+                      on buffer: CVPixelBuffer, size: CGSize, at time: Double) {
         CVPixelBufferLockBaseAddress(buffer, [])
         defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
         guard let context = CGContext(
@@ -169,12 +213,28 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         ) else { return }
+        // The builder's ring around the camera, under captions.
+        if let ring {
+            let width = max(3, ring.rect.width * 0.03)
+            context.setStrokeColor(ring.layer.ringColour)
+            context.setLineWidth(width)
+            context.strokeEllipse(in: ring.rect.insetBy(dx: width / 2, dy: width / 2))
+        }
         for overlay in overlays {
             context.saveGState()
             overlay.draw(in: context, size: size, at: time)
             context.restoreGState()
         }
     }
+}
+
+/// camera.mov in the export: its track in the composition, where the
+/// bubble sat (camera.json), the cuts to follow, and the ring colour.
+struct CameraLayer: @unchecked Sendable {
+    let trackID: CMPersistentTrackID
+    let track: CameraTrack
+    let timeline: ExportTimeline
+    let ringColour: CGColor
 }
 
 /// Draws nothing; the compositor's paper shows.
