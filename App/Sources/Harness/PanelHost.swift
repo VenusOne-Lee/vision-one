@@ -179,9 +179,7 @@ struct PanelContent: View {
             case .clips:
                 ClipsPane(model: workspace.clips)
             case .sound:
-                ScrollView {
-                    SoundPanel(model: workspace.editor).padding(Theme.Space.md - 2)
-                }
+                SoundPanelContent(model: workspace.editor)
             case .post:
                 PostPanel(take: workspace.take)
             case .captions:
@@ -195,6 +193,74 @@ struct PanelContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.paper)
+    }
+}
+
+/// The Sound panel: with no music and no effects yet, a short note and
+/// the two ways to add some; otherwise the full controls.
+struct SoundPanelContent: View {
+    @ObservedObject var model: EditorModel
+
+    var body: some View {
+        ScrollView {
+            if model.sound.music == nil && model.sound.effects.isEmpty {
+                empty
+            } else {
+                SoundPanel(model: model).padding(Theme.Space.md - 2)
+            }
+        }
+    }
+
+    private var empty: some View {
+        VStack(spacing: Theme.Space.md) {
+            VStack(spacing: Theme.Space.xs) {
+                Text("No music or effects yet")
+                    .textStyle(.headline)
+                    .foregroundStyle(Theme.text)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Add a music bed under your voice, or a sound effect at the playhead.")
+                    .textStyle(.body)
+                    .foregroundStyle(Theme.textMuted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: Theme.Space.sm) {
+                Menu {
+                    ForEach(SoundLibrary.music) { sound in
+                        Button("\(sound.title) · \(sound.summary)") { model.setMusic(.library(sound)) }
+                    }
+                    Divider()
+                    Button("Choose a file…") { model.chooseMusicFile() }
+                } label: {
+                    Text("Add music")
+                }
+                .menuStyle(.button)
+                .buttonStyle(PillButtonStyle(kind: .primary))
+                .fixedSize()
+                Menu {
+                    ForEach(SoundLibrary.effects) { sound in
+                        Button("\(sound.title) · \(sound.summary)") { model.addEffect(sound.id) }
+                    }
+                } label: {
+                    Text("Add effect")
+                }
+                .menuStyle(.button)
+                .buttonStyle(PillButtonStyle(kind: .secondary))
+                .fixedSize()
+                .help("Adds a sound effect at the playhead")
+            }
+            if let problem = model.soundProblem {
+                Text(problem)
+                    .textStyle(.caption)
+                    .foregroundStyle(Theme.error)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Theme.Space.lg)
+        .frame(maxWidth: 360)
+        .frame(maxWidth: .infinity)
+        .padding(.top, Theme.Space.lg)
     }
 }
 
