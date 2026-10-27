@@ -6,7 +6,8 @@ import VisionOneKit
 /// (the Library, and the editor once a take is open), plus a menu bar
 /// panel for quick recording, like Loom. The menu bar icon is the
 /// builder's ring: dashed when idle, filled while live.
-@main
+/// Started from main.swift, which runs the MCP bridge instead when the
+/// app is launched as `Vision One --mcp`.
 struct VisionOneApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ObservedObject private var recorder = ScreenRecorder.shared
@@ -99,6 +100,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         RecordingBarController.shared.start()
         // Finish any transcript a quit left undone.
         Task { @MainActor in Transcriber.shared.catchUp(in: ScreenRecorder.shared.library) }
+        // Claude Code, Codex and other agents connect through here.
+        MCPService.shared.start()
+        // Opened in the background by an agent: stay out of the way.
+        if CommandLine.arguments.contains(MCPService.backgroundFlag) { return }
         // First launch, or access was turned off: show only what's
         // missing. Otherwise open on the Library.
         if !AccessCenter.shared.checklist.canRecord {
