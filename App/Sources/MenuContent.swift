@@ -673,8 +673,9 @@ private struct SourceRow<Detail: View>: View {
             Spacer(minLength: Theme.Space.sm)
             Toggle(title, isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(InkSwitchStyle())
-                .accessibilityLabel(title)
+                // Ink, not the system switch, which goes grey whenever the
+                // panel isn't the active window and makes "on" look off.
+                .toggleStyle(InkSwitchStyle(label: title))
         }
         .frame(minHeight: 30)
     }
@@ -910,31 +911,5 @@ private struct PanelWindowReader: NSViewRepresentable {
             super.viewDidMoveToWindow()
             if let window { MenuPanel.window = window }
         }
-    }
-}
-
-/// An on/off switch drawn in ink. The system switch turns grey whenever
-/// its window isn't active, which made switches that were on look off.
-struct InkSwitchStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Button {
-            configuration.isOn.toggle()
-        } label: {
-            Capsule()
-                .fill(configuration.isOn ? Theme.text : Theme.line)
-                .frame(width: 28, height: 16)
-                .overlay(alignment: configuration.isOn ? .trailing : .leading) {
-                    Circle()
-                        .fill(Theme.paper)
-                        .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
-                        .frame(width: 12, height: 12)
-                        .padding(2)
-                }
-                .animation(.easeOut(duration: 0.12), value: configuration.isOn)
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityValue(configuration.isOn ? "On" : "Off")
-        .accessibilityAddTraits(.isToggle)
     }
 }
