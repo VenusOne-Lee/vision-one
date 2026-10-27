@@ -49,7 +49,7 @@ Keep each decision question self-contained: small rungs get them in batches.
 | --- | --- | --- |
 | Producer (`ProducerAgent`) | Pre-flight checks before recording (mic, disk, battery, notifications, camera for talking heads) as plain rules; optional outline: hook, points, payoff, call to action. | Checks: none. Outline: any, fits on device. |
 | Editor (`EditorAgent`) | After auto-clean, one "keep this sentence?" question per sentence. With a length ("make it 60s") it drops the weakest until it fits; otherwise it drops ones under the Energy's threshold. Cuts are proposed (dashed) with reason `trim`. | Decisions API first, else any. |
-| Clipper (`ClipperAgent`) | Scores candidate windows (from the clips feature's ClipFinder, or 15 to 60 s of whole sentences), keeps the best that don't overlap, titles them. Picks map onto `Clip` with origin `agent`. | Scores: Decisions first. Titles: any. |
+| Clipper (`ClipperAgent`) | Scores candidate windows (from the clips feature's ClipFinder, or 15 to 60 s of whole sentences), keeps the best that don't overlap, titles them. Picks become proposed `Clip`s with origin `agent` in clips.json, so they show dashed in the editor's Clips tab. | Scores: Decisions first. Titles: any. |
 | Sharer (`SharerAgent`) | Title, description, chapters (timed on the edited video), one post per network and a Version One launch draft matching `share_launch`. Saved as `share.json`; posting asks each time. | Any; usually rung 2. |
 
 ## Pick what it's for, and the Energy dial

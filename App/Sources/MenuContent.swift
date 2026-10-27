@@ -1,118 +1,293 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 import VisionOneKit
 
-/// The panel that drops down from the menu bar. Ink on paper; the only
-/// orange is the record dot and, while live, the button border.
+/// The panel that drops down from the menu bar: what to record, which
+/// sources, one big record button, then the last take. Ink on paper; the
+/// only orange is the menu ring, the button border and the dot while live.
+/// Each section folds to a one-line summary and stays how you left it.
 struct MenuContent: View {
     @EnvironmentObject private var recorder: ScreenRecorder
     @ObservedObject private var exports = ExportController.shared
     @ObservedObject private var transcriber = Transcriber.shared
     @ObservedObject private var updater = Updater.shared
-    @ObservedObject private var devices = CaptureDevices.shared
+    @ObservedObject private var microphones = Microphones.shared
+    @AppStorage("panel.recordOpen") private var recordOpen = true
+    @AppStorage("panel.sourcesOpen") private var sourcesOpen = true
+    @AppStorage("panel.takeOpen") private var takeOpen = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.md) {
-            HStack {
-                Text("vision one")
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Theme.Space.sm) {
+                PanelRing(isLive: recorder.phase.isLive)
+                Text("Vision One")
                     .font(.system(size: 13, weight: .semibold))
                 UpdateBadge(updater: updater)
-                Spacer()
-                Text("⌘⇧R")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Theme.textMuted)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Theme.Panel.inset)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+
+            // Choices fold away while recording, so nothing changes mid-take.
+            PanelSection(title: "Record", summary: recordSummary, isOpen: $recordOpen, locked: isLocked) {
+                CapturePicker()
+            }
+            PanelSection(title: "Sources", summary: sourcesSummary, isOpen: $sourcesOpen, locked: isLocked) {
+                SourcesList()
             }
 
-            HStack(spacing: Theme.Space.md) {
-                RecordButton(phase: recorder.phase) {
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                if case let .failed(message) = recorder.phase {
+                    ErrorAlert(message: message) { recorder.openSetup() }
+                }
+                RecordBar(phase: recorder.phase, title: idleTitle) {
                     Task { await recorder.toggle() }
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(statusTitle)
-                        .font(.system(size: 13, weight: .medium))
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(Timecode.string(from: recorder.phase.elapsed(at: context.date) ?? 0))
-                            .font(.system(size: 12, design: .monospaced).monospacedDigit())
-                            .foregroundStyle(Theme.textMuted)
-                    }
+                ForEach(recorder.trackNotes, id: \.self) { note in
+                    Text(note)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !recorder.phase.isLive {
+                    FooterLink("Before you record…") { ProducerWindowController.shared.show() }
+                }
+            }
+            .padding(.horizontal, Theme.Panel.inset)
+            .padding(.top, 4)
+            .padding(.bottom, 14)
+
+            if let take = recorder.lastTake, !recorder.phase.isLive {
+                PanelSection(title: "Last take", summary: take.shortLabel(), isOpen: $takeOpen) {
+                    LastTakeCard(take: take, exports: exports, transcriber: transcriber,
+                                 isBusy: recorder.phase.isBusy)
                 }
             }
 
-            CapturePicker()
-                .disabled(recorder.phase.isLive || recorder.phase.isBusy)
-            SourcesRow(devices: devices)
-                .disabled(recorder.phase.isLive || recorder.phase.isBusy)
-
-            ForEach(recorder.trackNotes, id: \.self) { note in
-                Text(note)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 14) {
+                FooterLink("All recordings") { recorder.revealRecordings() }
+                FooterLink("Brand") { BrandWindowController.shared.show() }
+                FooterLink("AI") { AISettingsWindowController.shared.show() }
+                FooterLink("Access") { recorder.openSetup() }
+                Spacer(minLength: 0)
+                FooterLink("Quit") { NSApplication.shared.terminate(nil) }
+                    .keyboardShortcut("q")
             }
-
-            if case let .failed(message) = recorder.phase {
-                ErrorAlert(message: message) { recorder.openSetup() }
-            }
-
-            if let text = transcriber.phase.statusText {
-                TranscriptStatus(text: text, phase: transcriber.phase) { transcriber.retry() }
-            }
-
-            if let take = recorder.lastTake, !recorder.phase.isLive {
-                ExportRow(take: take, exports: exports)
-            }
-
-            HStack {
-                Button("Before you record…") { ProducerWindowController.shared.show() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-                    .disabled(recorder.phase.isLive)
-                Spacer()
-                Button("AI settings") { AISettingsWindowController.shared.show() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-            }
-
-            Divider().overlay(Theme.line)
-
-            HStack {
-                Button("Edit last take") { EditorWindowController.shared.openLatest() }
-                    .buttonStyle(PillButtonStyle(kind: .primary))
-                    .disabled(recorder.phase.isLive || recorder.phase.isBusy)
-                Button("Show recordings") { recorder.revealRecordings() }
-                    .buttonStyle(PillButtonStyle(kind: .secondary))
-                Spacer()
-                Button("Brand") { BrandWindowController.shared.show() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-                Button("Access") { recorder.openSetup() }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-            }
+            .padding(.horizontal, Theme.Panel.inset)
+            .padding(.vertical, Theme.Space.sm)
+            .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 1) }
         }
-        .padding(Theme.Space.md)
-        .frame(width: 280)
+        .frame(width: Theme.Panel.width)
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
         .environment(\.colorScheme, .light) // light only, always
     }
 
-    private var statusTitle: String {
-        switch recorder.phase {
-        case .idle: return "Record \(recorder.choice.mode.title.lowercased())"
-        case .preparing: return "Getting ready…"
-        case .recording: return "Recording"
-        case .finishing: return "Saving…"
-        case .failed: return "Couldn't record"
+    private var isLocked: Bool { recorder.phase.isLive || recorder.phase.isBusy }
+
+    private var idleTitle: String {
+        switch recorder.choice.missingStep {
+        case .pickWindow: return "Pick a window first"
+        case .dragArea: return "Choose an area to record"
+        case nil: return "Record \(recorder.choice.mode.title.lowercased())"
         }
+    }
+
+    private var recordSummary: String {
+        let choice = recorder.choice
+        switch choice.mode {
+        case .screen:
+            let id = choice.displayID ?? CGMainDisplayID()
+            let name = NSScreen.screens.first { $0.displayID == id }?.localizedName
+            return name.map { "Screen · \($0)" } ?? "Screen"
+        case .window:
+            return choice.windowID == nil ? "Window · none picked" : "Window"
+        case .area:
+            guard let area = choice.area else { return "Area · none yet" }
+            return "Area · \(Int(area.width)) × \(Int(area.height))"
+        }
+    }
+
+    private var sourcesSummary: String {
+        var on: [String] = []
+        if recorder.choice.includeMicrophone {
+            on.append(microphones.resolved(for: recorder.choice)?.name ?? "Mic")
+        }
+        if recorder.choice.includeSystemSound { on.append("Sound") }
+        return on.isEmpty ? "Video only" : on.joined(separator: " · ")
+    }
+}
+
+/// The builder's ring, small: dashed while idle, orange and solid while
+/// live, like the menu bar icon.
+private struct PanelRing: View {
+    let isLive: Bool
+
+    var body: some View {
+        ZStack {
+            if isLive {
+                Circle().strokeBorder(Theme.tally, lineWidth: 2)
+                Circle().fill(Theme.tally).frame(width: 6, height: 6)
+            } else {
+                Circle().strokeBorder(Theme.text, style: StrokeStyle(lineWidth: 1.5, dash: [2.5, 2]))
+            }
+        }
+        .frame(width: 16, height: 16)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A titled part of the panel with a hairline above it. Click the title
+/// to fold it to a one-line summary; `locked` keeps it folded.
+private struct PanelSection<Content: View>: View {
+    let title: String
+    let summary: String
+    @Binding var isOpen: Bool
+    var locked = false
+    let content: Content
+
+    init(title: String, summary: String, isOpen: Binding<Bool>, locked: Bool = false,
+         @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.summary = summary
+        self._isOpen = isOpen
+        self.locked = locked
+        self.content = content()
+    }
+
+    private var open: Bool { isOpen && !locked }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.sm) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { isOpen.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(open ? 0 : -90))
+                    Text(title.uppercased())
+                        .font(.system(size: 11, weight: .medium))
+                        .tracking(0.66)
+                    Spacer(minLength: Theme.Space.sm)
+                    if !open {
+                        Text(summary)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+                .foregroundStyle(Theme.textMuted)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(locked)
+            .accessibilityLabel(title)
+            .accessibilityValue(open ? "Shown" : summary)
+
+            if open { content }
+        }
+        .padding(.horizontal, Theme.Panel.inset)
+        .padding(.top, 10)
+        .padding(.bottom, open ? 12 : 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+}
+
+/// One wide button. Idle it's a black pill with a hollow dot, ink like
+/// every other button. Live it turns white with an orange border, a
+/// blinking orange dot, the running time and Stop.
+struct RecordBar: View {
+    let phase: RecordingPhase
+    let title: String
+    let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                if phase.isLive {
+                    TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                        HStack(spacing: 10) {
+                            Circle()
+                                .fill(Theme.tally)
+                                .frame(width: 12, height: 12)
+                                .opacity(blinkOn(at: context.date) ? 1 : 0.25)
+                            Text(Timecode.string(from: phase.elapsed(at: context.date) ?? 0))
+                                .font(.system(size: 13, weight: .medium, design: .monospaced).monospacedDigit())
+                        }
+                    }
+                    Spacer(minLength: Theme.Space.sm)
+                    HStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Theme.text)
+                            .frame(width: 10, height: 10)
+                        Text("Stop")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                } else if phase.isBusy {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Theme.paper)
+                    Text(busyTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer(minLength: 0)
+                } else {
+                    Circle()
+                        .strokeBorder(Theme.paper, lineWidth: 2)
+                        .frame(width: 14, height: 14)
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: Theme.Space.sm)
+                    Text("⌘⇧R")
+                        .font(.system(size: 11, design: .monospaced))
+                        .opacity(0.7)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(phase.isLive ? Theme.text : Theme.paper)
+            .background(Capsule().fill(phase.isLive ? Theme.paper : Theme.text))
+            .overlay(Capsule().strokeBorder(phase.isLive ? Theme.tally : Theme.text, lineWidth: 2))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(phase.isBusy)
+        .accessibilityLabel(phase.isLive ? "Stop recording" : title)
+    }
+
+    private var busyTitle: String {
+        if case .finishing = phase { return "Saving…" }
+        return "Getting ready…"
+    }
+
+    private func blinkOn(at date: Date) -> Bool {
+        reduceMotion || Int(date.timeIntervalSinceReferenceDate * 2) % 2 == 0
+    }
+}
+
+/// Quiet text links along the foot of the panel.
+private struct FooterLink: View {
+    let title: String
+    let action: () -> Void
+
+    init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    var body: some View {
+        Button(title, action: action)
+            .buttonStyle(.plain)
+            .font(.system(size: 12))
+            .foregroundStyle(Theme.textMuted)
+            .lineLimit(1)
+            .fixedSize()
     }
 }
 
@@ -133,38 +308,6 @@ struct UpdateBadge: View {
                 .disabled(!updater.isEnabled)
                 .help(updater.isEnabled ? "Check for updates" : "Dev builds don't update")
         }
-    }
-}
-
-/// White circle, ink border, orange dot. While live the border turns
-/// orange and the dot becomes an ink stop square.
-struct RecordButton: View {
-    let phase: RecordingPhase
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(Theme.paper)
-                Circle()
-                    .strokeBorder(phase.isLive ? Theme.tally : Theme.text, lineWidth: 2)
-                if phase.isLive {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Theme.text)
-                        .frame(width: 14, height: 14)
-                } else {
-                    Circle()
-                        .fill(Theme.tally)
-                        .frame(width: 18, height: 18)
-                }
-            }
-            .frame(width: 44, height: 44)
-            .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(phase.isBusy)
-        .accessibilityLabel(phase.isLive ? "Stop recording" : "Start recording")
     }
 }
 
@@ -219,11 +362,10 @@ struct ErrorAlert: View {
     }
 }
 
-/// Screen, Window or Area, then what to record within it, and which
-/// sound. Changes are saved for the next take.
+/// Screen, Window or Area, then what to record within it. Changes are
+/// saved for the next take.
 struct CapturePicker: View {
     @EnvironmentObject private var recorder: ScreenRecorder
-    @ObservedObject private var microphones = Microphones.shared
     @State private var windows: [WindowCandidate] = []
 
     var body: some View {
@@ -232,80 +374,96 @@ struct CapturePicker: View {
 
             switch recorder.choice.mode {
             case .screen:
-                if NSScreen.screens.count > 1 { displayPicker }
+                displayRow
             case .window:
-                windowPicker
+                windowRow
             case .area:
                 areaRow
             }
+        }
+    }
 
-            HStack(spacing: Theme.Space.md) {
-                Toggle("Mic", isOn: $recorder.choice.includeMicrophone)
-                Toggle("System sound", isOn: $recorder.choice.includeSystemSound)
+    @ViewBuilder
+    private var displayRow: some View {
+        if NSScreen.screens.count > 1 {
+            ChoiceRow(label: "Display") {
+                Picker("Display", selection: Binding(
+                    get: { recorder.choice.displayID ?? CGMainDisplayID() },
+                    set: { recorder.choice.displayID = $0 }
+                )) {
+                    ForEach(NSScreen.screens, id: \.self) { screen in
+                        if let id = screen.displayID {
+                            Text(screen.localizedName).tag(id)
+                        }
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
             }
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-            .tint(Theme.text)
-            .font(.system(size: 12))
-
-            if recorder.choice.includeMicrophone, let mic = microphones.resolved(for: recorder.choice) {
-                Text("Mic: \(mic.name)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.textMuted)
+        } else {
+            ChoiceRow(label: "Display") {
+                Text(NSScreen.main?.localizedName ?? "Main display")
+                    .foregroundStyle(Theme.text)
                     .lineLimit(1)
-                    .truncationMode(.middle)
             }
         }
     }
 
-    private var displayPicker: some View {
-        Picker("Screen", selection: Binding(
-            get: { recorder.choice.displayID ?? CGMainDisplayID() },
-            set: { recorder.choice.displayID = $0 }
-        )) {
-            ForEach(NSScreen.screens, id: \.self) { screen in
-                if let id = screen.displayID {
-                    Text(screen.localizedName).tag(id)
+    private var windowRow: some View {
+        ChoiceRow(label: "Window") {
+            Picker("Window", selection: $recorder.choice.windowID) {
+                Text("Choose a window").tag(UInt32?.none)
+                ForEach(windows) { window in
+                    Text(window.label).tag(UInt32?.some(window.id))
                 }
             }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: 200)
         }
-        .pickerStyle(.menu)
-        .font(.system(size: 12))
-    }
-
-    private var windowPicker: some View {
-        Picker("Window", selection: $recorder.choice.windowID) {
-            Text("Choose a window").tag(UInt32?.none)
-            ForEach(windows) { window in
-                Text(window.label).tag(UInt32?.some(window.id))
-            }
-        }
-        .pickerStyle(.menu)
-        .font(.system(size: 12))
         .task { windows = await recorder.pickableWindows() }
     }
 
     private var areaRow: some View {
-        HStack {
+        ChoiceRow(label: "Area") {
             if let area = recorder.choice.area {
                 Text("\(Int(area.width)) × \(Int(area.height))")
                     .font(.system(size: 12, design: .monospaced).monospacedDigit())
-            } else {
-                Text("No area yet")
-                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.text)
             }
-            Spacer()
             Button(recorder.choice.area == nil ? "Choose area" : "Change area") {
                 recorder.chooseArea()
             }
             .buttonStyle(PillButtonStyle(kind: .secondary))
         }
-        .foregroundStyle(Theme.textMuted)
     }
 }
 
-/// Three ink segments. The chosen one is a black pill, like a primary
-/// button; the others are plain text.
+/// A muted label on the left, the control on the right.
+private struct ChoiceRow<Control: View>: View {
+    let label: String
+    let control: Control
+
+    init(label: String, @ViewBuilder control: () -> Control) {
+        self.label = label
+        self.control = control()
+    }
+
+    var body: some View {
+        HStack(spacing: Theme.Space.sm) {
+            Text(label)
+                .foregroundStyle(Theme.textMuted)
+            Spacer(minLength: Theme.Space.sm)
+            control
+        }
+        .font(.system(size: 12))
+        .frame(minHeight: 24)
+    }
+}
+
+/// Three ink segments with icons. The chosen one is a black pill, like a
+/// primary button; the others are plain text.
 private struct ModeSwitch: View {
     @Binding var selection: CaptureMode
 
@@ -315,7 +473,8 @@ private struct ModeSwitch: View {
                 Button {
                     selection = mode
                 } label: {
-                    Text(mode.title)
+                    Label(mode.title, systemImage: mode.symbol)
+                        .labelStyle(.titleAndIcon)
                         .font(.system(size: 12, weight: .medium))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 5)
@@ -332,30 +491,175 @@ private struct ModeSwitch: View {
     }
 }
 
-/// Exports the last take, with the cuts saved in its edits.json.
-struct ExportRow: View {
+private extension CaptureMode {
+    var symbol: String {
+        switch self {
+        case .screen: return "display"
+        case .window: return "macwindow"
+        case .area: return "rectangle.dashed"
+        }
+    }
+}
+
+/// Mic, system sound and iPhone screen, each naming what it records.
+struct SourcesList: View {
+    @EnvironmentObject private var recorder: ScreenRecorder
+    @ObservedObject private var microphones = Microphones.shared
+    @ObservedObject private var devices = CaptureDevices.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SourceRow(symbol: "mic", title: "Microphone", isOn: $recorder.choice.includeMicrophone) {
+                micMenu
+            }
+            if recorder.choice.includeMicrophone, let mic = activeMic, mic.dropsHeadphonesToCallQuality {
+                Text("\(mic.name) switches to call quality while it records, so what you hear sounds muffled. Pick the Mac's mic to keep music quality.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Theme.Space.sm)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
+            }
+            SourceRow(symbol: "speaker.wave.2", title: "System sound", isOn: $recorder.choice.includeSystemSound) {
+                Text("What's playing on the Mac")
+                    .foregroundStyle(Theme.textMuted)
+            }
+            // iPhone screen over USB, from the device tracks work.
+            SourcesRow(devices: devices)
+        }
+        .onAppear { microphones.refresh() }
+    }
+
+    private var activeMic: MicrophoneOption? { microphones.resolved(for: recorder.choice) }
+
+    private var micMenu: some View {
+        Menu {
+            Button {
+                recorder.choice.microphoneID = nil
+            } label: {
+                if recorder.choice.microphoneID == nil {
+                    Label("Automatic", systemImage: "checkmark")
+                } else {
+                    Text("Automatic")
+                }
+            }
+            Divider()
+            ForEach(microphones.options) { option in
+                Button {
+                    recorder.choice.microphoneID = option.id
+                } label: {
+                    let name = option.dropsHeadphonesToCallQuality ? "\(option.name) (call quality)" : option.name
+                    if recorder.choice.microphoneID == option.id {
+                        Label(name, systemImage: "checkmark")
+                    } else {
+                        Text(name)
+                    }
+                }
+            }
+        } label: {
+            Text(activeMic?.name ?? "No mic found")
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.visible)
+        .fixedSize(horizontal: false, vertical: true)
+        .foregroundStyle(Theme.text)
+        .disabled(!recorder.choice.includeMicrophone || microphones.options.isEmpty)
+        .help("Which mic records your voice")
+    }
+}
+
+/// Icon, name and what it records, then a switch. Faded when off.
+private struct SourceRow<Detail: View>: View {
+    let symbol: String
+    let title: String
+    @Binding var isOn: Bool
+    let detail: Detail
+
+    init(symbol: String, title: String, isOn: Binding<Bool>, @ViewBuilder detail: () -> Detail) {
+        self.symbol = symbol
+        self.title = title
+        self._isOn = isOn
+        self.detail = detail()
+    }
+
+    var body: some View {
+        HStack(spacing: Theme.Space.sm) {
+            Image(systemName: symbol)
+                .font(.system(size: 13))
+                .frame(width: 18)
+                .foregroundStyle(isOn ? Theme.text : Theme.textMuted)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(isOn ? Theme.text : Theme.textMuted)
+                detail
+                    .font(.system(size: 11))
+            }
+            Spacer(minLength: Theme.Space.sm)
+            Toggle(title, isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .tint(Theme.text)
+        }
+        .frame(minHeight: 30)
+    }
+}
+
+/// The newest take: a thumbnail, when it was made, then Edit, Export and
+/// Show in Finder. Export progress and the transcript line sit below.
+struct LastTakeCard: View {
     let take: Take
     @ObservedObject var exports: ExportController
+    @ObservedObject var transcriber: Transcriber
+    let isBusy: Bool
+    @State private var duration: Double?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            HStack {
-                ExportMenu(take: take, exports: exports)
+            HStack(spacing: 10) {
+                TakeThumbnail(take: take, duration: $duration)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(take.shortLabel())
+                        .font(.system(size: 12.5, weight: .medium))
+                        .lineLimit(1)
+                    Text(detailLine)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textMuted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
 
-                Spacer()
-
-                switch exports.phase {
-                case .exporting:
+            HStack(spacing: 6) {
+                Button("Edit") { EditorWindowController.shared.open(take) }
+                    .buttonStyle(PillButtonStyle(kind: .primary))
+                    .disabled(isBusy)
+                ExportMenu(take: take, exports: exports, kind: .secondary)
+                Spacer(minLength: 0)
+                if case .exporting = exports.phase {
                     Button("Cancel") { exports.cancel() }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.textMuted)
-                case .done:
-                    Button("Show") { exports.revealExport() }
-                        .buttonStyle(PillButtonStyle(kind: .secondary))
-                default:
-                    EmptyView()
                 }
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([take.screenURL])
+                } label: {
+                    Image(systemName: "folder")
+                        .font(.system(size: 13))
+                        .frame(width: 26, height: 26)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.textMuted)
+                .help("Show in Finder")
+                .accessibilityLabel("Show in Finder")
             }
 
             if !exports.phase.status.isEmpty {
@@ -368,9 +672,28 @@ struct ExportRow: View {
                         .foregroundStyle(exportFailed ? Theme.error : Theme.textMuted)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
+                    if case .done = exports.phase {
+                        Spacer(minLength: 0)
+                        Button("Show") { exports.revealExport() }
+                            .buttonStyle(PillButtonStyle(kind: .secondary))
+                    }
                 }
             }
+
+            if let text = transcriber.phase.statusText {
+                TranscriptStatus(text: text, phase: transcriber.phase) { transcriber.retry() }
+            }
         }
+    }
+
+    private var detailLine: String {
+        var parts: [String] = []
+        if let duration { parts.append(Timecode.short(from: duration)) }
+        if transcriber.phase.statusText == nil,
+           FileManager.default.fileExists(atPath: take.transcriptURL.path) {
+            parts.append("Transcript ready")
+        }
+        return parts.isEmpty ? take.name : parts.joined(separator: " · ")
     }
 
     /// The ring fills while exporting and is solid once done.
@@ -388,12 +711,59 @@ struct ExportRow: View {
     }
 }
 
-/// The black Export pill with one item per preset. `keep` overrides the
-/// kept spans; nil uses the take's saved edits.json.
+/// A frame from about a second in, with the take's length on it.
+private struct TakeThumbnail: View {
+    let take: Take
+    @Binding var duration: Double?
+    @State private var image: CGImage?
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            RoundedRectangle(cornerRadius: Theme.Radius.sm)
+                .fill(Theme.canvas)
+            if let image {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            }
+            if let duration {
+                Text(Timecode.short(from: duration))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced).monospacedDigit())
+                    .foregroundStyle(Theme.paper)
+                    .padding(.horizontal, 3)
+                    .background(Theme.text.opacity(0.75), in: RoundedRectangle(cornerRadius: 3))
+                    .padding(3)
+            }
+        }
+        .frame(width: 72, height: 45)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.sm))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.sm).strokeBorder(Theme.line, lineWidth: 1))
+        .task(id: take.folder) { await load() }
+        .accessibilityHidden(true)
+    }
+
+    private func load() async {
+        image = nil
+        duration = nil
+        let asset = AVURLAsset(url: take.screenURL)
+        let seconds = (try? await asset.load(.duration))?.seconds ?? 0
+        if seconds.isFinite, seconds > 0 { duration = seconds }
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 288, height: 180)
+        let at = CMTime(seconds: min(1, max(seconds / 2, 0)), preferredTimescale: 600)
+        image = try? await generator.image(at: at).image
+    }
+}
+
+/// The Export pill, black unless `kind` says otherwise, with one item
+/// per preset. `keep` overrides the kept spans; nil uses the take's saved
+/// edits.json.
 struct ExportMenu: View {
     let take: Take
     var keep: [Range<Double>]? = nil
     @ObservedObject var exports: ExportController
+    var kind: PillButtonStyle.Kind = .primary
 
     var body: some View {
         Menu("Export") {
@@ -408,7 +778,7 @@ struct ExportMenu: View {
             }
         }
         .menuStyle(.button)
-        .buttonStyle(PillButtonStyle(kind: .primary))
+        .buttonStyle(PillButtonStyle(kind: kind))
         .fixedSize()
         .disabled(exports.phase.isBusy)
     }

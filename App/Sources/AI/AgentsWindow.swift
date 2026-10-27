@@ -75,13 +75,26 @@ final class AgentsModel: ObservableObject {
                 let transcript = try Transcript.read(from: take.transcriptURL)
                 let edits = try EditList.load(from: take.editsURL, sourceDuration: transcript.duration)
                 let format = purpose.formats.contains("vertical") ? "vertical" : purpose.formats.first ?? "vertical"
-                let candidates = ClipperAgent.candidates(from: transcript.sentences(keeping: edits))
+                // The on-device finder's windows first; plain sentence windows if it found none.
+                var candidates = ClipFinder().candidates(transcript: transcript, edits: edits).map(ClipCandidate.init)
+                if candidates.isEmpty {
+                    candidates = ClipperAgent.candidates(from: transcript.sentences(keeping: edits))
+                }
                 guard !candidates.isEmpty else {
                     clipperRun = .done("This take is too short for clips of 15 seconds or more.")
                     return
                 }
                 clips = try await agent.pick(from: candidates, brief: brief, count: 3, format: format)
-                clipperRun = .done(clips.isEmpty ? "No moment stands on its own yet." : "")
+                // Into clips.json, where the editor's Clips tab shows them dashed.
+                var list = try ClipList.load(from: take.clipsURL)
+                let added = list.propose(clips.map(\.clip), sourceDuration: transcript.duration)
+                try list.write(to: take.clipsURL)
+                if clips.isEmpty {
+                    clipperRun = .done("No moment stands on its own yet.")
+                } else {
+                    clipperRun = .done(added.isEmpty ? "These are already in the Clips tab."
+                                       : "Added \(added.count) to the Clips tab, dashed until you keep them.")
+                }
             } catch {
                 clipperRun = .failed(AgentsModel.message(for: error))
             }

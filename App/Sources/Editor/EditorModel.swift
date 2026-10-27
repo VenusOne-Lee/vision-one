@@ -25,6 +25,8 @@ final class EditorModel: ObservableObject {
     let take: Take
     let undoManager = UndoManager()
     let player = AVPlayer()
+    /// Zooms and blurs, drawn into the preview by the export compositor.
+    let effects: EffectsModel
 
     @Published private(set) var phase: Phase = .loading
     @Published private(set) var transcriptState: TranscriptState = .loading
@@ -38,6 +40,8 @@ final class EditorModel: ObservableObject {
     @Published private(set) var sourceTime: Double = 0
     @Published private(set) var isPlaying = false
     @Published var saveError: String?
+    /// Shape of the video, so boxes drawn over the preview line up.
+    @Published private(set) var videoSize: CGSize = .zero
 
     /// Words in time order and their spans, cached from the transcript.
     private(set) var words: [TranscriptWord] = []
@@ -51,9 +55,13 @@ final class EditorModel: ObservableObject {
     /// (auto-clean runs right after transcription) can be told apart
     /// from cuts the user removed here.
     private var knownCutIDs = Set<UUID>()
+    /// The preview as last built, so zooms and blurs can be redrawn
+    /// without rebuilding it.
+    private var preview: (composition: AVComposition, trackID: CMPersistentTrackID, renderSize: CGSize)?
 
     init(take: Take) {
         self.take = take
+        effects = EffectsModel(take: take, undoManager: undoManager)
     }
 
     // MARK: Loading
@@ -75,6 +83,8 @@ final class EditorModel: ObservableObject {
             phase = .failed("Couldn't open this take: \(error.localizedDescription)")
             return
         }
+        effects.onChange = { [weak self] in self?.refreshEffects() }
+        effects.load(edits: edits)
         addTimeObserver()
         await rebuildPlayer()
         phase = .ready
@@ -132,6 +142,7 @@ final class EditorModel: ObservableObject {
         timeObserver = nil
         rebuildTask?.cancel()
         watch?.cancel()
+        effects.close()
     }
 
     // MARK: Editing
@@ -289,7 +300,19 @@ final class EditorModel: ObservableObject {
                                           sourceDuration: edits.sourceDuration, frameRate: 0)
             let added = await SoundComposer.add(sound, timeline: timeline, words: wordSpans, to: composition)
             guard !Task.isCancelled else { return }
+            if let track = composition.tracks(withMediaType: .video).first {
+                let natural = try await track.load(.naturalSize)
+                // Big enough to judge a blur, small enough to play smoothly.
+                let scale = min(1, 1920 / max(natural.width, natural.height, 1))
+                let size = CGSize(width: (natural.width * scale / 2).rounded() * 2,
+                                  height: (natural.height * scale / 2).rounded() * 2)
+                preview = (composition, track.trackID, size)
+                videoSize = natural
+            } else {
+                preview = nil
+            }
             let item = AVPlayerItem(asset: composition)
+            item.videoComposition = previewVideoComposition()
             if !added.parameters.isEmpty {
                 let mix = AVMutableAudioMix()
                 mix.inputParameters = added.parameters
@@ -302,6 +325,29 @@ final class EditorModel: ObservableObject {
         } catch {
             phase = .failed("Couldn't prepare the preview: \(error.localizedDescription)")
         }
+    }
+}
+
+extension EditorModel {
+    /// Redraws zooms and blurs on the current preview, keeping its place.
+    func refreshEffects() {
+        player.currentItem?.videoComposition = previewVideoComposition()
+    }
+
+    /// The export compositor, drawing this take's zooms and blurs, or nil
+    /// to play the frames as they are.
+    fileprivate func previewVideoComposition() -> AVVideoComposition? {
+        guard let preview, preview.renderSize.width > 0,
+              let effects = effects.previewEffects(edits: edits) else { return nil }
+        let composition = AVMutableVideoComposition()
+        composition.customVideoCompositorClass = FrameCompositor.self
+        composition.renderSize = preview.renderSize
+        composition.frameDuration = CMTime(value: 1, timescale: 30)
+        composition.instructions = [
+            FrameInstruction(timeRange: CMTimeRange(start: .zero, duration: preview.composition.duration),
+                             trackID: preview.trackID, overlays: [], effects: effects),
+        ]
+        return composition
     }
 }
 

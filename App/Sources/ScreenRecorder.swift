@@ -35,6 +35,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
     private override init() {
         choice = CaptureChoice.decoded(from: UserDefaults.standard.data(forKey: Self.choiceKey))
         super.init()
+        lastTake = library.takes().first
     }
 
     func toggle() async {

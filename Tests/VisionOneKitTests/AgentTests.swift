@@ -137,6 +137,16 @@ final class AgentTests: XCTestCase {
         XCTAssertFalse(picks[0].span.overlaps(picks[1].span))
     }
 
+    func testClipPickBecomesProposedAgentClip() {
+        let clip = ClipPick(start: 2, end: 20, score: 0.8, title: "T", hook: "H", format: "square").clip
+        XCTAssertEqual(clip.origin, Clip.Origin.agent)
+        XCTAssertEqual(clip.state, .proposed)
+        XCTAssertEqual(clip.format, .square)
+        var list = ClipList()
+        XCTAssertEqual(list.propose([clip], sourceDuration: 30).count, 1)
+        XCTAssertTrue(list.propose([clip], sourceDuration: 30).isEmpty)
+    }
+
     // MARK: Sharer
 
     func testSharerMapsChaptersToEditedTime() async throws {

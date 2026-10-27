@@ -11,4 +11,13 @@ public enum Timecode {
         let s = total % 60
         return String(format: "%02d:%02d:%02d", h, m, s)
     }
+
+    /// "2:13" or "1:02:13", for a take's length on its thumbnail.
+    public static func short(from seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded(.down)))
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+    }
 }
