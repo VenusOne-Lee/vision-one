@@ -1,6 +1,7 @@
 import AppKit
 import CoreText
 import SwiftUI
+import VisionOneKit
 
 /// PostScript names of the fonts in App/Resources/Fonts. Static OFL
 /// instances: Bricolage Grotesque at optical size 12 for controls and at
@@ -57,7 +58,13 @@ enum TypeStyle: CaseIterable {
         case .body, .caption: BundledFont.sansRegular
         case .bodyStrong: BundledFont.sansMedium
         case .mono, .monoSmall: BundledFont.monoRegular
-        case .transcript: BundledFont.serifRegular
+        case .transcript:
+            switch Theme.appearance.transcriptFont {
+            case .serif: BundledFont.serifRegular
+            case .sans: BundledFont.sansRegular
+            // No bundled face: the system font below, with its open shapes.
+            case .easyRead: ""
+            }
         }
     }
 
@@ -108,10 +115,14 @@ enum TypeStyle: CaseIterable {
         let points = (size * scale).rounded()
         guard NSFont(name: postScriptName, size: points) != nil else {
             let base = Font.system(size: points, weight: systemWeight,
-                                   design: self == .transcript ? .serif : .default)
+                                   design: usesSerifFallback ? .serif : .default)
             return self == .mono || self == .monoSmall ? base.monospacedDigit() : base
         }
         return Font.custom(postScriptName, fixedSize: points)
+    }
+
+    private var usesSerifFallback: Bool {
+        self == .transcript && Theme.appearance.transcriptFont == .serif
     }
 
     func nsFont(scale: CGFloat = 1) -> NSFont {

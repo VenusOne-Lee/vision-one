@@ -2,35 +2,54 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
-/// Tokens from docs/DESIGN.md. Light only. Tally orange means "recording
-/// is live" and nothing else. There is no success green. The values live
-/// in VisionOneKit's DesignTokens so `swift test` checks their contrast.
+/// Tokens from docs/DESIGN.md, read from the look picked in Settings →
+/// Appearance (VisionOneKit's `ThemePalette`, contrast tested for every
+/// preset). Paper, ink on white, is the default. Tally orange means
+/// "recording is live" in every look and nothing else. There is no
+/// success green. Hosting roots add `.themed()` so a new look repaints.
 /// Components that use these are in DesignSystem/.
 enum Theme {
-    static let paper = Color(hex: DesignTokens.paper)
-    static let canvas = Color(hex: DesignTokens.canvas)
-    /// Panel edges and dividers. With Increase Contrast on, as strong as a control edge.
-    static let line = Color(hex: DesignTokens.line, increased: DesignTokens.lineStrong)
-    /// Edges of fields, switches and anything you can click.
-    static let lineStrong = Color(hex: DesignTokens.lineStrong, increased: DesignTokens.text)
-    static let text = Color(hex: DesignTokens.text)
-    /// Secondary text. Becomes ink with Increase Contrast on.
-    static let textMuted = Color(hex: DesignTokens.textMuted, increased: DesignTokens.text)
-    /// Placeholders and tertiary text.
-    static let textFaint = Color(hex: DesignTokens.textFaint, increased: DesignTokens.textMuted)
-    /// Only for "recording is live". Never buttons, links or badges.
-    static let tally = Color(hex: DesignTokens.tally)
-    static let tallySoft = Color(hex: DesignTokens.tallySoft)
-    static let error = Color(hex: DesignTokens.error)
-    static let errorSoft = Color(hex: DesignTokens.errorSoft)
+    /// The look in use. Set by ThemeStore on the main thread.
+    static var palette: ThemePalette { ThemeState.palette }
+    static var appearance: Appearance { ThemeState.appearance }
 
+    static var paper: Color { Color(hex: palette.paper) }
+    static var canvas: Color { Color(hex: palette.canvas) }
+    /// Panel edges and dividers.
+    static var line: Color { Color(hex: palette.line) }
+    /// Edges of fields, switches and anything you can click.
+    static var lineStrong: Color { Color(hex: palette.lineStrong) }
+    static var text: Color { Color(hex: palette.text) }
+    /// Secondary text.
+    static var textMuted: Color { Color(hex: palette.textMuted) }
+    /// Placeholders and tertiary text.
+    static var textFaint: Color { Color(hex: palette.textFaint) }
+    /// The primary button: ink, or the ring colour with Bold buttons.
+    static var button: Color { Color(hex: palette.button) }
+    static var onButton: Color { Color(hex: palette.onButton) }
+    /// The builder's ring colour: rings, the camera bubble edge.
+    static var accent: Color { Color(hex: palette.accent) }
+    /// Behind the video.
+    static var stage: Color { Color(hex: palette.stage) }
+    /// Only for "recording is live". Never buttons, links or badges.
+    static let tally = Color(hex: ThemePalette.tally)
+    static var tallySoft: Color { Color(hex: palette.tallySoft) }
+    static var error: Color { Color(hex: palette.error) }
+    static var errorSoft: Color { Color(hex: palette.errorSoft) }
+
+    /// Roomy density opens the larger gaps up by a quarter; the small
+    /// ones stay put so rows still line up.
     enum Space {
         static let xs: CGFloat = 4
         static let sm: CGFloat = 8
-        static let md: CGFloat = 16
-        static let lg: CGFloat = 24
-        static let xl: CGFloat = 32
-        static let xxl: CGFloat = 48
+        static var md: CGFloat { roomy(16) }
+        static var lg: CGFloat { roomy(24) }
+        static var xl: CGFloat { roomy(32) }
+        static var xxl: CGFloat { roomy(48) }
+
+        private static func roomy(_ value: CGFloat) -> CGFloat {
+            Theme.appearance.density == .roomy ? (value * 1.25).rounded() : value
+        }
     }
 
     /// The menu bar panel: wide enough that no label wraps.
@@ -39,11 +58,22 @@ enum Theme {
         static let inset: CGFloat = 14
     }
 
+    /// Corners: Sharp, Soft (the default) or Round.
     enum Radius {
-        static let sm: CGFloat = 4
-        static let md: CGFloat = 8
-        static let lg: CGFloat = 12
+        static var sm: CGFloat { scaled(4) }
+        static var md: CGFloat { scaled(8) }
+        static var lg: CGFloat { scaled(12) }
         static let full: CGFloat = 9999
+        /// The composer and other big inputs.
+        static var composer: CGFloat { scaled(14) }
+
+        private static func scaled(_ value: CGFloat) -> CGFloat {
+            switch Theme.appearance.corners {
+            case .sharp: value / 2
+            case .soft: value
+            case .round: (value * 1.5).rounded()
+            }
+        }
     }
 
     /// Control heights. Hit targets never go below `hitMin`.
@@ -53,7 +83,7 @@ enum Theme {
         static let controlLarge: CGFloat = 36
         static let hitMin: CGFloat = 24
         static let toolbar: CGFloat = 44
-        static let row: CGFloat = 44
+        static var row: CGFloat { Theme.appearance.density == .roomy ? 52 : 44 }
     }
 
     /// Dashed means proposed or not done yet; solid means accepted or done.
@@ -79,7 +109,9 @@ enum Theme {
     }
 
     /// One soft offset shadow for floating things (recorder bar, sheets).
-    static let floatShadow = (color: Color.black.opacity(0.12), radius: CGFloat(9), y: CGFloat(6))
+    static var floatShadow: (color: Color, radius: CGFloat, y: CGFloat) {
+        (Color.black.opacity(palette.isDark ? 0.45 : 0.12), 9, 6)
+    }
 }
 
 extension Color {
@@ -91,16 +123,5 @@ extension Color {
             blue: Double(hex & 0xFF) / 255,
             opacity: 1
         )
-    }
-
-    /// A colour that swaps to `increased` while Increase Contrast is on
-    /// (System Settings → Accessibility → Display).
-    init(hex: UInt32, increased: UInt32) {
-        self.init(nsColor: NSColor(name: nil) { _ in
-            let value = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? increased : hex
-            return NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
-                           green: CGFloat((value >> 8) & 0xFF) / 255,
-                           blue: CGFloat(value & 0xFF) / 255, alpha: 1)
-        })
     }
 }

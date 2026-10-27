@@ -103,7 +103,7 @@ struct EditorView: View {
         .frame(minWidth: 520, minHeight: 480)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light) // light only, always
+        .themed()
         .task(id: model.take.folder) {
             await model.load()
             await clips.load()
@@ -628,7 +628,7 @@ private struct ShortcutsCard: View {
         }
         .padding(16)
         .background(Theme.paper)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 }
 
@@ -760,7 +760,6 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
                 defer: false
             )
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.title = "Vision One"
             window.delegate = self
             window.center()

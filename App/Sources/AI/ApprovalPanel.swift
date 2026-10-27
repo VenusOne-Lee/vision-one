@@ -48,7 +48,6 @@ final class ApprovalCenter: ObservableObject {
             panel.isFloatingPanel = true
             panel.level = .floating
             panel.isReleasedWhenClosed = false
-            panel.appearance = NSAppearance(named: .aqua)
             // Keep the sheet out of the recording, like every Vision One window.
             panel.sharingType = .none
             panel.contentViewController = NSHostingController(rootView: ApprovalView(center: self))
@@ -74,7 +73,7 @@ struct ApprovalView: View {
         }
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 
     private func content(_ r: OutboundRequest) -> some View {

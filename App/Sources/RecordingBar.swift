@@ -63,7 +63,7 @@ final class RecordingBarController {
         let bar = RecordingBarView(recorder: ScreenRecorder.shared) { [weak self] translation, done in
             self?.dragged(by: translation, done: done)
         }
-        panel.contentView = FirstClickHostingView(rootView: bar)
+        panel.contentView = FirstClickHostingView(rootView: bar.themed())
         self.panel = panel
     }
 

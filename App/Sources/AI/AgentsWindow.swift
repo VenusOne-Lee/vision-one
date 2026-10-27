@@ -219,7 +219,7 @@ struct AgentsView: View {
         .frame(minWidth: 380, idealWidth: 440, minHeight: 520)
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
         .task { await ai.refresh() }
     }
 
@@ -437,7 +437,6 @@ final class AgentsWindowController {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 720),
                                   styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.sharingType = .none
             window.setFrameAutosaveName("VisionOneAgents")
             window.center()
