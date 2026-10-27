@@ -73,6 +73,13 @@ public struct AgentJob: Codable, Equatable, Identifiable, Sendable {
         public var characters: Int
         public var estimatedRand: Double?
         public var fromPlan: Bool
+        /// The outside agent asking over MCP ("Claude Code"); nil for a
+        /// send from Vision One's own agents. Its card answers that agent,
+        /// and a "no" note goes back to it.
+        public var askedBy: String?
+        /// For an outside agent: whether "allow until quit" is offered
+        /// (shares always ask).
+        public var canRemember: Bool?
 
         public init(_ request: OutboundRequest) {
             id = request.id
@@ -84,6 +91,8 @@ public struct AgentJob: Codable, Equatable, Identifiable, Sendable {
             characters = request.characters
             estimatedRand = request.estimatedRand
             fromPlan = request.fromPlan
+            askedBy = nil
+            canRemember = nil
         }
     }
 

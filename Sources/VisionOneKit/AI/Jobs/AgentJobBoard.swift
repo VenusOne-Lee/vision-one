@@ -15,6 +15,9 @@ public actor AgentJobBoard {
     private let storeURL: URL?
     private var observers: [UUID: AsyncStream<[AgentJob]>.Continuation] = [:]
     private var waiting: [UUID: CheckedContinuation<OutboundDecision, Never>] = [:]
+    /// "Tell it what to do instead" from a task's card, for an outside
+    /// agent's request, until `takeNote(jobID:)` picks it up.
+    private var notes: [UUID: String] = [:]
 
     /// Jobs are kept for this long after they finish.
     public static let keepFor: TimeInterval = 30 * 24 * 3600
@@ -121,8 +124,9 @@ public actor AgentJobBoard {
     // MARK: Approvals
 
     /// Parks the request on the job and waits for the user's answer. With
-    /// `alsoAsk`, that approver (the floating panel) asks too, and
-    /// whichever answers first wins.
+    /// `alsoAsk`, that approver (the floating panel) asks too: both answer
+    /// this one pending approval, and the one that didn't answer is
+    /// cancelled so it can go away.
     public func requestApproval(jobID: UUID, request: OutboundRequest,
                          alsoAsk: (any OutboundApprover)? = nil) async -> OutboundDecision {
         var ask: (@Sendable () async -> OutboundDecision)?
@@ -132,21 +136,26 @@ public actor AgentJobBoard {
 
     /// The same, for anything shown as an approval: an MCP agent asking
     /// to record or share. `alsoAsk` is another place to answer (the
-    /// floating card); whichever answers first wins.
+    /// floating card); once either answers, the other is cancelled.
     public func requestApproval(jobID: UUID, approval: AgentJob.Approval,
                                 alsoAsk: (@Sendable () async -> OutboundDecision)? = nil) async -> OutboundDecision {
         guard let job = job(jobID), job.state.isActive else { return .deny }
         let before = job.state
         update(jobID) { $0.state = .needsApproval; $0.approval = approval }
+        var asker: Task<Void, Never>?
         let decision = await withCheckedContinuation { continuation in
             waiting[jobID] = continuation
             if let alsoAsk {
-                Task {
+                asker = Task {
                     let answer = await alsoAsk()
+                    // Answered on the task already: a late "no" from the
+                    // panel going away mustn't touch a later approval.
+                    guard !Task.isCancelled else { return }
                     self.resolveApproval(jobID: jobID, decision: answer)
                 }
             }
         }
+        asker?.cancel()
         update(jobID) { job in
             job.approval = nil
             if job.state == .needsApproval { job.state = decision == .deny ? .cancelled : before }
@@ -154,18 +163,35 @@ public actor AgentJobBoard {
         return decision
     }
 
-    /// The answer from the task's approve card.
-    public func resolveApproval(jobID: UUID, decision: OutboundDecision) {
-        waiting.removeValue(forKey: jobID)?.resume(returning: decision)
+    /// The answer from the task's approve card. `note` is "tell it what to
+    /// do instead", kept for an outside agent's request (`takeNote`).
+    public func resolveApproval(jobID: UUID, decision: OutboundDecision, note: String? = nil) {
+        guard let continuation = waiting.removeValue(forKey: jobID) else { return }
+        if let note = note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
+            notes[jobID] = note
+        }
+        continuation.resume(returning: decision)
+    }
+
+    /// The note given with the last answer on this job's card, once.
+    public func takeNote(jobID: UUID) -> String? {
+        notes.removeValue(forKey: jobID)
     }
 
     /// An approver for the ladder's gate: requests made inside a job wait
     /// on that job's card; anything else goes to `fallback` (the floating
     /// approval panel in the app).
-    /// `panelForJobs` keeps the fallback asking for job requests too, for
-    /// screens that don't show the task's approve card yet.
+    /// `panelForJobs` keeps the fallback asking for job requests too.
     public nonisolated func approver(fallback: any OutboundApprover, panelForJobs: Bool = false) -> any OutboundApprover {
-        JobApprover(board: self, fallback: fallback, panelForJobs: panelForJobs)
+        JobApprover(board: self, fallback: fallback, panelFor: { _ in panelForJobs })
+    }
+
+    /// The same, deciding per job whether the fallback (the floating
+    /// panel) asks as well as the job's card, so a request is asked in one
+    /// place when the card is in view (`ApprovalSurface`).
+    public nonisolated func approver(fallback: any OutboundApprover,
+                                     panelFor: @escaping @Sendable (UUID) async -> Bool) -> any OutboundApprover {
+        JobApprover(board: self, fallback: fallback, panelFor: panelFor)
     }
 
     // MARK: Keep and undo
@@ -245,11 +271,12 @@ public actor AgentJobBoard {
 struct JobApprover: OutboundApprover {
     let board: AgentJobBoard
     let fallback: any OutboundApprover
-    var panelForJobs = false
+    let panelFor: @Sendable (UUID) async -> Bool
 
     func approve(_ request: OutboundRequest) async -> OutboundDecision {
         if let id = AgentJobContext.jobID {
-            return await board.requestApproval(jobID: id, request: request, alsoAsk: panelForJobs ? fallback : nil)
+            let panel = await panelFor(id)
+            return await board.requestApproval(jobID: id, request: request, alsoAsk: panel ? fallback : nil)
         }
         return await fallback.approve(request)
     }

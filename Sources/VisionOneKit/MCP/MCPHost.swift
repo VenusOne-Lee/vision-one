@@ -104,6 +104,10 @@ public protocol VisionOneMCPHost: Sendable {
     func ask(_ question: MCPQuestion) async -> MCPAnswer
     /// Takes the card away when the user answered on the task instead.
     func dismiss(_ questionID: UUID) async
+    /// For a question on a task: whether the floating card asks too. No
+    /// when the task's card is in view (the main window is in front), so
+    /// the user is asked once (`ApprovalSurface`).
+    func showsCard(for question: MCPQuestion) async -> Bool
     /// An agent connected (for Settings › Agents).
     func connected(_ client: MCPClient) async
     func isRecording() async -> Bool
@@ -120,6 +124,11 @@ public protocol VisionOneMCPHost: Sendable {
     func export(_ take: Take, preset: ExportPreset) async throws -> URL
     /// Shows the file, copies the words and opens the post. The user posts.
     func share(_ file: URL, text: String?, to target: ShareTarget) async throws
+}
+
+public extension VisionOneMCPHost {
+    /// Hosts without a window always show the card.
+    func showsCard(for question: MCPQuestion) async -> Bool { true }
 }
 
 /// A plain message from the app for the agent ("Pick an area first").
@@ -158,5 +167,7 @@ extension AgentJob.Approval {
         characters = text.count
         estimatedRand = nil
         fromPlan = false
+        askedBy = question.client.displayName
+        canRemember = question.canRemember
     }
 }
