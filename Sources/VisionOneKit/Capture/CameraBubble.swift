@@ -191,7 +191,7 @@ public struct CameraTrack: Codable, Equatable, Sendable {
         return placement(at: source)
     }
 
-
+    public func write(to url: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(self).write(to: url, options: .atomic)
