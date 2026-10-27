@@ -32,6 +32,7 @@ Vision One has a main window (the Library of takes, and the editor) with a Dock 
 - Auto zoom on clicks and blur for secrets on screen ([docs/EFFECTS.md](docs/EFFECTS.md))
 - The AI ladder: on device first, then your ChatGPT plan or your own key ([docs/AI.md](docs/AI.md)), used by the editor's Ask bar and the Agents window
 - Clips and thumbnails for social apps ([docs/CLIPS.md](docs/CLIPS.md))
+- Copy a style: drop a video you like and get a template with its pacing, captions and framing ([docs/STYLE.md](docs/STYLE.md))
 
 ## Install
 
@@ -83,6 +84,7 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | `docs/EFFECTS.md` | Auto zoom and secret blur |
 | `docs/AI.md` | The AI ladder (on device, ChatGPT plan, Decisions API, your own key), the approval gate, and the Producer, Editor, Clipper and Sharer agents |
 | `docs/CLIPS.md` | Short clips and thumbnails: finding, framing, rendering |
+| `docs/STYLE.md` | Copy a style: what a video scan reads and the template it saves |
 | `docs/IPHONE.md` | Recording a plugged-in iPhone's screen, and the iPhone as a camera |
 | `docs/PRESETS.md` | Prompt presets: the file format and how a prompt is put together |
 | `docs/RELEASING.md` | Signing, notarised DMG, Sparkle updates, Homebrew, and the one-time setup |

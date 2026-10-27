@@ -85,13 +85,28 @@ struct LibraryView: View {
 
     /// The Producer and the Agents read "ai.nextPurpose" when the next
     /// take's plan.json is made, so Home's pick lands there too. Just
-    /// record clears it, and they fall back to their default.
+    /// record clears it, and they fall back to their default. A copied
+    /// template carries its purpose, and its id as "ai.nextTemplate" for
+    /// the template picker.
     private func carryPurposeToNextTake(_ id: String) {
-        if id.isEmpty || Purpose.named(id) == nil {
+        let template = userTemplate(id)
+        let purpose = template?.purposeID ?? id
+        if purpose.isEmpty || Purpose.named(purpose) == nil {
             UserDefaults.standard.removeObject(forKey: "ai.nextPurpose")
         } else {
-            UserDefaults.standard.set(id, forKey: "ai.nextPurpose")
+            UserDefaults.standard.set(purpose, forKey: "ai.nextPurpose")
         }
+        if let template {
+            UserDefaults.standard.set(template.id, forKey: "ai.nextTemplate")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "ai.nextTemplate")
+        }
+    }
+
+    /// A template saved by Copy a style, when `id` names one.
+    private func userTemplate(_ id: String) -> TemplateLook? {
+        guard !id.isEmpty, Purpose.named(id) == nil else { return nil }
+        return try? TemplateLook.load(from: UserTemplates.standardFolder.appendingPathComponent(id, isDirectory: true))
     }
 
     /// "3 takes this week", for the window's title bar.
@@ -155,7 +170,7 @@ struct LibraryView: View {
                     .tracking(showPurposes ? -0.9 : -0.4)
                     .accessibilityAddTraits(.isHeader)
                 if !showPurposes {
-                    Text(Purpose.named(purposeID)?.title ?? "Just record")
+                    Text(Purpose.named(purposeID)?.title ?? userTemplate(purposeID)?.title ?? "Just record")
                         .font(.system(size: 20, weight: .semibold))
                 }
                 Spacer(minLength: Theme.Space.sm)
