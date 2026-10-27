@@ -68,6 +68,21 @@ actor FakeMCPHost: VisionOneMCPHost {
     func share(_ file: URL, text: String?, to target: ShareTarget) async throws {
         shared.append((file, text, target))
     }
+
+    func demos() async -> [DemoFile] {
+        let demo = DemoScript(name: "Driver sign-up", app: DemoApp(bundleID: "com.apple.Safari", name: "Safari"),
+                              steps: [DemoStep(.click), DemoStep(.click)])
+        return [DemoFile(url: URL(fileURLWithPath: "/tmp/driver-sign-up.json"), demo: demo)]
+    }
+
+    func rerecordDemo(_ name: String, release: String?, requestedBy: String) async -> UUID? {
+        guard name.caseInsensitiveCompare("driver sign-up") == .orderedSame else { return nil }
+        var job = AgentJob(agent: .autopilot, title: "Re-record “Driver sign-up”", steps: ["Click"])
+        job.requestedBy = requestedBy
+        _ = await board.add(job)
+        await board.finish(job.id, receipt: "Recorded “Driver sign-up” for \(release ?? "now").", changes: [])
+        return job.id
+    }
 }
 
 final class MCPTests: XCTestCase {
@@ -402,6 +417,29 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(task?.queued.count, 0)
         XCTAssertFalse(task?.cells.contains { if case .ask = $0.kind { return true } else { return false } } ?? true,
                        "the note goes to Claude Code, not to Vision One's agents")
+    }
+
+    // MARK: Autopilot demos
+
+    func testListsAndRerecordsDemos() async throws {
+        let (mcp, _) = server()
+        let listed = await call(mcp, "list_demos")
+        XCTAssertFalse(listed.isError, listed.text)
+        XCTAssertEqual(listed.data?["demos"]?.arrayValue?.first?["name"]?.stringValue, "Driver sign-up")
+        XCTAssertEqual(listed.data?["demos"]?.arrayValue?.first?["steps"]?.intValue, 2)
+        let none = await call(mcp, "list_demos", ["search": "checkout"])
+        XCTAssertEqual(none.data?["demos"]?.arrayValue?.count, 0)
+
+        let missing = await call(mcp, "rerecord_demo", ["demo": "Checkout"])
+        XCTAssertTrue(missing.isError)
+        XCTAssertTrue(missing.text.contains("Driver sign-up"), missing.text)
+
+        let run = await call(mcp, "rerecord_demo", ["demo": "Driver sign-up", "release": "v1.4.0"])
+        XCTAssertFalse(run.isError, run.text)
+        let job = await mcp.board.jobs.first
+        XCTAssertEqual(run.data?["task_id"]?.stringValue, job?.id.uuidString)
+        XCTAssertEqual(job?.requestedBy, "Claude Code")
+        XCTAssertTrue(run.text.contains("v1.4.0"), run.text)
     }
 
     // MARK: Recording, export, share

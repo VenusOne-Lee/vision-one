@@ -219,6 +219,14 @@ struct AppMCPHost: VisionOneMCPHost {
         await Self.share(file, text: text, to: target)
     }
 
+    func demos() async -> [DemoFile] {
+        await MainActor.run { AutopilotService.shared.library.all() }
+    }
+
+    func rerecordDemo(_ name: String, release: String?, requestedBy: String) async -> UUID? {
+        await MainActor.run { AutopilotService.shared.rerecord(name: name, release: release, requestedBy: requestedBy) }
+    }
+
     @MainActor
     private static func start() async throws -> Take {
         let recorder = ScreenRecorder.shared

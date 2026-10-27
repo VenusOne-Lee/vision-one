@@ -77,6 +77,8 @@ Name a take by its title, its folder name, or `latest` (the default).
 | `export_video` | MP4 with the brand kit: original, hd1080, hd720, whatsapp, vertical, square | No |
 | `share_video` | Opens the post with the right export and the Sharer's words | **Yes, every time** |
 | `rename_take` | Gives a take a title | No |
+| `list_demos` | Autopilot demos: name, app, steps, about how long | No |
+| `rerecord_demo` | Autopilot re-records a demo (optionally for a release); returns a `task_id` | **Yes**, unless you let those steps run on their own |
 
 Resources: `visionone://takes`, `visionone://tasks`, `visionone://takes/{take}`, `visionone://takes/{take}/transcript`.
 
