@@ -13,6 +13,7 @@ struct MenuContent: View {
     @ObservedObject private var transcriber = Transcriber.shared
     @ObservedObject private var updater = Updater.shared
     @ObservedObject private var microphones = Microphones.shared
+    @ObservedObject private var devices = CaptureDevices.shared
     @AppStorage("panel.recordOpen") private var recordOpen = true
     @AppStorage("panel.sourcesOpen") private var sourcesOpen = true
     @AppStorage("panel.takeOpen") private var takeOpen = true
@@ -112,6 +113,7 @@ struct MenuContent: View {
             on.append(microphones.resolved(for: recorder.choice)?.name ?? "Mic")
         }
         if recorder.choice.includeSystemSound { on.append("Sound") }
+        if devices.cameraChoice != .off { on.append("Camera") }
         return on.isEmpty ? "Video only" : on.joined(separator: " · ")
     }
 }
@@ -497,7 +499,7 @@ private extension CaptureMode {
     }
 }
 
-/// Mic, system sound and iPhone screen, each naming what it records.
+/// Mic, system sound, camera and iPhone screen, each naming what it records.
 struct SourcesList: View {
     @EnvironmentObject private var recorder: ScreenRecorder
     @ObservedObject private var microphones = Microphones.shared
@@ -522,6 +524,9 @@ struct SourcesList: View {
                 Text("What's playing on the Mac")
                     .foregroundStyle(Theme.textMuted)
             }
+            SourceRow(symbol: "web.camera", title: "Camera", isOn: cameraOn) {
+                cameraMenu
+            }
             // iPhone screen over USB, from the device tracks work.
             SourcesRow(devices: devices)
         }
@@ -529,6 +534,60 @@ struct SourcesList: View {
     }
 
     private var activeMic: MicrophoneOption? { microphones.resolved(for: recorder.choice) }
+
+    /// On means the bubble shows and camera.mov records. Switching on
+    /// starts at Auto, which follows macOS (an iPhone on a stand wins).
+    private var cameraOn: Binding<Bool> {
+        Binding(get: { devices.cameraChoice != .off },
+                set: { devices.cameraChoice = $0 ? .auto : .off })
+    }
+
+    private var cameraMenu: some View {
+        Menu {
+            Button {
+                devices.cameraChoice = .auto
+            } label: {
+                if devices.cameraChoice == .auto {
+                    Label("Automatic", systemImage: "checkmark")
+                } else {
+                    Text("Automatic")
+                }
+            }
+            Divider()
+            ForEach(devices.pickerCameras) { camera in
+                Button {
+                    devices.cameraChoice = .device(id: camera.id)
+                } label: {
+                    if devices.cameraChoice == .device(id: camera.id) {
+                        Label(camera.name, systemImage: "checkmark")
+                    } else {
+                        Text(camera.name)
+                    }
+                }
+            }
+        } label: {
+            Text(cameraDetail)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.visible)
+        .fixedSize(horizontal: false, vertical: true)
+        .foregroundStyle(Theme.text)
+        .disabled(devices.cameraChoice == .off || devices.cameras.isEmpty)
+        .help("Which camera shows in the bubble")
+    }
+
+    private var cameraDetail: String {
+        if devices.cameras.isEmpty { return "No camera found" }
+        if devices.cameraChoice != .off, !devices.hasVideoAccess { return "Needs Camera access" }
+        switch devices.cameraChoice {
+        case .off: return devices.pickerCameras.first?.name ?? "Off"
+        case .auto: return devices.cameraToRecord()?.localizedName ?? "Automatic"
+        case .device: return devices.cameraLabel
+        }
+    }
 
     private var micMenu: some View {
         Menu {
