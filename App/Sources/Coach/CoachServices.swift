@@ -46,8 +46,8 @@ final class CoachServices: ObservableObject {
         tone = defaults.string(forKey: "coach.tone").flatMap(DeliveryTone.init(rawValue:)) ?? .lively
         voiceID = defaults.string(forKey: "coach.voiceID") ?? ""
         cloneVoiceID = defaults.string(forKey: "coach.cloneVoiceID") ?? ""
-        meters = (defaults.stringArray(forKey: "coach.meters") ?? []).compactMap(RehearsalMeter.init(rawValue:))
-        if meters.isEmpty { meters = RehearsalMeter.allCases }
+        let saved = (defaults.stringArray(forKey: "coach.meters") ?? []).compactMap(RehearsalMeter.init(rawValue:))
+        meters = saved.isEmpty ? RehearsalMeter.allCases : saved
         spokenCoach = defaults.object(forKey: "coach.spoken") as? Bool ?? true
     }
 
