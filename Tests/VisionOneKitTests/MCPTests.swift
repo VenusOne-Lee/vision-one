@@ -349,7 +349,8 @@ final class MCPTests: XCTestCase {
         let tasks = await desk.tasks
         XCTAssertEqual(tasks.count, 1)
         XCTAssertEqual(tasks.first?.requestedBy, "Claude Code")
-        XCTAssertEqual(tasks.first?.takeFolders, [take.folder])
+        XCTAssertEqual(tasks.first?.takeFolders.count, 1)
+        XCTAssertTrue(VisionOneMCP.same(tasks.first?.takeFolders.first, take.folder))
         XCTAssertEqual(tasks.first?.jobIDs.count, 1)
 
         _ = await call(mcp, "clean_up")
@@ -394,7 +395,7 @@ final class MCPTests: XCTestCase {
         XCTAssertFalse(stopped.isError, stopped.text)
         let job = await mcp.board.jobs.first
         XCTAssertEqual(job?.state, .done)
-        XCTAssertEqual(job?.takeFolder, take.folder)
+        XCTAssertTrue(VisionOneMCP.same(job?.takeFolder, take.folder))
     }
 
     func testExportThenShareAsksEveryTime() async throws {

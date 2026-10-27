@@ -152,7 +152,7 @@ public final class VisionOneMCP: Sendable {
         var jobs = await board.jobs
         if let name = args["take"]?.stringValue, !name.isEmpty {
             let take = try resolveTake(["take": .string(name)])
-            jobs = jobs.filter { $0.takeFolder == take.folder }
+            jobs = jobs.filter { Self.same($0.takeFolder, take.folder) }
         }
         if args["active_only"]?.boolValue == true {
             jobs = jobs.filter { $0.state.isActive || $0.state.needsYou }
@@ -231,7 +231,7 @@ public final class VisionOneMCP: Sendable {
         }
         let take = try await host.stopRecording()
         let job = await board.jobs.first {
-            $0.agent == .producer && $0.state.isActive && $0.takeFolder == take.folder
+            $0.agent == .producer && $0.state.isActive && Self.same($0.takeFolder, take.folder)
         }
         if let job { await board.step(job.id, 2) }
         let ready = await waitForTranscript(take)
@@ -598,7 +598,7 @@ public final class VisionOneMCP: Sendable {
     /// tagged with the agent.
     func deskTask(for take: Take?, title: String, client: MCPClient) async -> UUID? {
         guard let desk else { return nil }
-        if let take, let existing = await desk.tasks.first(where: { !$0.archived && $0.takeFolders.contains(take.folder) }) {
+        if let take, let existing = await desk.tasks.first(where: { !$0.archived && $0.takeFolders.contains { Self.same($0, take.folder) } }) {
             return existing.id
         }
         let task = await desk.newTask(title: take.map { $0.displayTitle() } ?? title, takes: take.map { [$0] } ?? [])
@@ -717,6 +717,12 @@ public final class VisionOneMCP: Sendable {
     // MARK: Formatting
 
     /// "1:05".
+    /// The same folder, even when one path goes through /var and the other /private/var.
+    static func same(_ a: URL?, _ b: URL) -> Bool {
+        guard let a else { return false }
+        return a.standardizedFileURL.resolvingSymlinksInPath() == b.standardizedFileURL.resolvingSymlinksInPath()
+    }
+
     static func clock(_ seconds: Double) -> String {
         let s = max(0, Int(seconds.rounded(.down)))
         return s >= 3600
