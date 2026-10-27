@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import VisionOneKit
 
 /// One instruction for the whole export: which track is the screen and
 /// what to draw on top. AVVideoCompositionCoreAnimationTool would be
@@ -14,18 +15,23 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
 
     let trackID: CMPersistentTrackID
     let overlays: [ExportOverlay]
+    /// Blurs and zooms, applied to the screen frame before it's scaled.
+    let effects: FrameEffects?
 
-    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay]) {
+    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], effects: FrameEffects? = nil) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
+        self.effects = effects
         requiredSourceTrackIDs = [NSNumber(value: trackID)]
     }
 }
 
-/// Scales each screen frame to the export size with Core Image (on the
-/// GPU), then lets overlays draw on top with Core Graphics. The camera
-/// bubble, burned-in captions and click zooms all plug in here.
+/// Per frame: secret blurs, then the zoom viewport (`FrameEffects`), then
+/// scaled to the export size with Core Image (on the GPU), then overlays
+/// drawn on top with Core Graphics (captions, the camera bubble). Blurring
+/// first means a secret can't slip out through a zoom or a clip's crop.
+/// The editor's preview plays through this compositor too.
 final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
@@ -49,7 +55,10 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         }
 
         let size = request.renderContext.size
-        let image = CIImage(cvPixelBuffer: source)
+        var image = CIImage(cvPixelBuffer: source)
+        if let effects = instruction.effects, !effects.isEmpty {
+            image = FrameEffectRenderer.apply(effects, to: image, atOutput: request.compositionTime.seconds)
+        }
         let scale = min(size.width / image.extent.width, size.height / image.extent.height)
         let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         // Centre it; the shape matches in v0.1, so this only matters once

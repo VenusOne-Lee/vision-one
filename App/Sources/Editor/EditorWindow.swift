@@ -125,7 +125,9 @@ struct EditorView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onTapGesture { model.togglePlay() }
+                    .overlay { EffectsLayer(model: model, effects: model.effects) }
                 EditorTimeline(model: model)
+                EffectsLane(model: model, effects: model.effects)
                 TransportBar(model: model)
             }
             if let saveError = model.saveError {

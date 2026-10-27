@@ -20,6 +20,7 @@ struct VideoExporter {
         case plan(ExportPlanError)
         case reader(Error?)
         case writer(Error?)
+        case blurs(Error)
 
         var errorDescription: String? {
             switch self {
@@ -27,6 +28,7 @@ struct VideoExporter {
             case let .plan(error): return ExportPhase.message(for: error)
             case let .reader(error): return "Couldn't read the recording. \(error?.localizedDescription ?? "")"
             case let .writer(error): return "Couldn't write the video. \(error?.localizedDescription ?? "")"
+            case let .blurs(error): return "Couldn't read this take's blurs, so it wasn't exported. Open it in the editor to check them. \(error.localizedDescription)"
             }
         }
     }
@@ -40,6 +42,8 @@ struct VideoExporter {
     var keep: [Range<Double>]?
     let preset: ExportPreset
     var overlays: [ExportOverlay] = []
+    /// Draw the take's zooms (zooms.json) and blurs (blurs.json).
+    var appliesEffects = true
 
     /// Exports and returns the file's URL and size. `progress` is called
     /// from a background queue with 0...1.
@@ -69,9 +73,10 @@ struct VideoExporter {
             throw Failure.plan(error)
         }
 
+        let effects = try appliesEffects ? Self.effects(for: take, timeline: timeline) : nil
         let url = outputURL ?? take.exportURL(for: preset)
         var bytes = try await render(timeline: timeline, sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     settings: settings, to: url, progress: progress)
+                                     effects: effects, settings: settings, to: url, progress: progress)
 
         // A single-pass encoder only roughly meets its average bitrate.
         // If a size-limited export overshoots, go again a little lower.
@@ -79,15 +84,31 @@ struct VideoExporter {
             let scale = Double(limit) * 0.85 / Double(bytes)
             settings.videoBitRate = Int(Double(settings.videoBitRate) * scale)
             bytes = try await render(timeline: timeline, sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     settings: settings, to: url, progress: progress)
+                                     effects: effects, settings: settings, to: url, progress: progress)
         }
         return (url, bytes)
     }
 
     // MARK: - Composition
 
+    /// Zooms and blurs for this export, or nil when the take has none.
+    static func effects(for take: Take, timeline: ExportTimeline) throws -> FrameEffects? {
+        // A blur list that can't be read stops the export rather than
+        // letting through what it was hiding.
+        let blurs: BlurList
+        do {
+            blurs = try BlurList.load(from: take.blursURL)
+        } catch {
+            throw Failure.blurs(error)
+        }
+        let zooms = (try? ZoomList.load(from: take.zoomsURL)) ?? ZoomList()
+        let cursor = (try? EventLog.read(from: take.eventsURL))?.cursorPath ?? []
+        let effects = FrameEffects.export(zooms: zooms, blurs: blurs, cursor: cursor, timeline: timeline)
+        return effects.isEmpty ? nil : effects
+    }
+
     private func render(timeline: ExportTimeline, sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
-                        settings: ExportSettings, to url: URL,
+                        effects: FrameEffects?, settings: ExportSettings, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
@@ -123,7 +144,7 @@ struct VideoExporter {
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(settings.frameRate))
         videoComposition.instructions = [
             FrameInstruction(timeRange: CMTimeRange(start: .zero, duration: duration),
-                             trackID: video.trackID, overlays: overlays),
+                             trackID: video.trackID, overlays: overlays, effects: effects),
         ]
 
         let audioMix = AVMutableAudioMix()
