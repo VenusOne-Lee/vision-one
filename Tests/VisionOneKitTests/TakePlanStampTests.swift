@@ -30,4 +30,15 @@ final class TakePlanStampTests: XCTestCase {
         XCTAssertNil(try TakePlan.stamp(take, purposeID: "nonsense"))
         XCTAssertNil(TakePlan.load(for: take))
     }
+
+    func testStampCarriesHomesEnergy() throws {
+        let take = Take(folder: folder)
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "vision-one-stamp-\(UUID().uuidString)"))
+        XCTAssertNil(try TakePlan.stamp(take, from: defaults))
+        defaults.set("tutorial", forKey: TakePlan.nextPurposeKey)
+        defaults.set("viral", forKey: TakePlan.nextEnergyKey)
+        try TakePlan.stamp(take, from: defaults)
+        XCTAssertEqual(TakePlan.load(for: take)?.purposeID, "tutorial")
+        XCTAssertEqual(TakePlan.load(for: take)?.energy, .viral)
+    }
 }

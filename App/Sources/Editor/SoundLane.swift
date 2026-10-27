@@ -1,9 +1,10 @@
 import SwiftUI
 import VisionOneKit
 
-/// The music and effects lane under the timeline, on the same clock
-/// (the whole take). The music's volume is drawn as a filled curve that
-/// dips wherever you talk; cut parts stay empty. Effects are circles:
+/// The music and effects lane at the foot of the timeline, on the same
+/// clock (the whole take); the timeline draws the playhead over it. The
+/// music's volume is drawn as a filled curve that dips wherever you
+/// talk; cut parts stay empty. Effects are circles:
 /// dashed when suggested, solid when accepted. Drag one to move it, click
 /// a dashed one to accept it, right-click for more.
 struct SoundLane: View {
@@ -17,7 +18,6 @@ struct SoundLane: View {
             let x = { (t: Double) in CGFloat(t / duration) * width }
             let envelope = model.musicEnvelope
             let edits = model.edits
-            let playhead = model.sourceTime
             ZStack(alignment: .topLeading) {
                 Canvas { context, size in
                     guard let envelope else { return }
@@ -52,7 +52,7 @@ struct SoundLane: View {
                     context.stroke(path, with: .color(Theme.text.opacity(0.7)), lineWidth: 1)
                 }
                 if envelope == nil {
-                    Text("No music · pick one below, or add effects at the playhead")
+                    Text("No music yet · pick one in the Sound tab")
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.textMuted)
                         .padding(.leading, 8)
@@ -64,11 +64,6 @@ struct SoundLane: View {
                         .padding(.leading, 8)
                         .padding(.top, 3)
                 }
-                Rectangle()
-                    .fill(Theme.text)
-                    .frame(width: 2)
-                    .offset(x: x(playhead) - 1)
-                    .allowsHitTesting(false)
                 ForEach(model.sound.effects.filter { $0.state != .rejected }) { effect in
                     marker(effect)
                         .gesture(drag(effect, width: width, duration: duration))

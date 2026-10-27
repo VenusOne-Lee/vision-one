@@ -70,4 +70,66 @@ public struct LoudnessEnvelope: Equatable, Sendable {
         }
         return merged.filter { $0.duration >= minDuration - 1e-9 }
     }
+
+    /// Seconds of sound the levels cover.
+    public var duration: Double { Double(levels.count) * hop }
+
+    /// The quiet run that starts the take and the one that ends it, if
+    /// the sound starts or ends quiet.
+    public func edgeSilence(minDuration: Double) -> (lead: TimeSpan?, tail: TimeSpan?) {
+        let runs = silentSpans(minDuration: minDuration)
+        let lead = runs.first.flatMap { $0.start <= hop + 1e-9 ? $0 : nil }
+        let tail = runs.last.flatMap { $0.end >= duration - hop - 1e-9 ? $0 : nil }
+        return (lead, tail)
+    }
+
+    /// The loudest level between two moments, for drawing a waveform one
+    /// pixel at a time. `floorDB` outside the sound.
+    public func peak(from start: Double, to end: Double) -> Float {
+        guard hop > 0, !levels.isEmpty else { return Self.floorDB }
+        let first = max(0, Int((min(start, end) / hop).rounded(.down)))
+        let last = min(levels.count - 1, Int((max(start, end) / hop).rounded(.down)))
+        guard first <= last else { return Self.floorDB }
+        return levels[first...last].max() ?? Self.floorDB
+    }
+
+    /// 0...1 for a level, with -60 dBFS and below drawn flat.
+    public static func amplitude(db: Float) -> Double {
+        Double(min(1, max(0, (db + 60) / 60)))
+    }
+}
+
+// MARK: levels.json
+
+/// Saved beside the take as levels.json, so the editor can draw the
+/// waveform and find silence without decoding the audio again. Levels
+/// are whole dB below full scale, one byte each, base64 in the file.
+extension LoudnessEnvelope: Codable {
+    private enum CodingKeys: String, CodingKey { case version, hop, db }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        hop = try container.decode(Double.self, forKey: .hop)
+        let encoded = try container.decode(String.self, forKey: .db)
+        guard let bytes = Data(base64Encoded: encoded) else {
+            throw DecodingError.dataCorruptedError(forKey: .db, in: container, debugDescription: "Levels aren't base64")
+        }
+        levels = bytes.map { -Float($0) }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(1, forKey: .version)
+        try container.encode(hop, forKey: .hop)
+        let bytes = levels.map { UInt8(min(100, max(0, -$0.rounded()))) }
+        try container.encode(Data(bytes).base64EncodedString(), forKey: .db)
+    }
+
+    public static func read(from url: URL) throws -> LoudnessEnvelope {
+        try JSONDecoder().decode(LoudnessEnvelope.self, from: Data(contentsOf: url))
+    }
+
+    public func write(to url: URL) throws {
+        try JSONEncoder().encode(self).write(to: url, options: .atomic)
+    }
 }

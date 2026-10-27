@@ -180,6 +180,22 @@ public struct TakePlan: Codable, Equatable, Sendable {
 
     public var purpose: Purpose { Purpose.named(purposeID) ?? .demo }
 
+    /// Where Home keeps its pick for the next take.
+    public static let nextPurposeKey = "ai.nextPurpose"
+    /// Home's Energy dial for the next take; unset means the purpose's.
+    public static let nextEnergyKey = "ai.nextEnergy"
+
+    /// The plan Home's pick makes for the next take, or nil after "Just
+    /// record". Write it as a take's plan.json when it has none yet.
+    public static func next(in defaults: UserDefaults = .standard) -> TakePlan? {
+        guard let purpose = defaults.string(forKey: nextPurposeKey).flatMap(Purpose.named) else { return nil }
+        var plan = TakePlan(purpose: purpose)
+        if let energy = defaults.string(forKey: nextEnergyKey).flatMap(Energy.init(rawValue:)) {
+            plan.energy = energy
+        }
+        return plan
+    }
+
     public static func load(for take: Take) -> TakePlan? {
         guard let data = try? Data(contentsOf: take.planURL) else { return nil }
         return try? JSONDecoder().decode(TakePlan.self, from: data)

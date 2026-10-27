@@ -31,8 +31,7 @@ final class AgentsModel: ObservableObject {
 
     init(take: Take) {
         self.take = take
-        let next = UserDefaults.standard.string(forKey: "ai.nextPurpose").flatMap(Purpose.named) ?? .demo
-        plan = TakePlan.load(for: take) ?? TakePlan(purpose: next)
+        plan = TakePlan.load(for: take) ?? TakePlan.next() ?? TakePlan(purpose: .demo)
         share = SharePack.load(for: take)
         presetName = UserDefaults.standard.string(forKey: "ai.preset") ?? ""
     }
@@ -152,19 +151,10 @@ final class AgentsModel: ObservableObject {
     }
 
     static func composer(for post: SharePack.Post) -> (String, URL) {
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "&+=?#")
-        let text = post.text.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-        switch post.network {
-        case "x", "twitter":
-            return ("x.com", URL(string: "https://x.com/intent/post?text=\(text)")!)
-        case "linkedin":
-            return ("linkedin.com", URL(string: "https://www.linkedin.com/feed/?shareActive=true&text=\(text)")!)
-        case "whatsapp":
-            return ("wa.me", URL(string: "https://wa.me/?text=\(text)")!)
-        default:
+        guard let target = ShareTarget(network: post.network) else {
             return ("versionone.co.za", URL(string: "https://versionone.co.za")!)
         }
+        return (target.destination, target.composer(text: post.text))
     }
 
     static func message(for error: Error) -> String {

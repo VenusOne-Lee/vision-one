@@ -31,7 +31,9 @@ final class EditorModel: ObservableObject {
     @Published private(set) var phase: Phase = .loading
     @Published private(set) var transcriptState: TranscriptState = .loading
     @Published private(set) var transcript: Transcript?
-    @Published private(set) var edits = EditList(sourceDuration: 0)
+    @Published private(set) var edits = EditList(sourceDuration: 0) {
+        didSet { if edits != oldValue { refreshMarks() } }
+    }
     /// Music and sound effects, saved to sound.json.
     @Published private(set) var sound = SoundPlan()
     /// Why some of the sound isn't playing, such as a moved music file.
@@ -42,10 +44,19 @@ final class EditorModel: ObservableObject {
     @Published var saveError: String?
     /// Shape of the video, so boxes drawn over the preview line up.
     @Published private(set) var videoSize: CGSize = .zero
+    /// Mic loudness every 10 ms, for the waveform and finding silence.
+    /// Nil until levels.json is read or measured.
+    @Published private(set) var levels: LoudnessEnvelope?
+    /// A stretch picked on the timeline, in seconds of the take. Delete
+    /// cuts it.
+    @Published var selection: TimeSpan?
 
     /// Words in time order and their spans, cached from the transcript.
     private(set) var words: [TranscriptWord] = []
     private(set) var wordSpans: [TimeSpan] = []
+    /// How each word is drawn, kept in step with the edits so a long take
+    /// isn't re-marked on every frame of playback.
+    private(set) var wordMarks: [WordMark] = []
 
     private var asset: AVURLAsset?
     private var timeObserver: Any?
@@ -94,6 +105,7 @@ final class EditorModel: ObservableObject {
         addTimeObserver()
         await rebuildPlayer()
         phase = .ready
+        if let saved = try? LoudnessEnvelope.read(from: take.levelsURL) { levels = saved }
         loadTranscript()
         startWatching()
     }
@@ -141,12 +153,18 @@ final class EditorModel: ObservableObject {
             self.transcript = transcript
             words = transcript.words
             wordSpans = words.map(\.span)
+            refreshMarks()
             transcriptState = .ready
             // Ducking follows the words, so the preview needs them.
             if !sound.isEmpty { scheduleRebuild() }
+            Task { await loadLevels() }
         } catch {
             transcriptState = .failed("The transcript couldn't be read: \(error.localizedDescription)")
         }
+    }
+
+    private func refreshMarks() {
+        wordMarks = edits.marks(for: wordSpans)
     }
 
     func close() {
@@ -239,6 +257,16 @@ final class EditorModel: ObservableObject {
         return result
     }
 
+    /// Swaps in `next` without an undo step: for suggestions only, which
+    /// the user hasn't touched yet.
+    private func replaceSuggestions(_ next: EditList) {
+        guard next != edits else { return }
+        edits = next
+        knownCutIDs.formUnion(next.cuts.map(\.id))
+        save()
+        scheduleRebuild()
+    }
+
     private func save() {
         // Keep cuts auto-clean wrote since the last look, instead of
         // writing over them.
@@ -323,7 +351,7 @@ final class EditorModel: ObservableObject {
 
     private func addTimeObserver() {
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(value: 1, timescale: 30), queue: .main
+            forInterval: CMTime(value: 1, timescale: 60), queue: .main
         ) { [weak self] time in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -438,5 +466,113 @@ enum PreviewComposition {
             }
         }
         return composition
+    }
+}
+
+// MARK: Levels, silence and the timeline
+
+extension EditorModel {
+    /// Reads levels.json, or measures the mic once and saves it. Takes
+    /// cleaned before silence was checked against the mic get their
+    /// undecided silence suggestions redone at the same time.
+    func loadLevels() async {
+        if levels != nil { return }
+        if let saved = try? LoudnessEnvelope.read(from: take.levelsURL) {
+            levels = saved
+            return
+        }
+        guard let samples = try? await TakeAudio.read(take).samples else { return }
+        let rate = TakeAudio.sampleRate
+        let measured = await Task.detached(priority: .utility) {
+            LoudnessEnvelope.measure(samples: samples, sampleRate: rate)
+        }.value
+        guard levels == nil else { return }
+        levels = measured
+        try? measured.write(to: take.levelsURL)
+        guard !words.isEmpty else { return }
+        let fresh = CleanupDetector().pauses(in: words, duration: edits.sourceDuration, loudness: measured)
+        replaceSuggestions(SilenceCut.refreshSuggestions(edits, with: fresh))
+    }
+
+    /// "Cut the silence" from the Ask bar: every quiet stretch, cut now as
+    /// one undo step.
+    func cutSilence() async -> SilenceCut.Result {
+        await loadLevels()
+        let proposals = SilenceCut.proposals(words: words, duration: edits.sourceDuration, loudness: levels)
+        let result = SilenceCut.apply(proposals, to: edits)
+        if result.edits != edits { apply(result.edits, actionName: "Cut Silence") }
+        return result
+    }
+
+    /// Length of the video if every dashed cut were accepted.
+    var lengthIfAccepted: Double {
+        var all = edits
+        all.acceptAllProposed()
+        return all.outputDuration
+    }
+
+    /// One frame (1/30 s) of the edited video forward or back.
+    func stepFrames(_ frames: Int) {
+        pause()
+        skip(by: Double(frames) / 30)
+    }
+
+    func seekToStart() { seek(toSource: edits.keptSpans.first?.start ?? 0) }
+
+    func seekToEnd() {
+        seek(toSource: edits.sourceTime(forOutput: max(0, edits.outputDuration - 1.0 / 30)))
+    }
+
+    /// Delete on the timeline: cuts the picked stretch, or brings it back
+    /// if all of it was already cut.
+    func cutSelection() {
+        guard let span = selection, span.duration > 0.01 else { return }
+        var next = edits
+        let removed = edits.removedSpans.contains { $0.start <= span.start + 1e-6 && span.end <= $0.end + 1e-6 }
+        if removed {
+            next.restore(span)
+            apply(next, actionName: "Restore")
+        } else {
+            next.add(Cut(span: span, reason: Cut.Reason.word, state: .accepted))
+            apply(next, actionName: "Cut")
+        }
+        selection = nil
+        seek(toSource: span.start)
+    }
+
+    /// Where the kept video starts and ends, for the trim handles.
+    var keptRange: TimeSpan {
+        let kept = edits.keptSpans
+        return TimeSpan(start: kept.first?.start ?? 0, end: kept.last?.end ?? edits.sourceDuration)
+    }
+
+    /// Drags the start trim handle to `t`: later cuts the opening,
+    /// earlier brings it back.
+    func trimStart(to t: Double) {
+        let current = keptRange.start
+        let target = min(max(0, t), keptRange.end - 0.5)
+        guard abs(target - current) > 0.01 else { return }
+        var next = edits
+        if target < current {
+            next.restore(TimeSpan(start: target, end: current))
+        } else {
+            next.add(Cut(span: TimeSpan(start: 0, end: target), reason: Cut.Reason.edge, state: .accepted))
+        }
+        apply(next, actionName: "Trim Start")
+        seek(toSource: target)
+    }
+
+    /// Drags the end trim handle to `t`.
+    func trimEnd(to t: Double) {
+        let current = keptRange.end
+        let target = max(min(edits.sourceDuration, t), keptRange.start + 0.5)
+        guard abs(target - current) > 0.01 else { return }
+        var next = edits
+        if target > current {
+            next.restore(TimeSpan(start: current, end: target))
+        } else {
+            next.add(Cut(span: TimeSpan(start: target, end: edits.sourceDuration), reason: Cut.Reason.edge, state: .accepted))
+        }
+        apply(next, actionName: "Trim End")
     }
 }

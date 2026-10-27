@@ -93,9 +93,12 @@ final class Transcriber: ObservableObject {
             // the video's length. A failure here leaves the transcript
             // usable, so it isn't shown as an error.
             let loudness = LoudnessEnvelope.measure(samples: audio.samples, sampleRate: TakeAudio.sampleRate)
+            // The editor draws the waveform and finds silence from these.
+            try? loudness.write(to: take.levelsURL)
             try? AutoClean.run(on: take, transcript: transcript, sourceDuration: audio.videoDuration,
                                loudness: loudness)
             activity = .idle
+            AIServices.shared.transcriptReady(for: take)
         } catch {
             let message = Self.describe(error)
             if (error as? TakeAudio.ReadError) == .noAudio {

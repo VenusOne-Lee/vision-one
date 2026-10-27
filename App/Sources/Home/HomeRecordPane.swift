@@ -26,6 +26,7 @@ struct HomeRecordPane: View {
             .padding(.top, 4)
             countdownPicker
             status
+            HomePreflight()
         }
         .frame(maxWidth: .infinity)
         .task { await refreshWindows() }

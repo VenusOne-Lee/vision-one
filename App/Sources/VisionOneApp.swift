@@ -11,6 +11,12 @@ struct VisionOneApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ObservedObject private var recorder = ScreenRecorder.shared
 
+    init() {
+        // Bricolage Grotesque, Source Serif 4 and JetBrains Mono, before
+        // anything draws.
+        BundledFont.registerAll()
+    }
+
     var body: some Scene {
         MenuBarExtra {
             MenuContent()
@@ -24,14 +30,17 @@ struct VisionOneApp: App {
     }
 }
 
-/// The app's menus. The global hot key already owns ⌘⇧R, so Record only
-/// names it in its title instead of binding it a second time.
+/// The app's menus, from VisionOneKit's ShortcutMap so menus, tooltips
+/// and the Keyboard Shortcuts window agree. The global hot key already
+/// owns ⇧⌘R, so Record only names it in its title instead of binding it
+/// a second time.
 struct AppCommands: Commands {
     @ObservedObject var recorder: ScreenRecorder
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button(recorder.phase.isLive ? "Stop Recording  ⌘⇧R" : "Start Recording  ⌘⇧R") {
+            Button(recorder.phase.isLive ? "Stop Recording  \(ShortcutMap.record.display)"
+                                         : "Start Recording  \(ShortcutMap.record.display)") {
                 Task { await recorder.toggle() }
             }
             .disabled(recorder.phase.isBusy)
@@ -40,12 +49,32 @@ struct AppCommands: Commands {
             }
             .disabled(!recorder.phase.isLive)
             Button("Show Library") { EditorWindowController.shared.showLibrary() }
-                .keyboardShortcut("l", modifiers: [.command, .shift])
+                .keyboardShortcut(ShortcutMap.library)
+            Button("Copy a Style…") { CopyStyleWindowController.shared.show() }
         }
         CommandGroup(after: .appSettings) {
-            Button("Brand…") { BrandWindowController.shared.show() }
-            Button("AI Settings…") { AISettingsWindowController.shared.show() }
-            Button("Access…") { SetupWindowController.shared.show() }
+            Button("Settings…") { SettingsWindowController.shared.show() }
+                .keyboardShortcut(",", modifiers: .command)
+            Button("Brand…") { SettingsWindowController.shared.show(.brand) }
+            Button("AI…") { SettingsWindowController.shared.show(.ai) }
+            Button("Access…") { SettingsWindowController.shared.show(.access) }
+        }
+        CommandGroup(after: .toolbar) {
+            Button("Bigger Text") { TextSize.step(1) }
+                .keyboardShortcut(ShortcutMap.textBigger)
+            Button("Smaller Text") { TextSize.step(-1) }
+                .keyboardShortcut(ShortcutMap.textSmaller)
+            Button("Actual Text Size") {
+                UserDefaults.standard.set(TextSize.medium.rawValue, forKey: TextSize.storageKey)
+            }
+            Divider()
+        }
+        CommandGroup(replacing: .help) {
+            Button("Keyboard Shortcuts") { ShortcutsWindowController.shared.show() }
+                .keyboardShortcut(ShortcutMap.shortcuts)
+            Button("Vision One on GitHub") {
+                NSWorkspace.shared.open(URL(string: "https://github.com/VenusOne-Lee/vision-one")!)
+            }
         }
     }
 }
