@@ -259,8 +259,9 @@ final class ScreenRecorder: NSObject, ObservableObject {
             Transcriber.shared.transcribe(take)
             phase = .idle
             MainWindowStepAside.forget()
-            // Straight to review. The editor waits for the transcript.
-            EditorWindowController.shared.open(take)
+            // Ready to share (or the editor, if that's the builder's
+            // pick). Both wait for the transcript.
+            ReadyToShareWindowController.shared.afterStop(take)
         } else {
             phase = .failed(message: sink.writerError?.localizedDescription
                 ?? "Nothing was recorded. Try again, and check Screen Recording access.")
