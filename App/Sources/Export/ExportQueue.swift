@@ -1,0 +1,89 @@
+import AppKit
+import Combine
+import VisionOneKit
+
+/// Exports several presets of one take, one after another.
+/// `ExportController` runs one export at a time, so the next preset only
+/// starts once the controller has left `.exporting`. Progress for each
+/// preset comes from the controller's phase, kept in an `ExportBatch`.
+@MainActor
+final class ExportQueue: ObservableObject {
+    @Published private(set) var batch: ExportBatch?
+
+    private let controller: ExportController
+    private var take: Take?
+    private var keep: [Range<Double>]?
+    private var watching: AnyCancellable?
+
+    init() {
+        let controller = ExportController.shared
+        self.controller = controller
+        // Phases arrive on the next turn of the main queue, after the
+        // controller has finished setting them, so starting the next
+        // export from here sees the controller's real state.
+        watching = controller.$phase
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] phase in
+                MainActor.assumeIsolated { self?.follow(phase) }
+            }
+    }
+
+    var isRunning: Bool { batch?.isRunning ?? false }
+
+    /// Starts exporting `presets` of `take`. `keep` overrides the kept
+    /// spans; nil uses the take's edits.json, as the Export menu does.
+    func export(_ take: Take, presets: [ExportPreset], keep: [Range<Double>]?) {
+        guard !isRunning, !presets.isEmpty else { return }
+        self.take = take
+        self.keep = keep
+        batch = ExportBatch(presets)
+        startNext()
+    }
+
+    /// Stops the running export and everything after it.
+    func cancel() {
+        guard isRunning else { return }
+        batch?.cancel()
+        if batch?.current != nil { controller.cancel() }
+    }
+
+    /// Forgets a finished batch, so the formats can be picked again.
+    func reset() {
+        guard !isRunning else { return }
+        batch = nil
+    }
+
+    func revealExports() {
+        guard let urls = batch?.exported, !urls.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+    }
+
+    private func follow(_ phase: ExportPhase) {
+        guard batch != nil else { return }
+        batch?.apply(phase)
+        startNext()
+    }
+
+    private func startNext() {
+        guard let take, let preset = batch?.next else { return }
+        // Something else is exporting (the menu bar panel, say); wait for
+        // it to finish and go then.
+        guard !controller.phase.isBusy else { return }
+
+        batch?.start(preset)
+        // The same call as the Export menu: captions are built inside the
+        // export, from the timeline it renders; subtitle files follow once
+        // the video is done.
+        let brand = BrandStore.shared
+        controller.export(take, preset: preset, keep: keep,
+                          overlays: brand.overlays(),
+                          captionRingHex: brand.kit.ring.hex,
+                          cards: brand.cardMaker())
+
+        guard case let .exporting(running, _) = controller.phase, running == preset else {
+            batch?.fail(preset, message: "Couldn't start the \(preset.title) export.")
+            startNext()
+            return
+        }
+    }
+}
