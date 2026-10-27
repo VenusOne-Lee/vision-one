@@ -90,7 +90,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
             }
             cursor.start()
             try await stream.startCapture()
-            trackNotes = await deviceTracks.start(for: take)
+            trackNotes = await deviceTracks.start(for: take, devices: .shared)
 
             self.stream = stream
             self.sink = sink

@@ -26,7 +26,7 @@ final class CaptureDevices: ObservableObject {
     private static let cameraKey = "captureCameraChoice"
     private static let phoneKey = "capturePhoneScreenChoice"
     private var observers: [NSObjectProtocol] = []
-    private var systemObservation: NSKeyValueObservation?
+    private var systemObserver: SystemCameraObserver?
 
     private init() {
         cameraChoice = Self.load(CameraChoice.self, key: Self.cameraKey) ?? .off
@@ -42,7 +42,7 @@ final class CaptureDevices: ObservableObject {
                 MainActor.assumeIsolated { self?.refresh() }
             })
         }
-        systemObservation = AVCaptureDevice.self.observe(\.systemPreferredCamera, options: [.new]) { [weak self] _, _ in
+        systemObserver = SystemCameraObserver { [weak self] in
             Task { @MainActor in self?.refresh() }
         }
     }
@@ -158,5 +158,28 @@ final class CaptureDevices: ObservableObject {
     private static func load<T: Decodable>(_ type: T.Type, key: String) -> T? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
+    }
+}
+
+/// Watches the class property `AVCaptureDevice.systemPreferredCamera`,
+/// which changes when macOS switches to an iPhone on a stand. Key paths
+/// can't name class properties, so this uses string KVO on the class.
+private final class SystemCameraObserver: NSObject {
+    private static let keyPath = "systemPreferredCamera"
+    private let onChange: @Sendable () -> Void
+
+    init(onChange: @escaping @Sendable () -> Void) {
+        self.onChange = onChange
+        super.init()
+        (AVCaptureDevice.self as AnyObject).addObserver(self, forKeyPath: Self.keyPath, options: [.new], context: nil)
+    }
+
+    deinit {
+        (AVCaptureDevice.self as AnyObject).removeObserver(self, forKeyPath: Self.keyPath)
+    }
+
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                               change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+        onChange()
     }
 }

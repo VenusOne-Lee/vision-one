@@ -11,7 +11,7 @@ final class DeviceTracks {
     private var recorders: [DeviceTrackRecorder] = []
 
     /// Returns a note for each track that couldn't start.
-    func start(for take: Take, devices: CaptureDevices = .shared) async -> [String] {
+    func start(for take: Take, devices: CaptureDevices) async -> [String] {
         var notes: [String] = []
         let wanted: [(device: AVCaptureDevice?, url: URL, what: String, chosen: Bool)] = [
             (devices.phoneToRecord(), take.phoneURL, "iPhone screen", devices.phoneChoice != .off),
