@@ -388,7 +388,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     private var model: HarnessModel { HarnessModel.shared }
 
     /// The take open in the editor, if any, for windows that act on it.
-    var currentTake: Take? { model?.take }
+    var currentTake: Take? { model.workspace?.take }
 
     /// Opens the newest take. With none, there's nothing to open: the
     /// menu only offers Review once a take exists.
