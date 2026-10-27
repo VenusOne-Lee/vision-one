@@ -52,6 +52,9 @@ final class AIServices: ObservableObject {
     let chatGPT: ChatGPTSession
     /// Every agent job, for the Agent Desk's task list (saved to jobs.json).
     let jobs: AgentJobBoard
+    /// Projects and tasks: what the main window's sidebar, the task
+    /// threads and the menu bar's Tasks list show (saved to desk.json).
+    let desk: Desk
     /// One gate for the whole app, so "Allow for this session" holds until
     /// quit. A job's approvals wait on its task; until the Agent Desk shows
     /// those cards, the floating panel asks for them too.
@@ -79,6 +82,7 @@ final class AIServices: ObservableObject {
         chatGPT = ChatGPTSession(store: secrets)
         let board = AgentJobBoard(storeURL: AgentJobBoard.standardURL)
         jobs = board
+        desk = Desk(board: board, storeURL: Desk.standardURL)
         gate = OutboundGate(approver: board.approver(fallback: PanelApprover(), panelForJobs: true))
         autoAgents = UserDefaults.standard.object(forKey: "ai.autoAgents") as? Bool ?? true
         if let data = UserDefaults.standard.data(forKey: "ai.settings"),
@@ -89,6 +93,7 @@ final class AIServices: ObservableObject {
         }
         localServerURL = UserDefaults.standard.string(forKey: "ai.localURL") ?? "http://127.0.0.1:8080/v1"
         localModel = UserDefaults.standard.string(forKey: "ai.localModel") ?? ""
+        startDesk()
     }
 
     private func saveSettings() {
@@ -135,10 +140,27 @@ final class AIServices: ObservableObject {
         AgentRunner(board: jobs, ladder: ladder())
     }
 
+    /// Hooks the Desk up; called once at launch.
+    func startDesk() {
+        let secrets = self.secrets
+        Task {
+            await desk.connect(
+                runner: { await MainActor.run { AIServices.shared.runner() } },
+                brief: { project, plan in
+                    let name = project.presetName ?? UserDefaults.standard.string(forKey: "ai.preset") ?? ""
+                    var brief = plan.purpose.brief(preset: PresetLibrary.standard.all().first { $0.name == name })
+                    if !project.notes.isEmpty {
+                        brief.houseStyle = [brief.houseStyle, project.notes].compactMap { $0 }.joined(separator: "\n")
+                    }
+                    return brief
+                },
+                sources: ScriptSources(secrets: secrets))
+        }
+    }
+
     /// The take's plan, or the purpose picked in "Before you record…".
     func plan(for take: Take) -> TakePlan {
-        TakePlan.load(for: take)
-            ?? TakePlan(purpose: UserDefaults.standard.string(forKey: "ai.nextPurpose").flatMap(Purpose.named) ?? .demo)
+        TakePlan.load(for: take) ?? TakePlan.next() ?? TakePlan(purpose: .demo)
     }
 
     /// The brief with the chosen prompt preset layered in.
@@ -151,12 +173,16 @@ final class AIServices: ObservableObject {
     /// Energy dial, the Sharer and Clipper) start on their own. What they
     /// make waits as dashed proposals with Keep and Undo.
     func transcriptReady(for take: Take) {
-        guard autoAgents, Self.isRecent(take) else { return }
+        guard Self.isRecent(take) else { return }
+        guard autoAgents else {
+            let desk = self.desk
+            Task { await desk.transcribed(take, runAgents: false) }
+            return
+        }
         let takePlan = plan(for: take)
         try? takePlan.write(for: take)
-        let runner = runner()
-        let brief = brief(for: takePlan)
-        Task { await runner.afterRecording(take, plan: takePlan, brief: brief) }
+        let desk = self.desk
+        Task { await desk.transcribed(take) }
     }
 
     /// Old takes transcribed on launch don't wake the agents.

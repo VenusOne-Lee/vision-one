@@ -123,7 +123,7 @@ public actor AgentJobBoard {
     /// Parks the request on the job and waits for the user's answer. With
     /// `alsoAsk`, that approver (the floating panel) asks too, and
     /// whichever answers first wins.
-    func requestApproval(jobID: UUID, request: OutboundRequest,
+    public func requestApproval(jobID: UUID, request: OutboundRequest,
                          alsoAsk: (any OutboundApprover)? = nil) async -> OutboundDecision {
         guard let job = job(jobID), job.state.isActive else { return .deny }
         let before = job.state
@@ -179,12 +179,13 @@ public actor AgentJobBoard {
         let cuts = job.changes.compactMap { if case let .cut(id) = $0 { return id } else { return nil } }
         let clips = job.changes.compactMap { if case let .clip(id) = $0 { return id } else { return nil } }
         let fm = FileManager.default
-        if !cuts.isEmpty, fm.fileExists(atPath: take.editsURL.path) {
-            var list = try EditList.read(from: take.editsURL)
+        let editsURL = job.editsFile.map { take.folder.appendingPathComponent($0) } ?? take.editsURL
+        if !cuts.isEmpty, fm.fileExists(atPath: editsURL.path) {
+            var list = try EditList.read(from: editsURL)
             for id in cuts {
                 if keep { list.setState(.accepted, for: id) } else { list.remove(id: id) }
             }
-            try list.write(to: take.editsURL)
+            try list.write(to: editsURL)
         }
         if !clips.isEmpty, fm.fileExists(atPath: take.clipsURL.path) {
             var list = try ClipList.read(from: take.clipsURL)
