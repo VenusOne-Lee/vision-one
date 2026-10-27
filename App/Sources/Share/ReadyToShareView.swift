@@ -253,7 +253,6 @@ final class ReadyToShareWindowController: NSObject, NSWindowDelegate {
                 defer: false
             )
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.title = "Ready to share"
             window.delegate = self
             window.center()
@@ -262,7 +261,7 @@ final class ReadyToShareWindowController: NSObject, NSWindowDelegate {
         }
         window?.subtitle = take.name
         let frame = window?.frame
-        window?.contentViewController = NSHostingController(rootView: view)
+        window?.contentViewController = NSHostingController(rootView: view.themed())
         if let frame { window?.setFrame(frame, display: false) }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
