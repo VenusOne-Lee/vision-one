@@ -226,3 +226,29 @@ final class CleanupProposalsTests: XCTestCase {
         assertCut(cuts[4], 5.85, 7, .deadAir)
     }
 }
+
+final class AutoCleanTests: XCTestCase {
+    func testWritesProposalsAndKeepsRejections() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let take = Take(folder: folder)
+        let transcript = Transcript(language: "en", engine: "test", duration: 4, segments: [
+            TranscriptSegment(words: words([("Hello.", 0.1, 0.5), ("Um,", 2.0, 2.2), ("hi.", 2.3, 2.6)])),
+        ])
+
+        let first = try AutoClean.run(on: take, transcript: transcript)
+        XCTAssertEqual(first.map(\.reason), [Cut.Reason.pause, Cut.Reason.filler, Cut.Reason.deadAir])
+
+        var list = try EditList.read(from: take.editsURL)
+        let filler = try XCTUnwrap(list.cuts.first { $0.reason == Cut.Reason.filler })
+        list.setState(.rejected, for: filler.id)
+        try list.write(to: take.editsURL)
+
+        let second = try AutoClean.run(on: take, transcript: transcript)
+        XCTAssertTrue(second.isEmpty, "a re-run proposes nothing new")
+        let after = try EditList.read(from: take.editsURL)
+        XCTAssertEqual(after.cuts.count, 3)
+        XCTAssertEqual(after.cuts.first { $0.id == filler.id }?.state, .rejected)
+    }
+}
