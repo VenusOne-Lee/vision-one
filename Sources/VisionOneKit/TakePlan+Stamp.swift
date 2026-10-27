@@ -14,4 +14,15 @@ extension TakePlan {
         try plan.write(for: take)
         return plan
     }
+
+    /// Stamps Home's whole pick, purpose and Energy dial (`next(in:)`),
+    /// with the same rules.
+    @discardableResult
+    public static func stamp(_ take: Take, from defaults: UserDefaults,
+                             fileManager: FileManager = .default) throws -> TakePlan? {
+        guard !fileManager.fileExists(atPath: take.planURL.path),
+              let plan = next(in: defaults) else { return nil }
+        try plan.write(for: take)
+        return plan
+    }
 }

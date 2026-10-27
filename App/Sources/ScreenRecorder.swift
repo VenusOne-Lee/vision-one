@@ -203,7 +203,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
         if saved {
             // Remember what it's for now, so a later pick on Home
             // doesn't change what this take is.
-            try? TakePlan.stamp(take, purposeID: UserDefaults.standard.string(forKey: "ai.nextPurpose"))
+            try? TakePlan.stamp(take, from: .standard)
             lastTake = take
             Transcriber.shared.transcribe(take)
             phase = .idle
