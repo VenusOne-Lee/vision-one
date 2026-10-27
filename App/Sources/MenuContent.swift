@@ -27,7 +27,7 @@ struct MenuContent: View {
                     .font(.system(size: 13, weight: .semibold))
                 UpdateBadge(updater: updater)
                 Spacer(minLength: 0)
-                FooterLink("Open Vision One") { EditorWindowController.shared.show() }
+                FooterLink("Open Vision One", action: MenuPanel.closing { EditorWindowController.shared.show() })
             }
             .padding(.horizontal, Theme.Panel.inset)
             .padding(.top, 12)
@@ -43,11 +43,13 @@ struct MenuContent: View {
 
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
                 if case let .failed(message) = recorder.phase {
-                    ErrorAlert(message: message) { recorder.openSetup() }
+                    ErrorAlert(message: message, openSettings: MenuPanel.closing { recorder.openSetup() })
                 }
-                RecordBar(phase: recorder.phase, title: idleTitle) {
+                // The panel closes so it isn't sitting over what you record,
+                // and so the editor that opens after a take comes up in front.
+                RecordBar(phase: recorder.phase, title: idleTitle, action: MenuPanel.closing {
                     Task { await recorder.toggle() }
-                }
+                })
                 .help(hotKey.isRegistered ? "" : "⌘⇧R is taken by another app")
                 if !hotKey.isRegistered {
                     Text("⌘⇧R is taken by another app. Use this button to record.")
@@ -62,7 +64,7 @@ struct MenuContent: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !recorder.phase.isLive {
-                    FooterLink("Before you record…") { ProducerWindowController.shared.show() }
+                    FooterLink("Before you record…", action: MenuPanel.closing { ProducerWindowController.shared.show() })
                 }
             }
             .padding(.horizontal, Theme.Panel.inset)
@@ -77,10 +79,10 @@ struct MenuContent: View {
             }
 
             HStack(spacing: 14) {
-                FooterLink("All recordings") { recorder.revealRecordings() }
-                FooterLink("Brand") { BrandWindowController.shared.show() }
-                FooterLink("AI") { AISettingsWindowController.shared.show() }
-                FooterLink("Access") { recorder.openSetup() }
+                FooterLink("All recordings", action: MenuPanel.closing { recorder.revealRecordings() })
+                FooterLink("Brand", action: MenuPanel.closing { BrandWindowController.shared.show() })
+                FooterLink("AI", action: MenuPanel.closing { AISettingsWindowController.shared.show() })
+                FooterLink("Access", action: MenuPanel.closing { recorder.openSetup() })
                 Spacer(minLength: 0)
                 FooterLink("Quit") { NSApplication.shared.terminate(nil) }
                     .keyboardShortcut("q")
@@ -93,6 +95,7 @@ struct MenuContent: View {
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
         .environment(\.colorScheme, .light) // light only, always
+        .background(PanelWindowReader())
     }
 
     private var isLocked: Bool { recorder.phase.isLive || recorder.phase.isBusy }
@@ -309,7 +312,7 @@ struct UpdateBadge: View {
 
     var body: some View {
         if let version = updater.waitingVersion {
-            Button("Update to \(version)") { updater.checkForUpdates() }
+            Button("Update to \(version)", action: MenuPanel.closing { updater.checkForUpdates() })
                 .buttonStyle(PillButtonStyle(kind: .primary))
         } else {
             Button("v\(updater.currentVersion)") { updater.checkForUpdates() }
@@ -443,9 +446,8 @@ struct CapturePicker: View {
                     .font(.system(size: 12, design: .monospaced).monospacedDigit())
                     .foregroundStyle(Theme.text)
             }
-            Button(recorder.choice.area == nil ? "Choose area" : "Change area") {
-                recorder.chooseArea()
-            }
+            Button(recorder.choice.area == nil ? "Choose area" : "Change area",
+                   action: MenuPanel.closing { recorder.chooseArea() })
             .buttonStyle(PillButtonStyle(kind: .secondary))
         }
     }
@@ -671,9 +673,9 @@ private struct SourceRow<Detail: View>: View {
             Spacer(minLength: Theme.Space.sm)
             Toggle(title, isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .tint(Theme.text)
+                // Ink, not the system switch, which goes grey whenever the
+                // panel isn't the active window and makes "on" look off.
+                .toggleStyle(InkSwitchStyle(label: title))
         }
         .frame(minHeight: 30)
     }
@@ -705,7 +707,7 @@ struct LastTakeCard: View {
             }
 
             HStack(spacing: 6) {
-                Button("Review take") { EditorWindowController.shared.open(take) }
+                Button("Review take", action: MenuPanel.closing { EditorWindowController.shared.open(take) })
                     .buttonStyle(PillButtonStyle(kind: .primary))
                     .disabled(isBusy)
                     .help("Play it back, read the transcript and decide on the suggested cuts")
@@ -717,9 +719,9 @@ struct LastTakeCard: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.textMuted)
                 }
-                Button {
+                Button(action: MenuPanel.closing {
                     NSWorkspace.shared.activateFileViewerSelecting([take.screenURL])
-                } label: {
+                }) {
                     Image(systemName: "folder")
                         .font(.system(size: 13))
                         .frame(width: 26, height: 26)
@@ -743,7 +745,7 @@ struct LastTakeCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if case .done = exports.phase {
                         Spacer(minLength: 0)
-                        Button("Show") { exports.revealExport() }
+                        Button("Show", action: MenuPanel.closing { exports.revealExport() })
                             .buttonStyle(PillButtonStyle(kind: .secondary))
                     }
                 }
@@ -874,5 +876,40 @@ struct ExportRing: View {
         }
         .frame(width: 14, height: 14)
         .accessibilityHidden(true)
+    }
+}
+
+/// Closes the menu bar panel when one of its buttons opens a window, so
+/// the window comes up in front instead of under the panel. MenuBarExtra
+/// has no dismiss action for its window style, so the panel remembers its
+/// own window (PanelWindowReader) and closes it; the next click on the
+/// menu bar icon opens it again.
+@MainActor
+enum MenuPanel {
+    fileprivate static weak var window: NSWindow?
+
+    static func close() {
+        window?.close()
+    }
+
+    /// `action`, run right after the panel closes.
+    static func closing(_ action: @escaping () -> Void) -> () -> Void {
+        {
+            close()
+            action()
+        }
+    }
+}
+
+/// Finds the window the panel is drawn in.
+private struct PanelWindowReader: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { ReaderView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class ReaderView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { MenuPanel.window = window }
+        }
     }
 }
