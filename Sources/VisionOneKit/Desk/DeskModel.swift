@@ -339,6 +339,7 @@ extension AgentKind {
         case .editor: return "editing"
         case .clipper: return "making clips"
         case .sharer: return "writing the post"
+        case .autopilot: return "recording a demo"
         }
     }
 }
