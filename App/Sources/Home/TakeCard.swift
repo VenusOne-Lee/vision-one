@@ -7,7 +7,7 @@ import VisionOneKit
 /// The ring is dashed until the take is exported, then solid, the app's
 /// one grammar. Rename in place; Move to Trash can be undone.
 struct TakeCard: View {
-    let item: LibraryItem
+    let item: TakeListing
     /// Bumped on every Library refresh so the frame is read again.
     let generation: Int
     /// The newest take while recording is still being saved.

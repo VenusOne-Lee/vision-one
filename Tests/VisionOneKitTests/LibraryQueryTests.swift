@@ -4,15 +4,15 @@ import XCTest
 final class LibraryQueryTests: XCTestCase {
     private func item(_ name: String, title: String, at seconds: TimeInterval?, duration: Double? = nil,
                       exported: Bool = false, cuts: Int = 0, words: String? = nil,
-                      purpose: String? = nil) -> LibraryItem {
-        LibraryItem(take: Take(folder: URL(fileURLWithPath: "/tmp/\(name)", isDirectory: true)),
+                      purpose: String? = nil) -> TakeListing {
+        TakeListing(take: Take(folder: URL(fileURLWithPath: "/tmp/\(name)", isDirectory: true)),
                     title: title,
                     recordedAt: seconds.map { Date(timeIntervalSince1970: $0) },
                     duration: duration, isExported: exported, suggestedCuts: cuts, transcriptText: words,
                     purposeTitle: purpose)
     }
 
-    private var items: [LibraryItem] {
+    private var items: [TakeListing] {
         [
             item("c", title: "Today at 14:41", at: 300, duration: 40, cuts: 3, words: "Here is the login demo"),
             item("b", title: "Café pitch", at: 200, duration: 125, exported: true, words: "Our pitch for investors"),

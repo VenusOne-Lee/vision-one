@@ -14,7 +14,7 @@ struct LibraryView: View {
     /// Read again whenever the window comes forward or a take finishes,
     /// the same way the editor's takes sidebar does.
     @State private var takes: [Take] = TakeLibrary.standard.takes()
-    @State private var items: [LibraryItem] = []
+    @State private var items: [TakeListing] = []
     @State private var indexed = false
     /// Bumped on every refresh so cards read their frame from disk again
     /// (a transcript or an export may have landed meanwhile).
@@ -181,7 +181,7 @@ struct LibraryView: View {
 
     // MARK: Takes
 
-    private var shown: [LibraryItem] { query.apply(to: items) }
+    private var shown: [TakeListing] { query.apply(to: items) }
 
     private var takesSection: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
@@ -220,7 +220,7 @@ struct LibraryView: View {
 
     /// The newest take, when it still has cuts waiting for a yes or no:
     /// one click back to where the builder left off.
-    private var pickUp: LibraryItem? {
+    private var pickUp: TakeListing? {
         guard let newest = items.first(where: { $0.take == takes.first }),
               newest.needsReview, !newest.isExported, !recorder.phase.isLive else { return nil }
         return newest
@@ -349,7 +349,7 @@ struct LibraryView: View {
     }
 
     /// Like Finder: no question first, and Undo puts it back.
-    private func moveToTrash(_ item: LibraryItem) {
+    private func moveToTrash(_ item: TakeListing) {
         var resulting: NSURL?
         do {
             try FileManager.default.trashItem(at: item.take.folder, resultingItemURL: &resulting)
@@ -401,7 +401,7 @@ struct LibraryView: View {
 
 /// "Your last take has 3 suggested cuts", with one button back into it.
 private struct PickUpBanner: View {
-    let item: LibraryItem
+    let item: TakeListing
     let review: () -> Void
 
     var body: some View {

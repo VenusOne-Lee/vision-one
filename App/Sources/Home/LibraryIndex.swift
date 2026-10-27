@@ -12,8 +12,8 @@ actor LibraryIndex {
     private var durations: [URL: Double] = [:]
     private var transcripts: [URL: String] = [:]
 
-    func items(for takes: [Take]) async -> [LibraryItem] {
-        var items: [LibraryItem] = []
+    func items(for takes: [Take]) async -> [TakeListing] {
+        var items: [TakeListing] = []
         items.reserveCapacity(takes.count)
         for take in takes {
             items.append(await item(for: take))
@@ -21,14 +21,14 @@ actor LibraryIndex {
         return items
     }
 
-    private func item(for take: Take) async -> LibraryItem {
+    private func item(for take: Take) async -> TakeListing {
         let fileManager = FileManager.default
         let edits = try? EditList.read(from: take.editsURL)
         let isExported = ExportPreset.allCases.contains {
             fileManager.fileExists(atPath: take.exportURL(for: $0).path)
         }
         let purpose = TakePlan.load(for: take).flatMap { Purpose.named($0.purposeID) }
-        return LibraryItem(
+        return TakeListing(
             take: take,
             title: take.displayTitle(fileManager: fileManager),
             recordedAt: take.recordedAt(),

@@ -40,7 +40,7 @@ extension Take {
 
 /// One take as the Library lists it: what it's called, when, how long,
 /// where it's up to, and its words for search.
-public struct LibraryItem: Equatable, Sendable {
+public struct TakeListing: Equatable, Sendable {
     public var take: Take
     public var title: String
     public var recordedAt: Date?
@@ -94,7 +94,7 @@ public enum LibraryFilter: String, CaseIterable, Sendable {
         }
     }
 
-    public func includes(_ item: LibraryItem) -> Bool {
+    public func includes(_ item: TakeListing) -> Bool {
         switch self {
         case .all: return true
         case .toReview: return item.needsReview
@@ -124,7 +124,7 @@ public struct LibraryQuery: Equatable, Sendable {
         search.split(whereSeparator: \.isWhitespace).map { Self.fold(String($0)) }
     }
 
-    public func apply(to items: [LibraryItem]) -> [LibraryItem] {
+    public func apply(to items: [TakeListing]) -> [TakeListing] {
         let terms = self.terms
         let kept = items.filter { item in
             guard filter.includes(item) else { return false }
@@ -137,9 +137,9 @@ public struct LibraryQuery: Equatable, Sendable {
     }
 
     /// Ties keep the folder order, newest first.
-    private func sorted(_ items: [LibraryItem]) -> [LibraryItem] {
+    private func sorted(_ items: [TakeListing]) -> [TakeListing] {
         let indexed = Array(items.enumerated())
-        func newer(_ a: LibraryItem, _ b: LibraryItem) -> Bool? {
+        func newer(_ a: TakeListing, _ b: TakeListing) -> Bool? {
             switch (a.recordedAt, b.recordedAt) {
             case let (x?, y?) where x != y: return x > y
             case (.some, nil): return true
