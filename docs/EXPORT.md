@@ -23,6 +23,10 @@ We don't use `AVAssetExportSession`: it can't set a bitrate, so it can't promise
 
 WhatsApp works out the bitrate from the edited length. It uses the largest size that still gets enough bits per pixel to keep text readable, and short videos don't use the whole budget. The hardware encoder only roughly meets its average bitrate, so if the file comes out over 16 MB it exports again at a lower bitrate worked out from what it actually wrote (`ExportPlanner.retryVideoBitRate`: only the video's share shrinks, aiming at 85% of the limit, then 80%). That's up to 3 tries in all; the progress ring gives the first try 70% and the retries share the rest, so it never runs backwards. If the third try is still too big, the file is deleted and export says "Still over 16 MB. Cut it shorter or pick 720p." Past about 7 minutes (depends on screen shape) it says how many parts to send instead.
 
+## Export sheet
+
+The editor's Export button opens a sheet: each preset is a tile drawn to the recording's real shape (solid when picked, dashed when not), with its length and rough size, next to the caption style chips and the Captions and Burn in switches. Export runs the picked presets one after another. The menu bar panel keeps its quick Export menu.
+
 ## Files
 
 Exports sit in the take folder, named after the take: `Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4`.

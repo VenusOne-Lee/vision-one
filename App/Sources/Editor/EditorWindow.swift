@@ -25,6 +25,7 @@ struct EditorView: View {
     @AppStorage("editor.sideTab") private var sidePaneRaw = SidePane.changes.rawValue
     /// An export of this take exists: the ring before its name goes solid.
     @State private var isExported = false
+    @State private var showExport = false
 
     /// What the pane beside the video shows.
     enum SidePane: String, CaseIterable, Identifiable {
@@ -141,9 +142,15 @@ struct EditorView: View {
                     .buttonStyle(PillButtonStyle(kind: .secondary))
                     .help("Pick what it's for, ask for a length, find clips, and write a title and posts")
                 // Exports exactly what's on screen, even if saving failed.
-                ExportMenu(take: model.take,
-                           keep: model.edits.keptSpans.map { $0.start..<$0.end },
-                           exports: exports)
+                Button("Export") { showExport = true }
+                    .buttonStyle(PillButtonStyle(kind: .primary))
+                    .help("Pick formats and captions, then export")
+                    .sheet(isPresented: $showExport) {
+                        ExportSheet(take: model.take,
+                                    keep: model.edits.keptSpans.map { $0.start..<$0.end }) {
+                            showExport = false
+                        }
+                    }
             }
             Button("Undo") { model.undoManager.undo() }
                 .buttonStyle(PillButtonStyle(kind: .secondary))
