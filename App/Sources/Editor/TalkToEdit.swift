@@ -106,7 +106,7 @@ final class TalkController: ObservableObject {
     }
 
     /// Built outside the main actor: the block runs on the audio thread.
-    private nonisolated static func tap(into sink: SampleBuffer) -> AVAudioNodeTapBlock {
+    nonisolated static func tap(into sink: SampleBuffer) -> AVAudioNodeTapBlock {
         { pcm, _ in
             guard let channel = pcm.floatChannelData?[0] else { return }
             sink.append(Array(UnsafeBufferPointer(start: channel, count: Int(pcm.frameLength))))
@@ -133,7 +133,7 @@ final class TalkController: ObservableObject {
 }
 
 /// Mic samples from the audio thread, read once listening stops.
-private final class SampleBuffer: @unchecked Sendable {
+final class SampleBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var samples: [Float] = []
     private var rate = 48_000.0

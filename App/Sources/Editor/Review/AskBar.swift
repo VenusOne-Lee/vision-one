@@ -22,8 +22,8 @@ final class AskModel: ObservableObject {
     }
 
     func go(on editor: EditorModel) {
-        let ask = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !ask.isEmpty, !isRunning else { return }
+        let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty, !isRunning else { return }
         let take = editor.take
         // What it's for, as the Agents window picks it: the take's own
         // plan, else the next purpose chosen, else a demo.
@@ -32,6 +32,19 @@ final class AskModel: ObservableObject {
         let presetName = UserDefaults.standard.string(forKey: "ai.preset") ?? ""
         let preset = PresetLibrary.standard.all().first { $0.name == presetName }
         let brief = plan.purpose.brief(preset: preset)
+        // "/copy make a punchier version": try it in a copy, so the
+        // main cut stays safe, then ask for the rest there.
+        var ask = typed
+        if ask.lowercased().hasPrefix("/copy") {
+            let rest = String(ask.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+            editor.versions.tryCopy(note: rest.isEmpty ? nil : rest)
+            guard !rest.isEmpty else {
+                text = ""
+                run = .done("Made \(editor.versions.open?.name ?? "a copy"). The main cut is safe; compare them from the version menu.")
+                return
+            }
+            ask = rest
+        }
         if SilenceCut.isSilenceAsk(ask) {
             cutSilence(on: editor)
             return
