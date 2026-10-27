@@ -10,6 +10,8 @@ Made for South African builders, as the sibling of [Version One](https://version
 
 Record → stop → the editor opens on the take → the transcript and suggested cuts appear → review → Export.
 
+Vision One has a main window (the Library of takes, and the editor) with a Dock icon, plus the menu bar panel for quick recording.
+
 ## v0.1 plan
 
 - [x] Menu bar recorder, ⌘⇧R from anywhere
