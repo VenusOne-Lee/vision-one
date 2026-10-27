@@ -8,6 +8,7 @@ import VisionOneKit
 /// Narrow windows drop the sidebar; very narrow ones stack the panes.
 struct EditorView: View {
     @ObservedObject var model: EditorModel
+    @ObservedObject private var exports = ExportController.shared
     let takes: [Take]
     let open: (Take) -> Void
 
@@ -68,6 +69,11 @@ struct EditorView: View {
                     .font(.system(size: 12, design: .monospaced).monospacedDigit())
                     .foregroundStyle(Theme.textMuted)
                     .help("Length of the take → length after your cuts")
+                EditorExportStatus(exports: exports)
+                // Exports exactly what's on screen, even if saving failed.
+                ExportMenu(take: model.take,
+                           keep: model.edits.keptSpans.map { $0.start..<$0.end },
+                           exports: exports)
             }
             Button("Undo") { model.undoManager.undo() }
                 .buttonStyle(PillButtonStyle(kind: .secondary))
@@ -343,5 +349,42 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         model?.close()
         model = nil
+    }
+}
+
+/// The ring and percentage beside the Export pill while exporting, and
+/// a solid ring with Show once the file is ready.
+struct EditorExportStatus: View {
+    @ObservedObject var exports: ExportController
+
+    var body: some View {
+        switch exports.phase {
+        case let .exporting(preset, progress):
+            HStack(spacing: 6) {
+                ExportRing(progress: progress)
+                Text("\(preset.title) \(Int(progress * 100))%")
+                    .font(.system(size: 12).monospacedDigit())
+                    .foregroundStyle(Theme.textMuted)
+                Button("Cancel") { exports.cancel() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
+            }
+        case let .done(_, _, bytes):
+            HStack(spacing: 6) {
+                ExportRing(progress: 1)
+                Button("Show · \(ExportPhase.size(bytes))") { exports.revealExport() }
+                    .buttonStyle(PillButtonStyle(kind: .secondary))
+            }
+        case let .failed(message):
+            Text(message)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.error)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(message)
+        case .idle:
+            EmptyView()
+        }
     }
 }

@@ -175,17 +175,7 @@ struct ExportRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             HStack {
-                Menu("Export") {
-                    ForEach(ExportPreset.allCases) { preset in
-                        Button("\(preset.title) · \(preset.detail)") {
-                            exports.export(take, preset: preset)
-                        }
-                    }
-                }
-                .menuStyle(.button)
-                .buttonStyle(PillButtonStyle(kind: .primary))
-                .fixedSize()
-                .disabled(exports.phase.isBusy)
+                ExportMenu(take: take, exports: exports)
 
                 Spacer()
 
@@ -230,6 +220,28 @@ struct ExportRow: View {
     private var exportFailed: Bool {
         if case .failed = exports.phase { return true }
         return false
+    }
+}
+
+/// The black Export pill with one item per preset. `keep` overrides the
+/// kept spans; nil uses the take's saved edits.json.
+struct ExportMenu: View {
+    let take: Take
+    var keep: [Range<Double>]? = nil
+    @ObservedObject var exports: ExportController
+
+    var body: some View {
+        Menu("Export") {
+            ForEach(ExportPreset.allCases) { preset in
+                Button("\(preset.title) · \(preset.detail)") {
+                    exports.export(take, preset: preset, keep: keep)
+                }
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(PillButtonStyle(kind: .primary))
+        .fixedSize()
+        .disabled(exports.phase.isBusy)
     }
 }
 
