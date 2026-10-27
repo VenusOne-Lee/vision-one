@@ -9,6 +9,7 @@ import Foundation
 ///       transcript.json  word-timed transcript of the mic track
 ///       edits.json       cuts made in the editor; screen.mov is never changed
 ///       camera.mov    (next) camera, drawn in the ring bubble at export
+///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
 public struct Take: Equatable, Sendable {
     public let folder: URL
 
@@ -22,6 +23,12 @@ public struct Take: Equatable, Sendable {
     public var cameraURL: URL { folder.appendingPathComponent("camera.mov") }
     public var transcriptURL: URL { folder.appendingPathComponent("transcript.json") }
     public var editsURL: URL { folder.appendingPathComponent("edits.json") }
+
+    /// Exports sit next to the recording, named after the take, so they
+    /// read well once dragged out of the folder.
+    public func exportURL(for preset: ExportPreset) -> URL {
+        folder.appendingPathComponent("\(name)\(preset.fileSuffix).mp4")
+    }
 }
 
 /// Decides where takes are saved and what they are called.
