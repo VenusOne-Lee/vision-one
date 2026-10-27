@@ -51,9 +51,10 @@ public struct PanelLayout: Codable, Equatable, Sendable {
                 isHidden: Bool = false, width: Double = 380, splitFraction: Double = 0.5) {
         var unique: [PanelKind] = []
         for tab in tabs where !unique.contains(tab) { unique.append(tab) }
+        let front = selected.flatMap { unique.contains($0) ? $0 : nil } ?? unique.first
         self.tabs = unique
-        self.selected = selected.flatMap { unique.contains($0) ? $0 : nil } ?? unique.first
-        self.split = split.flatMap { unique.contains($0) && $0 != self.selected ? $0 : nil }
+        self.selected = front
+        self.split = split.flatMap { unique.contains($0) && $0 != front ? $0 : nil }
         self.isHidden = isHidden
         self.width = min(Self.maxWidth, max(Self.minWidth, width))
         self.splitFraction = min(0.8, max(0.2, splitFraction))
