@@ -26,6 +26,7 @@ final class CopyStyleModel: ObservableObject {
     @Published private(set) var naming = false
 
     private var task: Task<Void, Never>?
+    @Published private var watcher: StyleWatcher?
 
     /// What the paste field would open, for the line under it.
     var pastedSource: StyleSource? { StyleSource.classify(pasted) }
@@ -61,18 +62,17 @@ final class CopyStyleModel: ObservableObject {
     private func start(_ source: StyleSource) {
         problem = nil
         self.source = source
-        guard source.readsDirectly else {
-            // Links on video sites play in a window while they're read;
-            // that comes next. Until then, a file they saved works.
-            phase = .waiting
-            problem = "Reading \(source.label) links as they play is coming next. For now, drop the video file here (TikTok and YouTube Studio let you download your own)."
-            return
-        }
         task?.cancel()
+        watcher?.stop(useWhatWasRead: false)
+        watcher = nil
         profile = nil
         phase = .reading(progress: 0)
         let label = source.label
         let url = source.url
+        guard source.readsDirectly else {
+            watch(url, label: label)
+            return
+        }
         task = Task { [weak self] in
             do {
                 let input = try await StyleSampler.read(url) { progress, partial in
@@ -95,6 +95,34 @@ final class CopyStyleModel: ObservableObject {
         }
     }
 
+    /// Links on video sites play in a Vision One window and are read as
+    /// they play. Nothing is downloaded.
+    private func watch(_ url: URL, label: String) {
+        let watcher = StyleWatcher(url: url) { [weak self] progress, partial in
+            guard let self, case .reading = self.phase else { return }
+            self.phase = .reading(progress: progress)
+            self.profile = StyleScanner.profile(from: partial, source: label)
+        } onFinish: { [weak self] result in
+            guard let self else { return }
+            self.watcher = nil
+            switch result {
+            case let .success(input):
+                Task {
+                    let profile = await Task.detached(priority: .userInitiated) {
+                        StyleScanner.profile(from: input, source: label)
+                    }.value
+                    self.finish(with: profile)
+                }
+            case let .failure(error):
+                self.phase = .waiting
+                self.profile = nil
+                self.problem = error.localizedDescription
+            }
+        }
+        self.watcher = watcher
+        watcher.start()
+    }
+
     private func finish(with profile: StyleProfile) {
         self.profile = profile
         copying = Set(profile.traits.filter(\.copiedByDefault).map(\.id))
@@ -103,12 +131,19 @@ final class CopyStyleModel: ObservableObject {
         Task { await nameOnDevice(profile) }
     }
 
+    /// Stop: a playing link keeps what it has read so far; a file starts over.
     func stop() {
+        if let watcher {
+            watcher.stop(useWhatWasRead: true)
+            return
+        }
         task?.cancel()
         task = nil
         phase = .waiting
         profile = nil
     }
+
+    var isWatching: Bool { watcher != nil }
 
     // MARK: - Result
 
@@ -153,6 +188,8 @@ final class CopyStyleModel: ObservableObject {
     }
 
     func reset() {
+        watcher?.stop(useWhatWasRead: false)
+        watcher = nil
         stop()
         source = nil
         pasted = ""
