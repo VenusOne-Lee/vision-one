@@ -8,3 +8,4 @@ xcuserdata/
 App/Info.plist
 App/VisionOne.entitlements
 .gstack/
+Config/Local.xcconfig

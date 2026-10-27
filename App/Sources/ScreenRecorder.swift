@@ -34,11 +34,15 @@ final class ScreenRecorder: NSObject, ObservableObject {
         guard !phase.isBusy, !phase.isLive else { return }
         phase = .preparing
 
-        guard CGPreflightScreenCaptureAccess() else {
-            CGRequestScreenCaptureAccess()
-            phase = .failed(message: RecorderError.screenAccessMessage)
+        // No dead end: without access, open the setup window instead.
+        let access = AccessCenter.shared
+        access.refresh()
+        guard access.checklist.canRecord else {
+            phase = .idle
+            SetupWindowController.shared.show()
             return
         }
+        let withMicrophone = access.checklist.state(of: .microphone) == .granted
 
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
@@ -64,10 +68,11 @@ final class ScreenRecorder: NSObject, ObservableObject {
             config.capturesAudio = true
             config.sampleRate = 48_000
             config.channelCount = 2
-            config.captureMicrophone = true
+            config.captureMicrophone = withMicrophone
 
             let take = try library.newTake()
-            let writer = try TakeWriter(url: take.screenURL, width: width, height: height)
+            let writer = try TakeWriter(url: take.screenURL, width: width, height: height,
+                                        includeMicrophone: withMicrophone)
             let cursor = CursorLogger(displayFrame: CGDisplayBounds(display.displayID))
             let sink = CaptureSink(writer: writer) { [weak cursor] firstFrame in
                 Task { @MainActor in cursor?.setOrigin(firstFrame.seconds) }
@@ -76,7 +81,9 @@ final class ScreenRecorder: NSObject, ObservableObject {
             let stream = SCStream(filter: filter, configuration: config, delegate: self)
             try stream.addStreamOutput(sink, type: .screen, sampleHandlerQueue: captureQueue)
             try stream.addStreamOutput(sink, type: .audio, sampleHandlerQueue: captureQueue)
-            try stream.addStreamOutput(sink, type: .microphone, sampleHandlerQueue: captureQueue)
+            if withMicrophone {
+                try stream.addStreamOutput(sink, type: .microphone, sampleHandlerQueue: captureQueue)
+            }
             cursor.start()
             try await stream.startCapture()
 
@@ -119,10 +126,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
         }
     }
 
-    func openScreenRecordingSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-            NSWorkspace.shared.open(url)
-        }
+    func openSetup() {
+        SetupWindowController.shared.show()
     }
 
     private func fail(_ error: Error) {

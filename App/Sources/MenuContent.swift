@@ -34,7 +34,7 @@ struct MenuContent: View {
             }
 
             if case let .failed(message) = recorder.phase {
-                ErrorAlert(message: message) { recorder.openScreenRecordingSettings() }
+                ErrorAlert(message: message) { recorder.openSetup() }
             }
 
             Divider().overlay(Theme.line)
@@ -43,6 +43,10 @@ struct MenuContent: View {
                 Button("Show recordings") { recorder.revealRecordings() }
                     .buttonStyle(PillButtonStyle(kind: .secondary))
                 Spacer()
+                Button("Access") { recorder.openSetup() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
                 Button("Quit") { NSApplication.shared.terminate(nil) }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
@@ -109,7 +113,7 @@ struct ErrorAlert: View {
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.error)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Open System Settings", action: openSettings)
+            Button("Check access", action: openSettings)
                 .buttonStyle(PillButtonStyle(kind: .secondary))
         }
         .padding(Theme.Space.sm)

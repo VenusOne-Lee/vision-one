@@ -1,0 +1,17 @@
+// Code signing for Vision One.
+//
+// macOS ties Screen Recording and Microphone access to the app's
+// signature. An ad hoc signature ("-") changes with every build, so macOS
+// treats each build as a new app and forgets its access. To keep access
+// across builds, sign with your own Apple Development certificate:
+//
+//   cp Config/Local.xcconfig.example Config/Local.xcconfig
+//
+// then put your team ID in Config/Local.xcconfig (it's ignored by git).
+// Without it, builds fall back to ad hoc signing and still run.
+
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

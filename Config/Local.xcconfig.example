@@ -1,0 +1,6 @@
+// Copy to Config/Local.xcconfig and fill in your team ID.
+// Find it in Xcode → Settings → Accounts, or at developer.apple.com/account.
+// A free Apple ID works: Xcode makes an Apple Development certificate for it.
+
+CODE_SIGN_IDENTITY = Apple Development
+DEVELOPMENT_TEAM = ABCDE12345
