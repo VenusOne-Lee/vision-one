@@ -6,6 +6,7 @@ import VisionOneKit
 /// per agent. Sharing always asks, whatever the rule.
 struct AgentsSettingsView: View {
     @ObservedObject var service: MCPService
+    @AppStorage("agents.offerToRecord") private var offerToRecord = true
 
     var body: some View {
         ScrollView {
@@ -67,6 +68,21 @@ struct AgentsSettingsView: View {
                             .font(.system(size: 12))
                             .foregroundStyle(Theme.textMuted)
                     }
+                }
+
+                section("Recording agents") {
+                    Toggle(isOn: $offerToRecord) {
+                        Text("Offer to record when an agent uses this Mac").font(.system(size: 13, weight: .semibold))
+                    }
+                    .toggleStyle(.switch)
+                    .tint(Theme.text)
+                    .onChange(of: offerToRecord) { _, on in
+                        on ? AgentWatcher.shared.start() : AgentWatcher.shared.stop()
+                    }
+                    Text("When Claude, ChatGPT, Codex or Cursor starts clicking or typing, Vision One asks if you'd like it recorded. Only the agent's clicks and typing are marked, never yours. You can also pick File › Record an Agent.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(Theme.Space.lg)

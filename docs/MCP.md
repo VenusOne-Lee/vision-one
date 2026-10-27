@@ -66,6 +66,8 @@ Name a take by its title, its folder name, or `latest` (the default).
 | `recording_status` | Recording or not, and which take | No |
 | `start_recording` | Records with your last screen and sound choices | **Yes** |
 | `stop_recording` | Stops, saves, transcribes on this Mac | No |
+| `start_agent_recording` | Records the agent itself using the Mac: marks its clicks and typing, never yours ([AGENT-RECORDING.md](AGENT-RECORDING.md)) | **Yes** |
+| `log_step` | During an agent recording: a short note that becomes a chapter | No |
 | `clean_up` | Proposes cuts for ums, repeats, long pauses (on this Mac) | No, proposals |
 | `cut_to_length` | The Editor agent proposes cuts to a length or an ask | No, proposals (AI settings may ask before words leave the Mac) |
 | `cut_part` | Proposes cutting a quote or a time span | No, proposals |
