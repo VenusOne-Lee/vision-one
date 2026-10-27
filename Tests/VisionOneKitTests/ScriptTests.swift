@@ -52,6 +52,15 @@ final class ScriptFollowerTests: XCTestCase {
         XCTAssertEqual(follower.position, 7)
     }
 
+    func testAdvanceStopsAtTheEnds() {
+        var follower = ScriptFollower(script: script)
+        follower.advance(by: 100)
+        XCTAssertTrue(follower.isFinished)
+        XCTAssertEqual(follower.currentLine, 2)
+        follower.advance(by: -200)
+        XCTAssertEqual(follower.position, 0)
+    }
+
     func testIgnoresFillers() {
         var follower = ScriptFollower(script: script)
         follower.hear("Joburg")

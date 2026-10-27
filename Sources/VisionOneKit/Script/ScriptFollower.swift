@@ -89,6 +89,12 @@ public struct ScriptFollower: Equatable, Sendable {
         return run
     }
 
+    /// Moves on by `count` words without hearing them, for a prompter
+    /// that scrolls at a steady pace.
+    public mutating func advance(by count: Int = 1) {
+        position = min(words.count, max(0, position + count))
+    }
+
     /// Back to the start, for a restarted take.
     public mutating func reset() {
         position = 0

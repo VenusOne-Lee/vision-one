@@ -44,7 +44,8 @@ struct AppCommands: Commands {
                 Task { await recorder.toggle() }
             }
             .disabled(recorder.phase.isBusy)
-            Button(recorder.isPaused ? "Resume Recording  ⌥⇧P" : "Pause Recording  ⌥⇧P") {
+            Button(recorder.isPaused ? "Resume Recording  \(ShortcutMap.pauseRecording.display)"
+                                     : "Pause Recording  \(ShortcutMap.pauseRecording.display)") {
                 recorder.togglePause()
             }
             .disabled(!recorder.phase.isLive)
