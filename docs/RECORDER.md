@@ -51,6 +51,14 @@ Mockups and research: https://claude.ai/artifact/XXu8UWfzJvLGZFc1FbebLZ
 - **Mic meter.** `CaptureSink` reads the peak of about fifteen mic buffers a second into `MicLevelMeter` (fast attack, 24 dB/s release). Nothing above −50 dBFS for 6 s shows "Can't hear you · check the mic".
 - **Area shapes.** Free, 16:9, 9:16 or 1:1. Picking one snaps the area to the biggest box of that shape inside it, and drawing and resizing keep it. Arrow keys nudge by a point, Shift-arrow by ten.
 
+## Recording from a script
+
+Add a script from the Script row on Home (or the coach, or an agent, through UserDefaults `script.text`). Each sentence becomes a line.
+
+- **Teleprompter.** It shows during the countdown, top centre under the menu bar so your eyes stay near the camera. Like every Vision One window it's left out of the capture. Drag it, resize it from its edges, and it opens where you left it. Said words fade and the next word is underlined. Its menu picks Follow my voice or Scroll steadily (120, 150 or 180 words a minute; a steady scroll waits while paused), and the text size.
+- **Follows your voice, on this Mac.** `ScriptVoice` feeds the mic buffers already being recorded to `SFSpeechRecognizer` with `requiresOnDeviceRecognition`, and `ScriptFollower` moves along the script: it skips a missed word or two, ignores fillers, and jumps back when you start a line again. Without speech permission it scrolls instead.
+- **Best try per line.** The script is saved with the take as `script.json`. After transcription, `ScriptRetakes` finds each try at each line (`script-takes.json`) and keeps the most complete, then the cleanest, then the latest. The other tries become proposed cuts with reason `repeat`, so you accept or reject them in the editor like any other suggestion. `[audio tags]` in the script aren't read or counted.
+
 ## Not yet
 
 - Showing and moving the bubble in the editor's preview

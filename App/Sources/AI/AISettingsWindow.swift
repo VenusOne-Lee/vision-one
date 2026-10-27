@@ -56,6 +56,14 @@ struct AISettingsView: View {
                 .font(.system(size: 12))
                 .toggleStyle(.checkbox)
 
+            Text("TOOLS THE PRODUCER READS FOR SCRIPTS")
+                .font(.system(size: 11, weight: .medium)).tracking(0.6)
+                .foregroundStyle(Theme.textMuted)
+            ToolKeyField(title: "GitHub token", hint: "Only for private repos. Public releases need none.",
+                         name: ScriptSources.githubTokenName)
+            ToolKeyField(title: "Linear API key", hint: "Reads finished issues for the teams you add to a project.",
+                         name: ScriptSources.linearKeyName)
+
             Rectangle().fill(Theme.line).frame(height: 1)
             elevenLabsRow
 
@@ -237,3 +245,36 @@ final class AISettingsWindowController {
         SettingsWindowController.shared.show(.ai)
     }
 }
+
+/// One Keychain field for a tool the Producer reads. Only names (a repo,
+/// a team) go out with it, never anything from a take.
+struct ToolKeyField: View {
+    let title: String
+    let hint: String
+    let name: String
+    @ObservedObject private var ai = AIServices.shared
+    @State private var draft = ""
+
+    var body: some View {
+        HStack(spacing: Theme.Space.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 12, weight: .semibold))
+                Text(hint).font(.system(size: 11)).foregroundStyle(Theme.textMuted)
+            }
+            Spacer()
+            StatusChip(ready: !ai.key(name).isEmpty)
+            SecureField("Paste", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 140)
+                .onSubmit { save() }
+            Button(draft.isEmpty && !ai.key(name).isEmpty ? "Remove" : "Save") { save() }
+                .buttonStyle(PillButtonStyle(kind: .secondary))
+        }
+    }
+
+    private func save() {
+        ai.setKey(draft, for: name)
+        draft = ""
+    }
+}
+

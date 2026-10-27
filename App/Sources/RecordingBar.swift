@@ -137,8 +137,6 @@ private struct RecordingBarView: View {
     /// Called while the pill is dragged, and once more with `done` on release.
     let onDrag: (CGSize, Bool) -> Void
     let onSize: (CGSize) -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     /// Restart and delete ask first, in the pill itself.
     private enum Asking { case restart, delete }
     @State private var asking: Asking?
@@ -159,7 +157,7 @@ private struct RecordingBarView: View {
         .padding(.vertical, 5)
         .background(Capsule().fill(Theme.paper))
         .overlay(border)
-        .shadow(color: Theme.text.opacity(0.3), radius: 10, y: 6)
+        .floatShadow()
         .fixedSize()
         .padding(RecordingBarController.margin)
         .background(GeometryReader { proxy in
@@ -188,13 +186,12 @@ private struct RecordingBarView: View {
         HStack(spacing: 2) {
             TimelineView(.periodic(from: .now, by: 0.25)) { context in
                 HStack(spacing: 10) {
-                    status(at: context.date)
-                    Text(Timecode.string(from: recorder.recordedTime(at: context.date)))
-                        .font(.system(size: 13, weight: .medium, design: .monospaced).monospacedDigit())
+                    status()
+                    Mono(Timecode.string(from: recorder.recordedTime(at: context.date)))
                     if mic.isActive, !recorder.isPaused {
                         if mic.isSilent() {
                             Text("Can't hear you · check the mic")
-                                .font(.system(size: 11, weight: .medium))
+                                .textStyle(.caption)
                                 .foregroundStyle(Theme.fillerText)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
@@ -218,14 +215,15 @@ private struct RecordingBarView: View {
 
             Divider().frame(height: 18).padding(.horizontal, 2)
 
-            BarIconButton(symbol: recorder.isPaused ? "play.fill" : "pause.fill",
-                          label: recorder.isPaused ? "Resume (⌥⇧P)" : "Pause (⌥⇧P)") {
+            IconButton(recorder.isPaused ? "Resume" : "Pause",
+                       systemImage: recorder.isPaused ? "play.fill" : "pause.fill",
+                       shortcut: ShortcutMap.pauseRecording.display) {
                 recorder.togglePause()
             }
-            BarIconButton(symbol: "arrow.counterclockwise", label: "Restart: bin this take and start over") {
+            IconButton("Start over (this take goes to the Bin)", systemImage: "arrow.counterclockwise") {
                 ask(.restart)
             }
-            BarIconButton(symbol: "trash", label: "Delete this take") {
+            IconButton("Delete this take", systemImage: "trash") {
                 ask(.delete)
             }
 
@@ -241,19 +239,16 @@ private struct RecordingBarView: View {
     }
 
     @ViewBuilder
-    private func status(at date: Date) -> some View {
+    private func status() -> some View {
         HStack(spacing: 6) {
             if recorder.isPaused {
                 Circle()
-                    .strokeBorder(Theme.text, lineWidth: 1.5)
+                    .strokeBorder(Theme.text, lineWidth: Theme.Stroke.ring)
                     .frame(width: 10, height: 10)
-                Text("Paused").font(.system(size: 12, weight: .bold))
+                Text("Paused").textStyle(.headline)
             } else {
-                Circle()
-                    .fill(Theme.tally)
-                    .frame(width: 10, height: 10)
-                    .opacity(blinkOn(at: date) ? 1 : 0.25)
-                Text("REC").font(.system(size: 12, weight: .bold))
+                LiveDot(size: 10)
+                Text("REC").textStyle(.headline)
             }
         }
     }
@@ -269,7 +264,7 @@ private struct RecordingBarView: View {
     private func question(_ what: Asking) -> some View {
         HStack(spacing: Theme.Space.sm) {
             Text(what == .restart ? "Start over? This take goes to the Bin." : "Delete this take? It goes to the Bin.")
-                .font(.system(size: 12, weight: .semibold))
+                .textStyle(.bodyStrong)
                 .fixedSize()
             Button("Keep recording") {
                 asking = nil
@@ -289,32 +284,6 @@ private struct RecordingBarView: View {
             .buttonStyle(PillButtonStyle(kind: .primary))
         }
         .padding(.vertical, 1)
-    }
-
-    private func blinkOn(at date: Date) -> Bool {
-        reduceMotion || Int(date.timeIntervalSinceReferenceDate * 2) % 2 == 0
-    }
-}
-
-/// A round 28 pt icon button for the pill.
-private struct BarIconButton: View {
-    let symbol: String
-    let label: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(hovering ? Theme.canvas : .clear))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .help(label)
-        .accessibilityLabel(label)
     }
 }
 

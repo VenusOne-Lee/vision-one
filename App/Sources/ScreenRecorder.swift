@@ -79,15 +79,22 @@ final class ScreenRecorder: NSObject, ObservableObject {
         }
         if case .failed = phase { phase = .idle }
         MainWindowStepAside.hide()
+        // The script shows during the countdown, so the first line is
+        // ready to read.
+        Teleprompter.shared.prepare(on: recordedScreen())
         isCountingDown = true
         let go = await Countdown.shared.run(on: recordedScreen())
         isCountingDown = false
         guard go else {
+            Teleprompter.shared.hide()
             MainWindowStepAside.restore()
             return
         }
         await start()
-        if !phase.isLive { MainWindowStepAside.restore() }
+        if !phase.isLive {
+            Teleprompter.shared.hide()
+            MainWindowStepAside.restore()
+        }
     }
 
     /// Starts recording straight away, without the countdown.
@@ -193,6 +200,12 @@ final class ScreenRecorder: NSObject, ObservableObject {
             }
             pauses = PauseLog()
             MicMonitor.shared.begin(withMicrophone: withMicrophone)
+            // Recorded from a script: keep it with the take, so the best
+            // attempt at each line can be picked after transcription.
+            if Teleprompter.shared.isShowing, let script = ScriptStore.shared.script {
+                try? script.write(to: take.scriptURL)
+                Teleprompter.shared.begin(withMicrophone: withMicrophone)
+            }
             phase = .recording(startedAt: Date())
         } catch {
             fail(error)
@@ -246,8 +259,9 @@ final class ScreenRecorder: NSObject, ObservableObject {
             Transcriber.shared.transcribe(take)
             phase = .idle
             MainWindowStepAside.forget()
-            // Straight to review. The editor waits for the transcript.
-            EditorWindowController.shared.open(take)
+            // Ready to share (or the editor, if that's the builder's
+            // pick). Both wait for the transcript.
+            ReadyToShareWindowController.shared.afterStop(take)
         } else {
             phase = .failed(message: sink.writerError?.localizedDescription
                 ?? "Nothing was recorded. Try again, and check Screen Recording access.")
@@ -323,6 +337,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
         await CameraBubble.shared.stopRecording()
         cursor?.stop(writingTo: take.eventsURL)
         MicMonitor.shared.end()
+        Teleprompter.shared.hide()
         let saved = await sink.finish()
         reset()
         return (take, sink, saved)
@@ -360,6 +375,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
     private func fail(_ error: Error) {
         if let take { cursor?.stop(writingTo: take.eventsURL) }
         MicMonitor.shared.end()
+        Teleprompter.shared.hide()
         pauses = PauseLog()
         MainWindowStepAside.restore()
         if let sink { Task { _ = await sink.finish() } }
@@ -415,6 +431,8 @@ final class CaptureSink: NSObject, SCStreamOutput, @unchecked Sendable {
                 guard type != .screen, sampleBuffer.isValid, AudioSamples.silence(sampleBuffer) else { return }
             } else if type == .microphone, meterMicrophone {
                 meter(sampleBuffer)
+                // The teleprompter follows the same voice, on device.
+                ScriptVoice.shared.append(sampleBuffer)
             }
             writer.append(sampleBuffer, of: type)
             if !sentFirstFrame, let first = writer.firstFrameTime {

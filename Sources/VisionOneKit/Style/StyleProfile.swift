@@ -242,6 +242,10 @@ extension StyleProfile {
             if let bpm = music.bpm { value += ", about \(Int(bpm.rounded())) bpm" }
             let detail = music.underVoiceDB.map { "About \(Int($0.rounded())) dB under the voice" } ?? "Plays through \(Self.percent(music.share))"
             list.append(StyleTrait(id: .music, value: value, detail: detail, confidence: c(.music), copiedByDefault: true))
+        } else if c(.music) <= 0.2 {
+            // No sound was heard at all, so there's nothing to copy.
+            list.append(StyleTrait(id: .music, value: "Sound not heard", detail: "Music is left to the Energy dial",
+                                   confidence: c(.music), copiedByDefault: false))
         } else {
             list.append(StyleTrait(id: .music, value: "No music", detail: "Voice only",
                                    confidence: c(.music), copiedByDefault: true))

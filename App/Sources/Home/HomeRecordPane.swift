@@ -11,6 +11,8 @@ struct HomeRecordPane: View {
     @ObservedObject private var microphones = Microphones.shared
     @State private var windows: [WindowCandidate] = []
     @State private var countdown = Countdown.shared.length
+    @ObservedObject private var scripts = ScriptStore.shared
+    @State private var editingScript = false
 
     var body: some View {
         VStack(spacing: 14) {
@@ -19,6 +21,7 @@ struct HomeRecordPane: View {
                 screenRow
                 cameraRow
                 micRow
+                scriptRow
             }
             HomeRecordButton(phase: recorder.phase) {
                 Task { await recorder.toggle() }
@@ -30,6 +33,7 @@ struct HomeRecordPane: View {
         }
         .frame(maxWidth: .infinity)
         .task { await refreshWindows() }
+        .sheet(isPresented: $editingScript) { ScriptSheet(store: scripts) }
         .onAppear { microphones.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             Task { await refreshWindows() }
@@ -225,6 +229,26 @@ struct HomeRecordPane: View {
             }
         }
         .help("Which mic records your voice")
+    }
+
+    /// Record from a script: the teleprompter shows it, and the best try
+    /// at each line is kept afterwards.
+    private var scriptRow: some View {
+        HomeDeviceRow(label: "Script") {
+            Button {
+                scripts.reload()
+                editingScript = true
+            } label: {
+                Text(scriptSummary).lineLimit(1)
+            }
+        }
+        .help("Add a script for the teleprompter")
+    }
+
+    private var scriptSummary: String {
+        guard let script = scripts.script else { return "None" }
+        let seconds = Int(script.estimatedSeconds().rounded())
+        return "\(script.lines.count) lines · about \(seconds) s"
     }
 
     private var micName: String {

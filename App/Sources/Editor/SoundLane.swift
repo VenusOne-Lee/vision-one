@@ -9,7 +9,15 @@ import VisionOneKit
 /// a dashed one to accept it, right-click for more.
 struct SoundLane: View {
     @ObservedObject var model: EditorModel
+    /// What the lane draws: both (the timeline), or just the music or
+    /// just the effects (their own lanes in the sound full mode).
+    var parts: Parts = .both
+    var height: CGFloat = 36
+    /// A dashed line at the level the music ducks to under speech.
+    var showsDuckLine = false
     @State private var dragStart: SoundPlan?
+
+    enum Parts { case both, music, effects }
 
     var body: some View {
         GeometryReader { geometry in
@@ -20,7 +28,7 @@ struct SoundLane: View {
             let edits = model.edits
             ZStack(alignment: .topLeading) {
                 Canvas { context, size in
-                    guard let envelope else { return }
+                    guard parts != .effects, let envelope else { return }
                     // Full height is -6 dB, the loudest the level slider goes.
                     let top: CGFloat = 4, bottom = size.height - 4
                     let loudest = MusicEnvelope.gain(db: -6)
@@ -50,8 +58,25 @@ struct SoundLane: View {
                     }
                     context.fill(path, with: .color(Theme.text.opacity(0.1)))
                     context.stroke(path, with: .color(Theme.text.opacity(0.7)), lineWidth: 1)
+                    if showsDuckLine, let bed = model.sound.music {
+                        let ducked = CGFloat(min(1, MusicEnvelope.gain(db: bed.levelDB - bed.duckDB) / loudest))
+                        let y = bottom - ducked * (bottom - top)
+                        var line = Path()
+                        line.move(to: CGPoint(x: 0, y: y))
+                        line.addLine(to: CGPoint(x: size.width, y: y))
+                        context.stroke(line, with: .color(Theme.text),
+                                       style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                    }
                 }
-                if envelope == nil {
+                if parts == .effects {
+                    if model.sound.effects.allSatisfy({ $0.state == .rejected }) {
+                        Text("No sound effects · pick an Energy or add one")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.textMuted)
+                            .padding(.leading, 8)
+                            .frame(maxHeight: .infinity)
+                    }
+                } else if envelope == nil {
                     Text("No music yet · pick one in the Sound tab")
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.textMuted)
@@ -64,7 +89,7 @@ struct SoundLane: View {
                         .padding(.leading, 8)
                         .padding(.top, 3)
                 }
-                ForEach(model.sound.effects.filter { $0.state != .rejected }) { effect in
+                ForEach(parts == .music ? [] : model.sound.effects.filter { $0.state != .rejected }) { effect in
                     marker(effect)
                         .gesture(drag(effect, width: width, duration: duration))
                         .position(x: x(effect.at), y: geometry.size.height / 2)
@@ -72,7 +97,7 @@ struct SoundLane: View {
             }
             .coordinateSpace(name: "soundLane")
         }
-        .frame(height: 36)
+        .frame(height: height)
         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.line))
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
