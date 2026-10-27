@@ -2,19 +2,128 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
-/// "Get set up": one window with every permission Vision One needs, a
-/// button for each, and a restart once Screen Recording is on. Rows are
-/// dashed until granted and solid once done, the app's one grammar.
+/// "Get set up": the first-run flow, one thing at a time. A welcome, one
+/// step per missing permission that moves on by itself once granted, then
+/// a finish. Returning users land straight on what's missing, and with
+/// nothing missing they get the compact checklist.
 struct SetupView: View {
     @ObservedObject var access: AccessCenter
-    @State private var moveError: String?
+    @State private var flow: OnboardingFlow
+    @State private var index = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Set once the welcome's Get started is pressed.
+    static let welcomeSeenKey = "onboarding.welcomeSeen"
+
+    init(access: AccessCenter) {
+        _access = ObservedObject(wrappedValue: access)
+        let welcomeSeen = UserDefaults.standard.bool(forKey: Self.welcomeSeenKey)
+        _flow = State(initialValue: OnboardingFlow(checklist: access.checklist, welcomeSeen: welcomeSeen))
+    }
+
+    var body: some View {
+        Group {
+            if flow.isOverview {
+                AccessOverview(access: access)
+            } else {
+                VStack(alignment: .leading, spacing: Theme.Space.lg) {
+                    if flow.steps.count > 1 {
+                        StepIndicator(count: flow.steps.count, current: index) { step in
+                            flow.isDone(step, current: index, checklist: access.checklist)
+                        }
+                    }
+                    // Stacked, so the leaving and arriving steps cross-fade
+                    // in place instead of sitting one above the other.
+                    ZStack(alignment: .topLeading) {
+                        stepContent
+                            .id(index)
+                            .transition(stepTransition)
+                    }
+                }
+            }
+        }
+        .padding(Theme.Space.lg)
+        .frame(width: 460, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(Theme.canvas)
+        .foregroundStyle(Theme.text)
+        .environment(\.colorScheme, .light) // light only, always
+        .onAppear { index = flow.advanced(from: index, checklist: access.checklist) }
+        .onChange(of: access.checklist) { _, checklist in
+            autoAdvance(checklist)
+        }
+    }
+
+    private var stepTransition: AnyTransition {
+        if reduceMotion { return AnyTransition.opacity }
+        return AnyTransition.asymmetric(
+            insertion: AnyTransition.opacity.combined(with: AnyTransition.offset(x: 16)),
+            removal: AnyTransition.opacity
+        )
+    }
+
+    private var currentStep: OnboardingStep {
+        flow.steps.indices.contains(index) ? flow.steps[index] : .finish
+    }
+
+    @ViewBuilder private var stepContent: some View {
+        switch currentStep {
+        case .welcome:
+            WelcomeStep(access: access) {
+                UserDefaults.standard.set(true, forKey: Self.welcomeSeenKey)
+                moveOn()
+            }
+        case .access(let kind):
+            AccessStep(kind: kind, state: access.checklist.state(of: kind)) {
+                access.request(kind)
+            } dismiss: {
+                if kind.isOptional { moveOn() } else { SetupWindowController.shared.close() }
+            }
+        case .finish:
+            if access.checklist.needsRestart || access.checklist.canRecord {
+                FinishStep(access: access)
+            } else {
+                // Access was turned off again on the way: show it all.
+                AccessOverview(access: access)
+            }
+        }
+    }
+
+    private func moveOn() {
+        guard let next = flow.next(after: index, checklist: access.checklist) else { return }
+        go(to: next)
+    }
+
+    private func go(to step: Int) {
+        withAnimation(.easeInOut(duration: reduceMotion ? 0.15 : 0.3)) { index = step }
+    }
+
+    /// Once the current permission turns on, wait a beat so the ring is
+    /// seen going solid, then move on without a Next button.
+    private func autoAdvance(_ checklist: AccessChecklist) {
+        let from = index
+        guard flow.advanced(from: from, checklist: checklist) != from else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard index == from else { return }
+            go(to: flow.advanced(from: from, checklist: access.checklist))
+        }
+    }
+}
+
+/// Every permission at once: the view for returning users with nothing
+/// missing. Rows are dashed until granted and solid once done, the app's
+/// one grammar.
+struct AccessOverview: View {
+    @ObservedObject var access: AccessCenter
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.lg) {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                Text("Get set up")
+                Text("Access")
                     .font(.system(size: 28, weight: .light))
-                Text("Vision One needs two things from macOS before it can record, and Camera if you want the camera bubble. Your recordings stay on this Mac.")
+                    .accessibilityAddTraits(.isHeader)
+                Text("What Vision One may use on this Mac. Your recordings stay on this Mac.")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -42,19 +151,7 @@ struct SetupView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if !access.isInApplications {
-                HStack(spacing: Theme.Space.sm) {
-                    Text("Access sticks best when Vision One lives in Applications.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.textMuted)
-                    Spacer()
-                    Button("Move to Applications") {
-                        do { try access.moveToApplications() } catch { moveError = error.localizedDescription }
-                    }
-                    .buttonStyle(PillButtonStyle(kind: .secondary))
-                }
-                if let moveError {
-                    Text(moveError).font(.system(size: 12)).foregroundStyle(Theme.error)
-                }
+                MoveToApplicationsLine(access: access)
             }
 
             HStack {
@@ -63,13 +160,9 @@ struct SetupView: View {
                     SetupWindowController.shared.close()
                 }
                 .buttonStyle(PillButtonStyle(kind: access.checklist.canRecord ? .primary : .secondary))
+                .keyboardShortcut(access.checklist.canRecord ? KeyboardShortcut.defaultAction : KeyboardShortcut.cancelAction)
             }
         }
-        .padding(Theme.Space.lg)
-        .frame(width: 440)
-        .background(Theme.canvas)
-        .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light) // light only, always
     }
 }
 
@@ -119,7 +212,7 @@ private struct AccessRow: View {
 }
 
 /// Dashed ring until done, solid ink ring with a tick once granted.
-private struct StatusRing: View {
+struct StatusRing: View {
     let done: Bool
 
     var body: some View {
@@ -153,7 +246,7 @@ private struct RestartBanner: View {
 }
 
 /// When Vision One doesn't show up in the list, it can be dragged in.
-private struct DragHint: View {
+struct DragHint: View {
     var body: some View {
         HStack(spacing: Theme.Space.md) {
             Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
@@ -187,14 +280,25 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
             )
             window.title = "Vision One"
             window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: SetupView(access: AccessCenter.shared))
             window.appearance = NSAppearance(named: .aqua)
             window.delegate = self
-            window.center()
             self.window = window
+            window.contentViewController = makeContent()
+            window.center()
+        } else if window?.isVisible == false {
+            // Reopened later (the Access… menu): start a fresh flow so it
+            // lands on whatever is missing now.
+            window?.contentViewController = makeContent()
         }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Fixed width; the window's height follows each step's content.
+    private func makeContent() -> NSViewController {
+        let hosting = NSHostingController(rootView: SetupView(access: AccessCenter.shared))
+        hosting.sizingOptions = [.minSize, .intrinsicContentSize, .maxSize, .preferredContentSize]
+        return hosting
     }
 
     func close() {
