@@ -275,7 +275,7 @@ private struct ScreenStandIn: View {
     var body: some View {
         GeometryReader { geometry in
             HStack(spacing: 0) {
-                Color(hex: 0xEFEEEA).frame(width: geometry.size.width * 0.22)
+                Theme.canvas.frame(width: geometry.size.width * 0.22)
                 VStack(alignment: .leading, spacing: geometry.size.height * 0.06) {
                     ForEach([0.6, 0.9, 0.8, 0.45, 0.7], id: \.self) { share in
                         RoundedRectangle(cornerRadius: 3)
@@ -286,7 +286,7 @@ private struct ScreenStandIn: View {
                 .padding(.leading, geometry.size.width * 0.05)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
-            .background(Color(hex: 0xFBFBFA))
+            .background(Theme.paper)
         }
     }
 }

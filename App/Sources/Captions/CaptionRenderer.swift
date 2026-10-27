@@ -8,9 +8,9 @@ import VisionOneKit
 /// preview and the export compositor both call `draw`, so the preview is
 /// exactly what ships.
 ///
-/// `draw(in:size:at:)` matches the exporter's ExportOverlay hook (origin
-/// bottom left, size in output pixels, output seconds), so burning in is
-/// `extension CaptionRenderer: ExportOverlay {}` once that lands.
+/// `draw(in:size:at:)` is the exporter's ExportOverlay hook (origin
+/// bottom left, size in output pixels, output seconds); CaptionExport
+/// makes it an ExportOverlay to burn captions in.
 struct CaptionRenderer {
     var track: CaptionTrack
     /// Style, size and position, all adjustable in the editor.
@@ -232,5 +232,6 @@ struct CaptionControls: View {
         }
         .font(.system(size: 12))
         .foregroundStyle(Theme.text)
+        .tint(Theme.text)
     }
 }
