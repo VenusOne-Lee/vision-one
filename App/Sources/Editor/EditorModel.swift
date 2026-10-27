@@ -54,6 +54,12 @@ final class EditorModel: ObservableObject {
     /// A stretch picked on the timeline, in seconds of the take. Delete
     /// cuts it.
     @Published var selection: TimeSpan?
+    /// What you said or drew while watching, newest last.
+    @Published var steerLog: [SteerEntry] = []
+    /// Something said while holding Space that Ask should handle.
+    @Published var pendingAsk: String?
+    /// A tool a spoken edit asked for ("blur this" picks the pen).
+    @Published var requestedTool: EditorTool?
     /// Mute and solo while listening in the sound full mode. Only the
     /// preview changes; exports always have every lane.
     @Published var laneMix = LaneMix() {

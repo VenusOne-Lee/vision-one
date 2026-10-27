@@ -124,9 +124,14 @@ enum StyleSampler {
     /// Speech and music per second, and the loudness envelope. Empty when
     /// there is no sound or it can't be read (a remote link, for one).
     static func readSound(_ asset: AVAsset, seconds: Double) async -> (windows: [StyleSoundWindow], envelope: [Double]) {
-        guard let samples = try? await readSamples(asset, seconds: seconds), samples.count > Int(soundRate) else {
-            return ([], [])
-        }
+        guard let samples = try? await readSamples(asset, seconds: seconds) else { return ([], []) }
+        return sound(from: samples)
+    }
+
+    /// Speech, music and loudness from mono samples at `soundRate`. Empty
+    /// under a second of sound.
+    static func sound(from samples: [Float]) -> (windows: [StyleSoundWindow], envelope: [Double]) {
+        guard samples.count > Int(soundRate) else { return ([], []) }
         let hop = Int(soundRate / StyleMeasure.envelopeRate)
         var envelope: [Double] = []
         envelope.reserveCapacity(samples.count / hop + 1)

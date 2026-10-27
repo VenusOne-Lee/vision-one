@@ -198,6 +198,11 @@ public actor Desk {
         syncCells()
     }
 
+    /// Tags a task started by an agent over MCP.
+    public func markRequested(_ taskID: UUID, by agent: String) {
+        update(taskID) { $0.requestedBy = agent }
+    }
+
     // MARK: Asking
 
     /// What the composer sends. Agents run now, after a plan approval

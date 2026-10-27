@@ -47,6 +47,7 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: za.co.versionone.visionone
             CFBundleURLSchemes: [visionone]
+        NSSpeechRecognitionUsageDescription: The teleprompter follows your voice through your script, on this Mac.
         # Sparkle updates. Releases put appcast.xml on the latest GitHub
         # release; the public key comes from the release workflow
         # (docs/RELEASING.md). Builds without a key never check.

@@ -113,8 +113,9 @@ final class EffectsModel: ObservableObject {
 
     /// A zoom on a box drawn over the video (with the Zoom tool, a pen
     /// circle or by voice), for `span`.
+    @discardableResult
     func addZoom(span: TimeSpan, viewport: FrameRect, state: ProposalState = .accepted,
-                 actionName: String = "Add Zoom") {
+                 actionName: String = "Add Zoom") -> UUID {
         var zoom = Zoom(span: span, scale: 2, centerX: viewport.midX, centerY: viewport.midY,
                         reason: Zoom.Reason.manual, state: state)
         zoom.setViewport(viewport)
@@ -122,6 +123,7 @@ final class EffectsModel: ObservableObject {
         next.zooms.removeAll { $0.span.overlaps(span) && $0.state == .rejected }
         next.zooms.append(zoom)
         apply(zooms: next, actionName: actionName)
+        return zoom.id
     }
 
     func setZoom(_ zoom: Zoom, actionName: String = "Adjust Zoom") {
@@ -142,7 +144,8 @@ final class EffectsModel: ObservableObject {
         apply(zooms: next, actionName: "Delete Zoom")
     }
 
-    private func cursorPosition(at t: Double) -> (Double, Double)? {
+    /// Where the cursor was at `t`, in 0...1 of the frame, if it was logged.
+    func cursorPosition(at t: Double) -> (Double, Double)? {
         guard let point = cursor.last(where: { $0.t <= t }) ?? cursor.first else { return nil }
         return (point.x, point.y)
     }
@@ -188,11 +191,14 @@ final class EffectsModel: ObservableObject {
     }
 
     /// A blur over a box drawn on the video, for `span`.
+    @discardableResult
     func addBlur(span: TimeSpan, rect: FrameRect, state: ProposalState = .accepted,
-                 actionName: String = "Add Blur") {
+                 actionName: String = "Add Blur") -> UUID {
         var next = blurs
-        next.add(Blur(span: span, rect: rect.clamped, kind: nil, reason: Blur.Reason.manual, state: state))
+        let blur = Blur(span: span, rect: rect.clamped, kind: nil, reason: Blur.Reason.manual, state: state)
+        next.add(blur)
         apply(blurs: next, actionName: actionName)
+        return blur.id
     }
 
     func setBlur(_ blur: Blur, actionName: String = "Adjust Blur") {

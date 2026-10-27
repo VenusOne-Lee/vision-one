@@ -17,6 +17,11 @@ final class ScreenRecorder: NSObject, ObservableObject {
     /// Why an extra track (like a plugged-in iPhone's screen) is missing
     /// from the current take. The screen recording carries on without it.
     @Published private(set) var trackNotes: [String] = []
+    /// Pauses in the current take, on the host clock. Nothing is written
+    /// while paused; at stop they become accepted cuts in edits.json.
+    @Published private(set) var pauses = PauseLog()
+    /// True from pressing record until the countdown ends.
+    @Published private(set) var isCountingDown = false
     /// Screen, window or area, and which sound to record. Saved so ⌘⇧R
     /// records the same way next launch.
     @Published var choice: CaptureChoice {
@@ -39,14 +44,63 @@ final class ScreenRecorder: NSObject, ObservableObject {
         lastTake = library.takes().first
     }
 
+    /// The take being recorded, while live.
+    var currentTake: Take? { phase.isLive ? take : nil }
+
     func toggle() async {
+        if Countdown.shared.isRunning {
+            // Pressing record again during the countdown starts at once.
+            Countdown.shared.skip()
+            return
+        }
         switch phase {
-        case .idle, .failed: await start()
+        case .idle, .failed: await record()
         case .recording: await stop()
         case .preparing, .finishing: break
         }
     }
 
+    /// What the record buttons and ⌘⇧R do: step Vision One's window aside,
+    /// count down, then start. Cancelling the countdown brings the window
+    /// back.
+    func record() async {
+        guard !phase.isBusy, !phase.isLive, !isCountingDown else { return }
+        if choice.missingStep == .dragArea {
+            chooseArea(thenRecord: true)
+            return
+        }
+        if choice.missingStep == .pickWindow {
+            phase = .failed(message: RecorderError.noWindowPicked.localizedDescription)
+            return
+        }
+        // Without access there's nothing to count down to.
+        let access = AccessCenter.shared
+        access.refresh()
+        guard access.checklist.canRecord else {
+            SetupWindowController.shared.show()
+            return
+        }
+        if case .failed = phase { phase = .idle }
+        MainWindowStepAside.hide()
+        // The script shows during the countdown, so the first line is
+        // ready to read.
+        Teleprompter.shared.prepare(on: recordedScreen())
+        isCountingDown = true
+        let go = await Countdown.shared.run(on: recordedScreen())
+        isCountingDown = false
+        guard go else {
+            Teleprompter.shared.hide()
+            MainWindowStepAside.restore()
+            return
+        }
+        await start()
+        if !phase.isLive {
+            Teleprompter.shared.hide()
+            MainWindowStepAside.restore()
+        }
+    }
+
+    /// Starts recording straight away, without the countdown.
     func start() async {
         guard !phase.isBusy, !phase.isLive else { return }
 
@@ -114,7 +168,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
             let writer = try TakeWriter(url: take.screenURL, width: target.width, height: target.height,
                                         includeSystemAudio: withSystemSound, includeMicrophone: withMicrophone)
             let cursor = CursorLogger(captureFrame: target.captureFrame)
-            let sink = CaptureSink(writer: writer) { [weak cursor] firstFrame in
+            let sink = CaptureSink(writer: writer, meterMicrophone: withMicrophone) { [weak cursor] firstFrame in
                 Task { @MainActor in
                     cursor?.setOrigin(firstFrame.seconds)
                     CameraBubble.shared.screenStarted(at: firstFrame.seconds)
@@ -147,6 +201,14 @@ final class ScreenRecorder: NSObject, ObservableObject {
             if choice.mode == .area {
                 RegionOutline.shared.show(around: target.captureFrame)
             }
+            pauses = PauseLog()
+            MicMonitor.shared.begin(withMicrophone: withMicrophone)
+            // Recorded from a script: keep it with the take, so the best
+            // attempt at each line can be picked after transcription.
+            if Teleprompter.shared.isShowing, let script = ScriptStore.shared.script {
+                try? script.write(to: take.scriptURL)
+                Teleprompter.shared.begin(withMicrophone: withMicrophone)
+            }
             phase = .recording(startedAt: Date())
         } catch {
             fail(error)
@@ -163,7 +225,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
             self.choice.displayID = displayID
             self.choice.area = area
             self.choice.mode = .area
-            if thenRecord { Task { await self.start() } }
+            if thenRecord { Task { await self.record() } }
         }
     }
 
@@ -189,7 +251,84 @@ final class ScreenRecorder: NSObject, ObservableObject {
     }
 
     func stop() async {
-        guard phase.isLive, let stream, let sink, let take else { return }
+        guard let ended = await endCapture() else { return }
+        let (take, sink, saved) = ended
+        if saved {
+            writePauseCuts(for: take, firstFrame: sink.firstFrameSeconds)
+            // Remember what it's for now, so a later pick on Home
+            // doesn't change what this take is.
+            try? TakePlan.stamp(take, from: .standard)
+            lastTake = take
+            Transcriber.shared.transcribe(take)
+            phase = .idle
+            MainWindowStepAside.forget()
+            // Ready to share (or the editor, if that's the builder's
+            // pick). Both wait for the transcript.
+            ReadyToShareWindowController.shared.afterStop(take)
+        } else {
+            phase = .failed(message: sink.writerError?.localizedDescription
+                ?? "Nothing was recorded. Try again, and check Screen Recording access.")
+            MainWindowStepAside.restore()
+        }
+        pauses = PauseLog()
+    }
+
+    // MARK: Pause, restart, delete
+
+    /// Seconds recorded so far, leaving out pauses, for the REC bar.
+    func recordedTime(at date: Date = Date()) -> TimeInterval {
+        guard let elapsed = phase.elapsed(at: date) else { return 0 }
+        return max(0, elapsed - pauses.pausedDuration(at: HostClock.now))
+    }
+
+    var isPaused: Bool { phase.isLive && pauses.isPaused }
+
+    func togglePause() {
+        isPaused ? resume() : pause()
+    }
+
+    /// Stops writing screen, sound, mic and camera until resumed. Clocks
+    /// keep running, so nothing needs lining up again afterwards.
+    func pause() {
+        guard phase.isLive, !pauses.isPaused, let sink else { return }
+        pauses.pause(at: HostClock.now)
+        sink.setPaused(true)
+        CameraBubble.shared.setPaused(true)
+    }
+
+    func resume() {
+        guard phase.isLive, pauses.isPaused, let sink else { return }
+        pauses.resume(at: HostClock.now)
+        sink.setPaused(false)
+        CameraBubble.shared.setPaused(false)
+        MicMonitor.shared.restartSilenceTimer()
+    }
+
+    /// Throws this take away (to the Bin, so it can be fished out) and
+    /// counts down again with the same choices.
+    func restart() async {
+        guard await discard() else { return }
+        await record()
+    }
+
+    /// Throws this take away and goes back to where you were. The editor
+    /// doesn't open.
+    func deleteTake() async {
+        guard await discard() else { return }
+        MainWindowStepAside.restore()
+    }
+
+    private func discard() async -> Bool {
+        guard let ended = await endCapture() else { return false }
+        try? FileManager.default.trashItem(at: ended.take.folder, resultingItemURL: nil)
+        pauses = PauseLog()
+        phase = .idle
+        return true
+    }
+
+    /// Stops every track of the live take and finishes its files.
+    private func endCapture() async -> (take: Take, sink: CaptureSink, saved: Bool)? {
+        guard phase.isLive, let stream, let sink, let take else { return nil }
         phase = .finishing
         do {
             try await stream.stopCapture()
@@ -197,24 +336,30 @@ final class ScreenRecorder: NSObject, ObservableObject {
             // Keep going: whatever was written is still worth finishing.
         }
         await deviceTracks.stop()
+        CameraBubble.shared.setPaused(false)
         await CameraBubble.shared.stopRecording()
         cursor?.stop(writingTo: take.eventsURL)
+        MicMonitor.shared.end()
+        Teleprompter.shared.hide()
         let saved = await sink.finish()
-        if saved {
-            // Remember what it's for now, so a later pick on Home
-            // doesn't change what this take is.
-            try? TakePlan.stamp(take, from: .standard)
-            lastTake = take
-            Transcriber.shared.transcribe(take)
-            phase = .idle
-            // Ready to share (or the editor, if that's the builder's
-            // pick). Both wait for the transcript.
-            ReadyToShareWindowController.shared.afterStop(take)
-        } else {
-            phase = .failed(message: sink.writerError?.localizedDescription
-                ?? "Nothing was recorded. Try again, and check Screen Recording access.")
-        }
         reset()
+        return (take, sink, saved)
+    }
+
+    /// The take's pauses as accepted cuts, so the editor and export play
+    /// straight through them.
+    private func writePauseCuts(for take: Take, firstFrame: Double?) {
+        guard let firstFrame else { return }
+        let end = HostClock.now
+        let cuts = pauses.cuts(firstFrame: firstFrame, end: end)
+        guard !cuts.isEmpty else { return }
+        do {
+            var edits = try EditList.load(from: take.editsURL, sourceDuration: end - firstFrame)
+            for cut in cuts { edits.add(cut) }
+            try edits.write(to: take.editsURL)
+        } catch {
+            trackNotes.append("Couldn't mark the paused parts as cuts: \(error.localizedDescription)")
+        }
     }
 
     func revealRecordings() {
@@ -232,6 +377,10 @@ final class ScreenRecorder: NSObject, ObservableObject {
 
     private func fail(_ error: Error) {
         if let take { cursor?.stop(writingTo: take.eventsURL) }
+        MicMonitor.shared.end()
+        Teleprompter.shared.hide()
+        pauses = PauseLog()
+        MainWindowStepAside.restore()
         if let sink { Task { _ = await sink.finish() } }
         Task {
             await deviceTracks.stop()
@@ -260,26 +409,52 @@ extension ScreenRecorder: SCStreamDelegate {
 }
 
 /// Receives sample buffers on the capture queue and hands them to the
-/// writer, which is only ever touched on that queue.
+/// writer, which is only ever touched on that queue. While paused, screen
+/// frames are dropped and sound is written as silence, so nothing from
+/// the pause is kept but the audio tracks have no holes.
 final class CaptureSink: NSObject, SCStreamOutput, @unchecked Sendable {
     private let writer: TakeWriter
     private let queue = DispatchQueue(label: "za.co.versionone.visionone.writer")
     private let onFirstFrame: @Sendable (CMTime) -> Void
+    private let meterMicrophone: Bool
     private var sentFirstFrame = false
+    // Touched only on `queue`.
+    private var paused = false
+    private var lastMeterPost = 0.0
 
-    init(writer: TakeWriter, onFirstFrame: @escaping @Sendable (CMTime) -> Void) {
+    init(writer: TakeWriter, meterMicrophone: Bool, onFirstFrame: @escaping @Sendable (CMTime) -> Void) {
         self.writer = writer
+        self.meterMicrophone = meterMicrophone
         self.onFirstFrame = onFirstFrame
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         queue.sync {
+            if paused {
+                guard type != .screen, sampleBuffer.isValid, AudioSamples.silence(sampleBuffer) else { return }
+            } else if type == .microphone, meterMicrophone {
+                meter(sampleBuffer)
+                // The teleprompter follows the same voice, on device.
+                ScriptVoice.shared.append(sampleBuffer)
+            }
             writer.append(sampleBuffer, of: type)
             if !sentFirstFrame, let first = writer.firstFrameTime {
                 sentFirstFrame = true
                 onFirstFrame(first)
             }
         }
+    }
+
+    func setPaused(_ paused: Bool) {
+        queue.sync { self.paused = paused }
+    }
+
+    /// About fifteen readings a second is plenty for the meter.
+    private func meter(_ buffer: CMSampleBuffer) {
+        let time = buffer.presentationTimeStamp.seconds
+        guard time - lastMeterPost >= 1.0 / 15, let peak = AudioSamples.peak(of: buffer) else { return }
+        lastMeterPost = time
+        Task { @MainActor in MicMonitor.shared.feed(peak: peak, at: time) }
     }
 
     func finish() async -> Bool {
@@ -291,6 +466,9 @@ final class CaptureSink: NSObject, SCStreamOutput, @unchecked Sendable {
     }
 
     var writerError: Error? { queue.sync { writer.error } }
+
+    /// screen.mov's first frame on the host clock, or nil before one.
+    var firstFrameSeconds: Double? { queue.sync { writer.firstFrameTime?.seconds } }
 }
 
 enum RecorderError: LocalizedError {

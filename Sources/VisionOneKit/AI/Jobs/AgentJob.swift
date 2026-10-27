@@ -97,6 +97,9 @@ public struct AgentJob: Codable, Equatable, Identifiable, Sendable {
     public var takeFolder: URL?
     /// What the user typed ("make it 60s"), if they asked.
     public var ask: String?
+    /// The agent that asked through MCP ("Claude Code"); nil when the
+    /// user started it in Vision One.
+    public var requestedBy: String?
     public var state: State
     public var steps: [Step]
     /// One short line on what it did: "Cut 21 s across 3 sentences".
