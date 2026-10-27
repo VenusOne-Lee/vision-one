@@ -423,7 +423,7 @@ private final class CameraFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDe
         previewLayer = AVCaptureVideoPreviewLayer(session: session)
         super.init()
         output.alwaysDiscardsLateVideoFrames = true
-        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCrBiPlanarVideoRange]
+        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
         output.setSampleBufferDelegate(self, queue: frameQueue)
     }
 
