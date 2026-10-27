@@ -88,7 +88,7 @@ public enum SecretScanner {
 
     static func isCardNumber(_ text: String) -> Bool {
         let d = text.compactMap(\.wholeNumberValue)
-        guard (13...19).contains(d.count), Set(d).count > 2 else { return false }
+        guard (13...19).contains(d.count), Set(d).count >= 2 else { return false }
         return luhn(d)
     }
 
