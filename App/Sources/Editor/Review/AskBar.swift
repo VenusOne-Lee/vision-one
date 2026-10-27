@@ -40,7 +40,7 @@ final class AskModel: ObservableObject {
             editor.versions.tryCopy(note: rest.isEmpty ? nil : rest)
             guard !rest.isEmpty else {
                 text = ""
-                run = .done("Made \(editor.versions.open?.name ?? "a copy"). The main cut is safe; compare them from the version menu.")
+                run = .done("Made \(editor.versions.main.name). The cut you had is kept as a copy; compare them from the version menu.")
                 return
             }
             ask = rest

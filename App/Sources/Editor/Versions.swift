@@ -2,48 +2,69 @@ import AVFoundation
 import SwiftUI
 import VisionOneKit
 
-/// "Try in a copy" for one take: make a copy to try a big change, switch
-/// between versions, pick the main cut, and compare two side by side.
+/// "Try in a copy" for one take, on the same versions.json the Desk
+/// and agents use. The version you edit is always the main cut
+/// (edits.json), so export, Home and agents read it as before. Trying a
+/// copy keeps the cut you had as a copy beside it; switching makes
+/// another version the main cut and keeps the one you left.
+/// Copies hold the cuts; zooms, blurs, sound and redos are shared.
 @MainActor
 final class VersionsModel: ObservableObject {
-    @Published private(set) var index: TakeVersions.Index
+    @Published private(set) var versions: TakeVersions
     @Published var error: String?
 
-    let versions: TakeVersions
+    let take: Take
     private weak var editor: EditorModel?
 
     init(editor: EditorModel) {
         self.editor = editor
-        versions = TakeVersions(take: editor.take)
-        index = versions.index()
+        take = editor.take
+        versions = TakeVersions.load(for: editor.take)
     }
 
-    var open: TakeVersion? { index.versions.first { $0.id == index.open } }
-    var main: TakeVersion? { index.versions.first { $0.id == index.main } }
-    var hasCopies: Bool { index.versions.count > 1 }
+    var main: TakeVersion { versions.main }
+    var hasCopies: Bool { !versions.copies.isEmpty }
 
-    func name(_ id: String) -> String { index.versions.first { $0.id == id }?.name ?? id }
+    func name(_ id: UUID) -> String { versions.version(id)?.name ?? "Version" }
 
-    /// Parks what's open and opens a copy of it to change freely.
-    func tryCopy(named name: String? = nil, note: String? = nil) {
-        perform { _ = try versions.tryCopy(named: name ?? versions.nextCopyName(), note: note) }
+    /// Keeps the cut you have as a copy and goes on editing a copy of it.
+    func tryCopy(note: String? = nil) {
+        perform { versions in
+            let kept = versions.main
+            let copy = try versions.makeCopy(in: take)
+            try versions.makeMain(copy.id, in: take)
+            // The cut you had keeps its own name.
+            versions.rename(kept.id, to: kept.name)
+        }
     }
 
-    func open(_ id: String) { perform { try versions.open(id) } }
-    func makeMain(_ id: String) { perform { try versions.makeMain(id) } }
-    func delete(_ id: String) { perform { try versions.delete(id) } }
+    /// Makes another version the main cut, the one you edit and export.
+    func use(_ id: UUID) {
+        guard id != versions.main.id else { return }
+        perform { versions in
+            let left = versions.main
+            try versions.makeMain(id, in: take)
+            versions.rename(left.id, to: left.name)
+        }
+    }
 
-    private func perform(_ change: () throws -> Void) {
-        let before = index.open
+    func delete(_ id: UUID) { perform { try $0.remove(id, in: take) } }
+
+    /// Picks up copies an agent made while the editor was open.
+    func refresh() { versions = TakeVersions.load(for: take) }
+
+    private func perform(_ change: (inout TakeVersions) throws -> Void) {
+        var next = TakeVersions.load(for: take)
         do {
-            try change()
+            try change(&next)
+            try next.write(for: take)
             error = nil
         } catch {
             self.error = error.localizedDescription
         }
-        index = versions.index()
-        // Another version's files are in the take's folder now.
-        if index.open != before { editor?.reloadFiles() }
+        versions = TakeVersions.load(for: take)
+        // Another cut may be in edits.json now.
+        editor?.reloadFiles()
     }
 }
 
@@ -71,48 +92,50 @@ struct VersionMenu: View {
     private var menu: some View {
         Menu {
             Section("Versions") {
-                ForEach(model.index.versions) { version in
+                ForEach(model.versions.versions) { version in
                     Button {
-                        model.open(version.id)
+                        model.use(version.id)
                     } label: {
-                        if version.id == model.index.open {
+                        if version.isMain {
                             Label(title(version), systemImage: "checkmark")
                         } else {
                             Text(title(version))
                         }
                     }
-                    .disabled(version.locked)
                 }
             }
             Divider()
             Button("Try in a copy") { model.tryCopy() }
             Button("Compare versions…", action: compare)
                 .disabled(!model.hasCopies)
-            if let open = model.open, open.id != model.index.main {
-                Button("Make \(open.name) the main cut") { model.makeMain(open.id) }
+            if model.hasCopies {
+                Menu("Delete a copy") {
+                    ForEach(model.versions.copies) { copy in
+                        Button(copy.name) { model.delete(copy.id) }
+                            .disabled(copy.locked)
+                    }
+                }
             }
         } label: {
             HStack(spacing: 4) {
-                Text(model.open?.name ?? "Main cut").lineLimit(1)
+                Text(model.main.name).lineLimit(1)
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
             }
             .font(.system(size: 12, weight: .medium))
             .padding(.horizontal, 10)
             .frame(height: Theme.Size.controlSmall + 2)
-            .overlay(Capsule().strokeBorder(Theme.text, style: StrokeStyle(
-                lineWidth: 1, dash: model.index.open == model.index.main ? [] : Theme.Stroke.dash)))
+            .overlay(Capsule().strokeBorder(Theme.text, lineWidth: 1))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(model.index.open == model.index.main
-              ? "The main cut. Try a big change in a copy and this stays safe."
-              : "A copy, dashed until you make it the main cut")
+        .help("The version you're editing. Try a big change in a copy and this one stays safe.")
+        .onAppear { model.refresh() }
     }
 
     private func title(_ version: TakeVersion) -> String {
         var parts = [version.name]
-        if version.id == model.index.main { parts.append("main") }
+        if version.isMain { parts.append("editing") }
         if version.locked { parts.append("exported, locked") }
         return parts.joined(separator: " · ")
     }
@@ -120,15 +143,15 @@ struct VersionMenu: View {
 
 // MARK: Compare
 
-/// Two versions side by side. Play both together, then make one the
-/// main cut or keep both.
+/// Two versions side by side. Play both together, then use one or keep
+/// both.
 struct CompareView: View {
     @ObservedObject var versions: VersionsModel
     let take: Take
     let done: () -> Void
 
-    @State private var leftID: String
-    @State private var rightID: String
+    @State private var leftID: UUID
+    @State private var rightID: UUID
     @StateObject private var left = VersionPreview()
     @StateObject private var right = VersionPreview()
 
@@ -136,11 +159,9 @@ struct CompareView: View {
         self.versions = versions
         self.take = take
         self.done = done
-        let index = versions.index
-        let main = index.main
-        let other = index.open != main ? index.open : (index.versions.last { $0.id != main }?.id ?? main)
+        let main = versions.main.id
         _leftID = State(initialValue: main)
-        _rightID = State(initialValue: other)
+        _rightID = State(initialValue: versions.versions.copies.last?.id ?? main)
     }
 
     var body: some View {
@@ -156,9 +177,9 @@ struct CompareView: View {
                 side(id: $rightID, preview: right)
             }
             HStack(spacing: Theme.Space.sm) {
-                if rightID != versions.index.main {
-                    Button("Make \(versions.name(rightID)) the main cut") {
-                        versions.makeMain(rightID)
+                if rightID != versions.main.id {
+                    Button("Use \(versions.name(rightID))") {
+                        versions.use(rightID)
                         done()
                     }
                     .buttonStyle(PillButtonStyle(kind: .primary))
@@ -166,7 +187,7 @@ struct CompareView: View {
                 Button("Keep both", action: done)
                     .buttonStyle(PillButtonStyle(kind: .secondary))
                 Spacer()
-                Text("The main cut is what Home and Library show. Exported versions stay locked.")
+                Text("The version you use is the one you edit, export and see in Home. The other stays as a copy.")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.textMuted)
             }
@@ -174,27 +195,31 @@ struct CompareView: View {
         .padding(Theme.Space.lg)
         .frame(minWidth: 820, minHeight: 460)
         .background(Theme.paper)
-        .task(id: leftID) { await left.load(take: take, folder: versions.versions.folder(for: leftID, in: versions.index)) }
-        .task(id: rightID) { await right.load(take: take, folder: versions.versions.folder(for: rightID, in: versions.index)) }
+        .task(id: leftID) { await left.load(take: take, edits: url(leftID)) }
+        .task(id: rightID) { await right.load(take: take, edits: url(rightID)) }
         .onDisappear {
             left.player.pause()
             right.player.pause()
         }
     }
 
-    private func side(id: Binding<String>, preview: VersionPreview) -> some View {
-        let isMain = id.wrappedValue == versions.index.main
+    private func url(_ id: UUID) -> URL {
+        versions.versions.version(id).map { TakeVersions.url(of: $0, in: take) } ?? take.editsURL
+    }
+
+    private func side(id: Binding<UUID>, preview: VersionPreview) -> some View {
+        let isMain = id.wrappedValue == versions.main.id
         return VStack(alignment: .leading, spacing: Theme.Space.sm) {
             HStack {
                 Picker("Version", selection: id) {
-                    ForEach(versions.index.versions) { version in
+                    ForEach(versions.versions.versions) { version in
                         Text(version.name).tag(version.id)
                     }
                 }
                 .labelsHidden()
                 .fixedSize()
                 Spacer()
-                Text(isMain ? "\(Timecode.short(from: preview.duration)) · main" : Timecode.short(from: preview.duration))
+                Text(isMain ? "\(Timecode.short(from: preview.duration)) · editing" : Timecode.short(from: preview.duration))
                     .font(.system(size: 12, design: .monospaced).monospacedDigit())
                     .foregroundStyle(Theme.textMuted)
             }
@@ -228,8 +253,8 @@ struct CompareView: View {
     }
 }
 
-/// One version played on its own: its cuts, zooms, blurs and sound over
-/// the take's video, built like the editor's preview.
+/// One version played on its own: its cuts, with the take's zooms,
+/// blurs, sound and redos, built like the editor's preview.
 @MainActor
 final class VersionPreview: ObservableObject {
     let player = AVPlayer()
@@ -244,21 +269,21 @@ final class VersionPreview: ObservableObject {
 
     func refresh() { isPlaying = player.rate != 0 }
 
-    func load(take: Take, folder: URL) async {
+    func load(take: Take, edits editsURL: URL) async {
         player.pause()
         do {
             let asset = AVURLAsset(url: take.screenURL)
             let sourceDuration = try await asset.load(.duration).seconds
-            let edits = (try? EditList.load(from: folder.appendingPathComponent("edits.json"), sourceDuration: sourceDuration))
+            let edits = (try? EditList.load(from: editsURL, sourceDuration: sourceDuration))
                 ?? EditList(sourceDuration: sourceDuration)
             let spans = edits.keptSpans
             let composition = try await PreviewComposition.make(from: asset, keeping: spans)
             let timeline = ExportTimeline(keep: spans.map { $0.start..<$0.end }, sourceDuration: sourceDuration, frameRate: 0)
             let words = (try? Transcript.read(from: take.transcriptURL))?.words.map(\.span) ?? []
-            let sound = (try? SoundPlan.load(from: folder.appendingPathComponent("sound.json"))) ?? SoundPlan()
+            let sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
             let voice = composition.tracks(withMediaType: .audio).map(\.trackID)
             let added = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition)
-            let redos = ((try? RedoList.load(from: folder.appendingPathComponent("redos.json"))) ?? RedoList()).playing
+            let redos = ((try? RedoList.load(from: take.redosURL)) ?? RedoList()).playing
             let redone = await RedoComposer.add(redos, take: take, timeline: timeline, to: composition)
             let item = AVPlayerItem(asset: composition)
             item.audioTimePitchAlgorithm = .spectral
@@ -275,8 +300,8 @@ final class VersionPreview: ObservableObject {
                 item.audioMix = mix
             }
             if let track = composition.tracks(withMediaType: .video).first {
-                let zooms = (try? ZoomList.load(from: folder.appendingPathComponent("zooms.json"))) ?? ZoomList()
-                let blurs = (try? BlurList.load(from: folder.appendingPathComponent("blurs.json"))) ?? BlurList()
+                let zooms = (try? ZoomList.load(from: take.zoomsURL)) ?? ZoomList()
+                let blurs = (try? BlurList.load(from: take.blursURL)) ?? BlurList()
                 let cursor = (try? EventLog.read(from: take.eventsURL))?.cursorPath ?? []
                 let effects = FrameEffects.export(zooms: zooms, blurs: blurs, cursor: cursor, timeline: timeline)
                 if !effects.isEmpty {
