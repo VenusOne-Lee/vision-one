@@ -102,7 +102,7 @@ struct ScriptCoachView: View {
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
         .task { await coach.refresh() }
     }
 
@@ -302,7 +302,6 @@ final class ScriptCoachWindowController: NSObject {
             window.title = "Script Coach"
             window.isReleasedWhenClosed = false
             window.contentViewController = NSHostingController(rootView: ScriptCoachView(model: model))
-            window.appearance = NSAppearance(named: .aqua)
             window.minSize = NSSize(width: 640, height: 460)
             window.setFrameAutosaveName("VisionOneScriptCoachWindow")
             // Kept out of recordings, like every Vision One window.

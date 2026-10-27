@@ -320,6 +320,9 @@ struct VideoExporter {
         let words: [TimeSpan] = sound.isEmpty ? [] : ((try? Transcript.read(from: take.transcriptURL))?.words.map(\.span) ?? [])
         let soundTracks = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition,
                                                   offset: joinOffset)
+        // Sentences said again replace the original voice in their slot.
+        let redos = ((try? RedoList.load(from: take.redosURL)) ?? RedoList()).accepted
+        let redone = await RedoComposer.add(redos, take: take, timeline: timeline, to: composition, offset: joinOffset)
         // Words re-said in the user's cloned voice, with the original muted under them.
         let voiceFixes = await VoiceComposer.addFixes(for: take, timeline: timeline, to: composition, offset: joinOffset)
 
@@ -332,8 +335,19 @@ struct VideoExporter {
         let audioMix = AVMutableAudioMix()
         let recorded: [AVMutableAudioMixInputParameters] = audio.enumerated().map { index, track in
             let parameters = AVMutableAudioMixInputParameters(track: track)
-            if index == micIndex { VoiceComposer.mute(voiceFixes.mutes, on: parameters) }
-            for join in timeline.joins.map({ $0 + joinOffset }) {
+            RedoComposer.mute(parameters, during: redone.mutes)
+            // Ramps can't overlap: a word fix inside a redone line is
+            // already silent, and a join right beside a redone line or a
+            // fixed word keeps their fades.
+            let fixMutes = voiceFixes.mutes.filter { fix in
+                !redone.mutes.contains { $0.lowerBound - 0.2 < fix.end && fix.start < $0.upperBound + 0.2 }
+            }
+            if index == micIndex { VoiceComposer.mute(fixMutes, on: parameters) }
+            let quiet = redone.mutes + fixMutes.map { $0.start..<max($0.start, $0.end) }
+            let joins = timeline.joins.map { $0 + joinOffset }.filter { join in
+                !quiet.contains { ($0.lowerBound - 0.2)...($0.upperBound + 0.2) ~= join }
+            }
+            for join in joins {
                 let fade = Self.time(Self.joinFade)
                 let t = Self.time(join)
                 parameters.setVolumeRamp(fromStartVolume: 1, toEndVolume: 0, timeRange: CMTimeRange(start: t - fade, duration: fade))
@@ -341,10 +355,10 @@ struct VideoExporter {
             }
             return parameters
         }
-        audioMix.inputParameters = recorded + soundTracks.parameters + voiceFixes.parameters
+        audioMix.inputParameters = recorded + soundTracks.parameters + redone.parameters + voiceFixes.parameters
 
         return try await encode(composition: composition, videoTracks: [video] + (cameraTrack.map { [$0] } ?? []),
-                                audio: audio + soundTracks.tracks + voiceFixes.tracks,
+                                audio: audio + soundTracks.tracks + redone.tracks + voiceFixes.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
                                 duration: duration.seconds, settings: settings, to: url, progress: progress)
     }
@@ -375,6 +389,8 @@ struct VideoExporter {
                 AVLinearPCMIsNonInterleaved: false,
             ])
             output.audioMix = audioMix
+            // Redone lines are fitted to their slot; keep the voice's pitch.
+            output.audioTimePitchAlgorithm = .spectral
             output.alwaysCopiesSampleData = false
             reader.add(output)
             audioOutput = output

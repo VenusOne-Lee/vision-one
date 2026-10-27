@@ -170,14 +170,19 @@ struct LiveDot: View {
     }
 }
 
-/// The builder's ring, the status light for a take: dashed = draft,
-/// dashed and slowly turning with an orange centre = recording, an arc
-/// filling = exporting, solid = exported. Colour is the builder's ring
-/// colour (identity), ink until it's set.
+/// The builder's ring, the status light for a take or a task: dashed =
+/// draft, dashed and slowly turning with an orange centre = recording,
+/// dashed and turning in ink = an agent is running (never orange), dashed
+/// with a dot = needs you, an arc filling = exporting, solid = exported
+/// or done. Colour is the builder's ring colour (identity), ink until set.
 struct BuilderRing: View {
     enum State: Equatable {
         case draft
         case recording
+        /// An agent is working on it.
+        case running
+        /// Waiting on the person: an approval or a review.
+        case needsYou
         case exporting(Double)
         case exported
     }
@@ -204,6 +209,17 @@ struct BuilderRing: View {
                         withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) { turn = true }
                     }
                 Circle().fill(Theme.tally).frame(width: size * 0.38, height: size * 0.38)
+            case .running:
+                Circle()
+                    .strokeBorder(Theme.text, style: StrokeStyle(lineWidth: lineWidth, dash: Theme.Stroke.dashSmall))
+                    .rotationEffect(.degrees(turn ? 360 : 0))
+                    .onAppear {
+                        guard !reduceMotion else { return }
+                        withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) { turn = true }
+                    }
+            case .needsYou:
+                Circle().strokeBorder(colour, style: StrokeStyle(lineWidth: lineWidth, dash: Theme.Stroke.dashSmall))
+                Circle().fill(Theme.text).frame(width: size * 0.34, height: size * 0.34)
             case .exporting(let progress):
                 Circle().strokeBorder(colour.opacity(0.45), style: StrokeStyle(lineWidth: lineWidth, dash: Theme.Stroke.dashSmall))
                 Circle()
@@ -225,6 +241,8 @@ struct BuilderRing: View {
         switch state {
         case .draft: "Not exported yet"
         case .recording: "Recording"
+        case .running: "Working"
+        case .needsYou: "Needs you"
         case .exporting(let p): "Exporting, \(Int((p * 100).rounded())) percent"
         case .exported: "Exported"
         }

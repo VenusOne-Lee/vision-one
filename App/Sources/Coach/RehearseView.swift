@@ -24,7 +24,7 @@ struct RehearseView: View {
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 
     // MARK: Toolbar
@@ -262,7 +262,6 @@ final class RehearseWindowController: NSObject, NSWindowDelegate {
             window.title = "Rehearse"
             window.isReleasedWhenClosed = false
             window.contentViewController = NSHostingController(rootView: RehearseView(model: model, talk: talk))
-            window.appearance = NSAppearance(named: .aqua)
             window.minSize = NSSize(width: 680, height: 460)
             window.setFrameAutosaveName("VisionOneRehearseWindow")
             window.sharingType = .none

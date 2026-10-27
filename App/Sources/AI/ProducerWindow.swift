@@ -151,7 +151,7 @@ struct ProducerView: View {
         .frame(minWidth: 380, idealWidth: 440, minHeight: 480)
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 }
 
@@ -168,7 +168,6 @@ final class ProducerWindowController {
                                   styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             window.title = "Before you record"
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.sharingType = .none
             window.setFrameAutosaveName("VisionOneProducer")
             window.contentViewController = NSHostingController(rootView: ProducerView(model: model))

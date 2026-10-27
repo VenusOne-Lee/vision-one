@@ -77,13 +77,15 @@ Name a take by its title, its folder name, or `latest` (the default).
 | `export_video` | MP4 with the brand kit: original, hd1080, hd720, whatsapp, vertical, square | No |
 | `share_video` | Opens the post with the right export and the Sharer's words | **Yes, every time** |
 | `rename_take` | Gives a take a title | No |
+| `list_demos` | Autopilot demos: name, app, steps, about how long | No |
+| `rerecord_demo` | Autopilot re-records a demo (optionally for a release); returns a `task_id` | **Yes**, unless you let those steps run on their own |
 
 Resources: `visionone://takes`, `visionone://tasks`, `visionone://takes/{take}`, `visionone://takes/{take}/transcript`.
 
 ## Approvals and tasks
 
 - Every call that does work becomes a task in the Agent Desk, tagged with the agent that asked ("from Claude Code"), filed under the take's task. Agent jobs started over MCP keep the id the tool hands back as `task_id`.
-- Recording, keeping changes and sharing show a floating card in Vision One, and the same question sits on the task. Answer either one. The choices are **Allow once**, **Allow until quit** (not for shares) and **Don't allow**, with an optional note that goes back to the agent ("record the browser window, not the whole screen").
+- Recording, keeping changes and sharing ask once. The question always sits on the task as a numbered card. With Vision One's main window in front, that card is the only place it asks. When the window is closed or you're in another app (your terminal, say), a floating card asks as well; it answers the same question, so answering either one closes both. The choices are **Allow once**, **Allow until quit** (not for shares) and **Don't allow**, with an optional note that goes back to the agent ("record the browser window, not the whole screen"), from either place. `VisionOneMCPHost.showsCard(for:)` makes the call; hosts without a window always show the floating card.
 - Settings › Agents lists the agents that have connected. Each can be **Ask first** (the default) or **Allow until quit**. Sharing always asks.
 - Edits are proposals (dashed) until kept. Exports only include kept cuts, so an agent calls `keep_changes` first, and you say yes.
 

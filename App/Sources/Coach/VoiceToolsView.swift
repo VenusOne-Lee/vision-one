@@ -29,9 +29,9 @@ struct VoiceToolsView: View {
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
-        .sheet(isPresented: $askingConsent) { consentSheet }
+        .sheet(isPresented: $askingConsent) { consentSheet.themed() }
         .onDisappear { model.stopPreview() }
+        .themed()
     }
 
     private var header: some View {
@@ -240,7 +240,6 @@ final class VoiceToolsWindowController: NSObject {
                                   backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.contentViewController = NSHostingController(rootView: VoiceToolsView(model: model))
-            window.appearance = NSAppearance(named: .aqua)
             window.setFrameAutosaveName("VisionOneVoiceToolsWindow")
             window.sharingType = .none
             window.center()

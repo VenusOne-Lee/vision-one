@@ -104,6 +104,10 @@ public protocol VisionOneMCPHost: Sendable {
     func ask(_ question: MCPQuestion) async -> MCPAnswer
     /// Takes the card away when the user answered on the task instead.
     func dismiss(_ questionID: UUID) async
+    /// For a question on a task: whether the floating card asks too. No
+    /// when the task's card is in view (the main window is in front), so
+    /// the user is asked once (`ApprovalSurface`).
+    func showsCard(for question: MCPQuestion) async -> Bool
     /// An agent connected (for Settings › Agents).
     func connected(_ client: MCPClient) async
     func isRecording() async -> Bool
@@ -120,6 +124,22 @@ public protocol VisionOneMCPHost: Sendable {
     func export(_ take: Take, preset: ExportPreset) async throws -> URL
     /// Shows the file, copies the words and opens the post. The user posts.
     func share(_ file: URL, text: String?, to target: ShareTarget) async throws
+    /// The Autopilot demos on this Mac and in linked repos.
+    func demos() async -> [DemoFile]
+    /// Starts Autopilot on the demo called `name` and returns its job id
+    /// on the board, or nil when there's no such demo. Autopilot asks the
+    /// user itself unless they let these steps run on their own.
+    func rerecordDemo(_ name: String, release: String?, requestedBy: String) async -> UUID?
+}
+
+extension VisionOneMCPHost {
+    public func demos() async -> [DemoFile] { [] }
+    public func rerecordDemo(_ name: String, release: String?, requestedBy: String) async -> UUID? { nil }
+}
+
+public extension VisionOneMCPHost {
+    /// Hosts without a window always show the card.
+    func showsCard(for question: MCPQuestion) async -> Bool { true }
 }
 
 /// A plain message from the app for the agent ("Pick an area first").
@@ -158,5 +178,7 @@ extension AgentJob.Approval {
         characters = text.count
         estimatedRand = nil
         fromPlan = false
+        askedBy = question.client.displayName
+        canRemember = question.canRemember
     }
 }

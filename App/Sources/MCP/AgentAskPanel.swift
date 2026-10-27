@@ -4,8 +4,9 @@ import VisionOneKit
 
 /// The floating card an agent's request waits on: "Record your screen for
 /// Claude Code?". One at a time, kept out of recordings like every Vision
-/// One window. The same question also sits on the task in the Agent Desk;
-/// answering either one closes both.
+/// One window. The question always sits on its task's card; this card only
+/// shows when the main window is out of view (or there's no task), and
+/// answering either one closes both (`ApprovalPlacement`).
 @MainActor
 final class AgentAskCenter: ObservableObject {
     static let shared = AgentAskCenter()
@@ -65,7 +66,6 @@ final class AgentAskCenter: ObservableObject {
             panel.isFloatingPanel = true
             panel.level = .floating
             panel.isReleasedWhenClosed = false
-            panel.appearance = NSAppearance(named: .aqua)
             panel.sharingType = .none
             panel.contentViewController = NSHostingController(rootView: AgentAskView(center: self))
             panel.standardWindowButton(.closeButton)?.isHidden = true
@@ -90,7 +90,7 @@ struct AgentAskView: View {
         }
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 
     private func content(_ q: MCPQuestion) -> some View {

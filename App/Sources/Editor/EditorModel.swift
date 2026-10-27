@@ -36,6 +36,8 @@ final class EditorModel: ObservableObject {
     }
     /// Music and sound effects, saved to sound.json.
     @Published private(set) var sound = SoundPlan()
+    /// Sentences said again, saved to redos.json.
+    @Published private(set) var redos = RedoList()
     /// Why some of the sound isn't playing, such as a moved music file.
     @Published private(set) var soundProblem: String?
     /// Playhead, in seconds of the original take.
@@ -58,6 +60,8 @@ final class EditorModel: ObservableObject {
     @Published var steerLog: [SteerEntry] = []
     /// Something said while holding Space that Ask should handle.
     @Published var pendingAsk: String?
+    /// The sentence picked for "Redo this sentence", while its card is open.
+    @Published var redoTarget: SpokenSentence?
     /// A tool a spoken edit asked for ("blur this" picks the pen).
     @Published var requestedTool: EditorTool?
     /// Mute and solo while listening in the sound full mode. Only the
@@ -91,6 +95,10 @@ final class EditorModel: ObservableObject {
     /// effects volume ramps, so mute and solo can be applied live.
     private var mixTracks: [MixLane: [CMPersistentTrackID]] = [:]
     private var soundParameters: [AVMutableAudioMixInputParameters] = []
+    /// Redone sentences on their own tracks, and where the original
+    /// voice is silent under them.
+    private var redoParameters: [AVMutableAudioMixInputParameters] = []
+    private var redoMutes: [Range<Double>] = []
     private var loadStarted = false
 
     init(take: Take) {
@@ -99,6 +107,29 @@ final class EditorModel: ObservableObject {
     }
 
     // MARK: Loading
+
+    /// Versions of this take's edit, for Try in a copy.
+    private(set) lazy var versions = VersionsModel(editor: self)
+
+    /// Reads the edit files again after another version was opened into
+    /// the take's folder. Undo starts fresh: the steps belonged to the
+    /// version that was open before.
+    func reloadFiles() {
+        guard phase == .ready else { return }
+        let duration = edits.sourceDuration
+        var next = (try? EditList.load(from: take.editsURL, sourceDuration: duration)) ?? EditList(sourceDuration: duration)
+        next.sourceDuration = duration
+        edits = next
+        knownCutIDs = Set(edits.cuts.map(\.id))
+        outsideCutIDs = []
+        sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
+        redos = (try? RedoList.load(from: take.redosURL)) ?? RedoList()
+        effects.load(edits: edits)
+        undoManager.removeAllActions()
+        steerLog = []
+        selection = nil
+        scheduleRebuild()
+    }
 
     /// Loads once, however many views (the full editor, the side panel)
     /// ask for it.
@@ -124,6 +155,7 @@ final class EditorModel: ObservableObject {
             knownCutIDs = Set(edits.cuts.map(\.id))
             // A damaged sound.json shouldn't stop the take opening.
             sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
+            redos = (try? RedoList.load(from: take.redosURL)) ?? RedoList()
         } catch {
             phase = .failed("Couldn't open this take: \(error.localizedDescription)")
             return
@@ -337,6 +369,24 @@ final class EditorModel: ObservableObject {
         scheduleRebuild()
     }
 
+    /// Every redo change goes through here, like cuts through `apply`.
+    func applyRedos(_ next: RedoList, actionName: String) {
+        let previous = redos
+        guard previous != next else { return }
+        undoManager.registerUndo(withTarget: self) { model in
+            MainActor.assumeIsolated { model.applyRedos(previous, actionName: actionName) }
+        }
+        undoManager.setActionName(actionName)
+        redos = next
+        do {
+            try redos.write(to: take.redosURL)
+            saveError = nil
+        } catch {
+            saveError = "Couldn't save the redone sentence: \(error.localizedDescription)"
+        }
+        scheduleRebuild()
+    }
+
     // MARK: Playback
 
     func togglePlay() {
@@ -411,6 +461,7 @@ final class EditorModel: ObservableObject {
             let timeline = ExportTimeline(keep: edits.keptSpans.map { $0.start..<$0.end },
                                           sourceDuration: edits.sourceDuration, frameRate: 0)
             let added = await SoundComposer.add(sound, timeline: timeline, words: wordSpans, to: composition)
+            let redone = await RedoComposer.add(redos.playing, take: take, timeline: timeline, to: composition)
             guard !Task.isCancelled else { return }
             if let track = composition.tracks(withMediaType: .video).first {
                 let natural = try await track.load(.naturalSize)
@@ -432,6 +483,10 @@ final class EditorModel: ObservableObject {
                 .effects: soundTracks.filter { $0 != added.musicTrackID },
             ]
             soundParameters = added.parameters
+            redoParameters = redone.parameters
+            redoMutes = redone.mutes
+            // Redone lines are fitted to their slot; keep the voice's pitch.
+            item.audioTimePitchAlgorithm = .spectral
             item.audioMix = previewAudioMix()
             soundProblem = added.problem
             player.replaceCurrentItem(with: item)
@@ -464,6 +519,17 @@ extension EditorModel {
         }
         if !laneMix.isAudible(.voice) {
             inputs += (mixTracks[.voice] ?? []).map(silent)
+            inputs += redoParameters.map { silent($0.trackID) }
+        } else {
+            inputs += redoParameters
+            if !redoMutes.isEmpty {
+                for id in mixTracks[.voice] ?? [] {
+                    let parameters = AVMutableAudioMixInputParameters()
+                    parameters.trackID = id
+                    RedoComposer.mute(parameters, during: redoMutes)
+                    inputs.append(parameters)
+                }
+            }
         }
         guard !inputs.isEmpty else { return nil }
         let mix = AVMutableAudioMix()

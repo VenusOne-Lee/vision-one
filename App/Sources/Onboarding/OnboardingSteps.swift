@@ -122,7 +122,8 @@ struct AccessStep: View {
 }
 
 /// The last step: a restart when Screen Recording needs one, otherwise
-/// the shortcut and a button that starts the first recording.
+/// the shortcut and one button that starts the first recording. Either
+/// way out lands on the main window's New task.
 struct FinishStep: View {
     @ObservedObject var access: AccessCenter
     @ObservedObject private var hotKey = GlobalHotKey.shared
@@ -157,17 +158,13 @@ struct FinishStep: View {
                     }
                 }
                 buttons {
-                    Button("Open Vision One") {
-                        SetupWindowController.shared.close()
-                        EditorWindowController.shared.showLibrary()
-                    }
-                    .buttonStyle(PillButtonStyle(kind: .secondary))
-                    Button("Start recording") {
-                        SetupWindowController.shared.close()
-                        Task { await ScreenRecorder.shared.toggle() }
-                    }
-                    .buttonStyle(PillButtonStyle(kind: .primary))
-                    .keyboardShortcut(.defaultAction)
+                    Button("Not now") { SetupWindowController.shared.finish(record: false) }
+                        .buttonStyle(PillButtonStyle(kind: .quiet))
+                        .keyboardShortcut(.cancelAction)
+                        .help("Open Vision One on New task")
+                    Button("Start recording") { SetupWindowController.shared.finish(record: true) }
+                        .buttonStyle(PillButtonStyle(kind: .primary))
+                        .keyboardShortcut(.defaultAction)
                 }
             }
             if !access.isInApplications {

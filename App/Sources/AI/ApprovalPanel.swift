@@ -2,9 +2,43 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
+/// Where an approval is asked, so the user answers it once. A request on
+/// a Desk task waits on the task's numbered card; the floating panel asks
+/// too only when the main window is closed, hidden or behind another app
+/// (`ApprovalSurface`). Both answer the same pending approval on the job
+/// board, so answering one clears the other.
+enum ApprovalPlacement {
+    /// Whether the floating panel asks for an approval on `jobID`.
+    static func panelAsks(jobID: UUID, desk: Desk) async -> Bool {
+        let onTask = await desk.taskID(forJob: jobID) != nil
+        let inFront = await MainActor.run { MainWindowPresence.inFront }
+        return ApprovalSurface.route(onTask: onTask, windowInFront: inFront).showsPanel
+    }
+}
+
+/// Whether the main (harness) window is where the user is looking: on
+/// screen, not minimised or covered, and Vision One the app in front.
+@MainActor
+enum MainWindowPresence {
+    /// `EditorWindowController` gives the main window this autosave name.
+    private static let autosaveName = "VisionOneEditor"
+
+    static var inFront: Bool {
+        guard NSApp.isActive, !NSApp.isHidden else { return false }
+        return NSApp.windows.contains { window in
+            window.frameAutosaveName == autosaveName
+                && window.isVisible
+                && !window.isMiniaturized
+                && window.occlusionState.contains(.visible)
+        }
+    }
+}
+
 /// Shows the approval sheet for anything about to leave the Mac, one at a
 /// time, and hands the answer back to the gate. A floating panel rather
-/// than a sheet, because a menu bar app may have no window open.
+/// than a sheet, because a menu bar app may have no window open. For a
+/// job's request it only shows when the task's card is out of view, and
+/// goes away when the card is answered (`dismiss`).
 @MainActor
 final class ApprovalCenter: ObservableObject {
     static let shared = ApprovalCenter()
@@ -20,7 +54,9 @@ final class ApprovalCenter: ObservableObject {
     private var panel: NSPanel?
 
     func ask(_ request: OutboundRequest) async -> OutboundDecision {
-        await withCheckedContinuation { continuation in
+        // Already answered on the task before the panel got its turn.
+        if Task.isCancelled { return .deny }
+        return await withCheckedContinuation { continuation in
             queue.append(Pending(request: request, reply: continuation))
             showNext()
         }
@@ -32,6 +68,16 @@ final class ApprovalCenter: ObservableObject {
         current = nil
         if queue.isEmpty { panel?.orderOut(nil) }
         showNext()
+    }
+
+    /// The user answered on the task's card instead: take this request
+    /// off the panel. The "no" it hands back is ignored by the board.
+    func dismiss(_ requestID: UUID) {
+        if active?.request.id == requestID {
+            answer(.deny)
+        } else if let i = queue.firstIndex(where: { $0.request.id == requestID }) {
+            queue.remove(at: i).reply.resume(returning: .deny)
+        }
     }
 
     private func showNext() {
@@ -48,7 +94,6 @@ final class ApprovalCenter: ObservableObject {
             panel.isFloatingPanel = true
             panel.level = .floating
             panel.isReleasedWhenClosed = false
-            panel.appearance = NSAppearance(named: .aqua)
             // Keep the sheet out of the recording, like every Vision One window.
             panel.sharingType = .none
             panel.contentViewController = NSHostingController(rootView: ApprovalView(center: self))
@@ -74,7 +119,7 @@ struct ApprovalView: View {
         }
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 
     private func content(_ r: OutboundRequest) -> some View {
