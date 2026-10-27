@@ -152,7 +152,7 @@ final class LanguagesModel: ObservableObject {
         task = Task {
             do {
                 let audio = try await TakeAudio.read(take)
-                let wav = WAVFile.data(samples: audio.samples, sampleRate: Int(TakeAudio.sampleRate))
+                let wav = WAVFile.data(samples: audio.samples, sampleRate: Int(TakeAudio.sampleRate), channels: 1)
                 let transcript = try await client.transcribe(audio: wav, fileName: "voice.wav", mimeType: "audio/wav",
                                                              seconds: audio.duration, language: language,
                                                              audioTrack: audio.source.rawValue)

@@ -142,34 +142,3 @@ extension ElevenLabsClient {
         throw AIError.unavailable(.elevenLabs, "The dub is taking longer than 30 minutes. It will be in your ElevenLabs account when it's done.")
     }
 }
-
-/// 16-bit mono WAV from 16 kHz floats, the smallest lossless upload Scribe
-/// takes and simple to make without AVFoundation.
-public enum WAVFile {
-    public static func data(samples: [Float], sampleRate: Int = 16_000) -> Data {
-        var data = Data()
-        func append<T: FixedWidthInteger>(_ value: T) {
-            var little = value.littleEndian
-            withUnsafeBytes(of: &little) { data.append(contentsOf: $0) }
-        }
-        let bytes = samples.count * 2
-        data.append(contentsOf: Array("RIFF".utf8))
-        append(UInt32(36 + bytes))
-        data.append(contentsOf: Array("WAVEfmt ".utf8))
-        append(UInt32(16))
-        append(UInt16(1))            // PCM
-        append(UInt16(1))            // mono
-        append(UInt32(sampleRate))
-        append(UInt32(sampleRate * 2))
-        append(UInt16(2))            // block align
-        append(UInt16(16))           // bits
-        data.append(contentsOf: Array("data".utf8))
-        append(UInt32(bytes))
-        data.reserveCapacity(data.count + bytes)
-        for sample in samples {
-            let clamped = max(-1, min(1, sample))
-            append(Int16(clamped * Float(Int16.max)))
-        }
-        return data
-    }
-}

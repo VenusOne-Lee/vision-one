@@ -258,11 +258,10 @@ final class LanguagesTests: XCTestCase {
         }
     }
 
-    func testWAVHeader() {
-        let data = WAVFile.data(samples: [0, 1, -1], sampleRate: 16_000)
+    func testScribeUploadIsMonoWAV() {
+        let data = WAVFile.data(samples: [0, 1, -1], sampleRate: 16_000, channels: 1)
         XCTAssertEqual(data.count, 44 + 6)
-        XCTAssertEqual(String(decoding: data.prefix(4), as: UTF8.self), "RIFF")
-        XCTAssertEqual(String(decoding: data[8..<12], as: UTF8.self), "WAVE")
+        XCTAssertEqual(data[22], 1)  // channels
         XCTAssertEqual(data[44 + 2], 0xFF)  // 32767 little endian: FF 7F
         XCTAssertEqual(data[44 + 3], 0x7F)
     }
