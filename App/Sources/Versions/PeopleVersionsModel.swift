@@ -7,7 +7,7 @@ import VisionOneKit
 /// list, with their name on the title card. Everything happens on this
 /// Mac; nothing is sent anywhere. See docs/VERSIONS.md.
 @MainActor
-final class VersionsModel: ObservableObject {
+final class PeopleVersionsModel: ObservableObject {
     enum RowState: Equatable {
         case ready
         case making(Double)
@@ -201,10 +201,10 @@ final class VersionsModel: ObservableObject {
 
 /// The Versions window, opened from the editor.
 @MainActor
-final class VersionsWindowController {
-    static let shared = VersionsWindowController()
+final class PeopleVersionsWindowController {
+    static let shared = PeopleVersionsWindowController()
     private var window: NSWindow?
-    private var model: VersionsModel?
+    private var model: PeopleVersionsModel?
 
     func show(for take: Take) {
         if window == nil {
@@ -219,9 +219,9 @@ final class VersionsWindowController {
         }
         // Keep a running batch's window; otherwise follow the take.
         if model?.take.folder != take.folder, model?.isMaking != true {
-            let model = VersionsModel(take: take)
+            let model = PeopleVersionsModel(take: take)
             self.model = model
-            window?.contentViewController = NSHostingController(rootView: VersionsView(model: model))
+            window?.contentViewController = NSHostingController(rootView: PeopleVersionsView(model: model))
         }
         window?.title = "Versions · \(take.name.replacingOccurrences(of: "Vision One ", with: ""))"
         NSApp.activate()

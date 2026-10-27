@@ -5,8 +5,8 @@ import VisionOneKit
 /// Paste a list on the left, see each person's title card on the right,
 /// make them all with one button. The divider drags; the preview grid
 /// fits as many cards per row as the width allows.
-struct VersionsView: View {
-    @ObservedObject var model: VersionsModel
+struct PeopleVersionsView: View {
+    @ObservedObject var model: PeopleVersionsModel
     @AppStorage("versions.listWidth") private var listWidth: Double = 320
     @State private var dropping = false
 
@@ -208,7 +208,7 @@ private struct VersionCard: View {
     let version: PlannedVersion
     let titleCard: Bool
     let ring: RingColour
-    let state: VersionsModel.RowState
+    let state: PeopleVersionsModel.RowState
 
     private var mark: StatusMark {
         if case .made = state { return .accepted }
