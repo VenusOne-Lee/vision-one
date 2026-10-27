@@ -139,9 +139,10 @@ public struct LibraryQuery: Equatable, Sendable {
     /// Ties keep the folder order, newest first.
     private func sorted(_ items: [TakeListing]) -> [TakeListing] {
         let indexed = Array(items.enumerated())
-        func newer(_ a: TakeListing, _ b: TakeListing) -> Bool? {
+        /// Undated takes go last either way.
+        func byDate(_ a: TakeListing, _ b: TakeListing, newestFirst: Bool) -> Bool? {
             switch (a.recordedAt, b.recordedAt) {
-            case let (x?, y?) where x != y: return x > y
+            case let (x?, y?) where x != y: return newestFirst ? x > y : x < y
             case (.some, nil): return true
             case (nil, .some): return false
             default: return nil
@@ -152,9 +153,9 @@ public struct LibraryQuery: Equatable, Sendable {
             let decided: Bool?
             switch sort {
             case .newest:
-                decided = newer(a, b)
+                decided = byDate(a, b, newestFirst: true)
             case .oldest:
-                decided = newer(a, b).map { !$0 }
+                decided = byDate(a, b, newestFirst: false)
             case .longest:
                 let x = a.duration ?? -1, y = b.duration ?? -1
                 decided = x == y ? nil : x > y
