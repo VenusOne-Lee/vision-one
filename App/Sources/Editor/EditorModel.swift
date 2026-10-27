@@ -125,6 +125,12 @@ final class EditorModel: ObservableObject {
         return true
     }
 
+    /// Picks up cuts an agent just wrote to edits.json, without waiting
+    /// for the next two-second look.
+    func pickUpOutsideCuts() {
+        if mergeOutsideCuts() { scheduleRebuild() }
+    }
+
     private func loadTranscript() {
         guard FileManager.default.fileExists(atPath: take.transcriptURL.path) else {
             transcriptState = .waiting
@@ -203,7 +209,9 @@ final class EditorModel: ObservableObject {
         edits.cuts.filter { $0.state == .proposed }.count
     }
 
-    private func apply(_ next: EditList, actionName: String) {
+    /// Internal so the Changes list (EditorModel+Changes) can switch a
+    /// whole group of cuts as one undoable step.
+    func apply(_ next: EditList, actionName: String) {
         let previous = edits
         let seen = outsideCutIDs
         undoManager.registerUndo(withTarget: self) { model in

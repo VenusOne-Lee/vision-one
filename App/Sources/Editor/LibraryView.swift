@@ -3,9 +3,11 @@ import AVFoundation
 import SwiftUI
 import VisionOneKit
 
-/// The main window's home when no take is open: a Record button and
-/// every take as a card, newest first. Clicking a card opens it in the
-/// editor in the same window.
+/// The main window's home when no take is open (design v2, "Home: say
+/// what it's for, then record"): pick what you're making on the left, the
+/// record pane on the right, and every take below as a card, newest first.
+/// Two columns stack into one under 900 pt. Clicking a card opens it in
+/// the editor in the same window.
 struct LibraryView: View {
     @ObservedObject private var recorder = ScreenRecorder.shared
     let open: (Take) -> Void
@@ -15,33 +17,39 @@ struct LibraryView: View {
     /// Bumped on every refresh so cards read their status from disk again
     /// (a transcript or an export may have landed meanwhile).
     @State private var generation = 0
+    @State private var width: CGFloat = 1000
+    /// What the next take is for; empty means "Just record, decide later".
+    @AppStorage("home.purposeID") private var purposeID = ""
+
+    /// Below this the record pane moves under the cards.
+    private static let stackWidth: CGFloat = 900
+    private static let paneWidth: CGFloat = 300
+
+    private var isWide: Bool { width >= Self.stackWidth }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider().overlay(Theme.line)
-            if takes.isEmpty {
-                emptyState
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: Theme.Space.md)],
-                              spacing: Theme.Space.md) {
-                        ForEach(takes, id: \.folder) { take in
-                            TakeCard(take: take, generation: generation) { open(take) }
-                        }
-                    }
-                    .padding(Theme.Space.lg)
-                }
+        ScrollView {
+            VStack(spacing: 0) {
+                launcher
+                Divider().overlay(Theme.line)
+                recentTakes
             }
+        }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { newWidth in
+            width = newWidth
         }
         .frame(minWidth: 480, minHeight: 420)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
         .environment(\.colorScheme, .light) // light only, always
+        .background(HomeWindowSubtitle(text: weekLine))
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             refresh()
         }
         .onReceive(recorder.$lastTake) { _ in refresh() }
+        .onChange(of: purposeID) { _, newID in carryPurposeToNextTake(newID) }
     }
 
     private func refresh() {
@@ -50,66 +58,128 @@ struct LibraryView: View {
         generation += 1
     }
 
-    // MARK: Header
+    /// The Producer and the Agents read "ai.nextPurpose" when the next
+    /// take's plan.json is made, so Home's pick lands there too. Just
+    /// record clears it, and they fall back to their default.
+    private func carryPurposeToNextTake(_ id: String) {
+        if id.isEmpty || Purpose.named(id) == nil {
+            UserDefaults.standard.removeObject(forKey: "ai.nextPurpose")
+        } else {
+            UserDefaults.standard.set(id, forKey: "ai.nextPurpose")
+        }
+    }
 
-    private var header: some View {
-        HStack(spacing: Theme.Space.sm) {
-            Text("Recordings")
-                .font(.system(size: 15, weight: .semibold))
-            if !takes.isEmpty {
-                Text("\(takes.count)")
-                    .font(.system(size: 12, design: .monospaced).monospacedDigit())
-                    .foregroundStyle(Theme.textMuted)
+    /// "3 takes this week", for the window's title bar.
+    private var weekLine: String {
+        let calendar = Calendar.current
+        let now = Date()
+        let count = takes.filter { take in
+            take.recordedAt(timeZone: calendar.timeZone)
+                .map { calendar.isDate($0, equalTo: now, toGranularity: .weekOfYear) } ?? false
+        }.count
+        switch count {
+        case 0: return "No takes this week"
+        case 1: return "1 take this week"
+        default: return "\(count) takes this week"
+        }
+    }
+
+    // MARK: Launcher
+
+    @ViewBuilder
+    private var launcher: some View {
+        if isWide {
+            HStack(alignment: .top, spacing: 0) {
+                purposePane
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .background(Theme.paper)
+                HomeRecordPane()
+                    .padding(Theme.Space.lg)
+                    .frame(width: Self.paneWidth)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .background(Theme.canvas)
+                    .overlay(alignment: .leading) {
+                        Rectangle().fill(Theme.line).frame(width: 1)
+                    }
             }
-            Spacer(minLength: Theme.Space.sm)
-            if recorder.phase.isLive {
-                // Orange only says "live", and only as this small dot.
-                HStack(spacing: 6) {
-                    Circle().fill(Theme.tally).frame(width: 8, height: 8)
-                    Text("Recording")
-                        .font(.system(size: 12))
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+            VStack(spacing: 0) {
+                purposePane
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .background(Theme.paper)
+                HomeRecordPane()
+                    .frame(maxWidth: 360)
+                    .padding(Theme.Space.lg)
+                    .frame(maxWidth: .infinity)
+                    .background(Theme.canvas)
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(Theme.line).frame(height: 1)
+                    }
+            }
+        }
+    }
+
+    private var purposePane: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("What are you making?")
+                .font(.system(size: 30, weight: .light))
+                .tracking(-0.9)
+                .accessibilityAddTraits(.isHeader)
+            HomePurposeGrid(selectedID: $purposeID, columns: purposeColumns)
+        }
+        .padding(28)
+    }
+
+    /// Three columns, two when the cards' side is narrow (design: 640).
+    private var purposeColumns: Int {
+        let side = isWide ? width - Self.paneWidth : width
+        return side < 640 ? 2 : 3
+    }
+
+    // MARK: Recent takes
+
+    private var recentTakes: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.md) {
+            HStack(spacing: Theme.Space.sm) {
+                Text("Recent takes")
+                    .font(.system(size: 15, weight: .semibold))
+                    .accessibilityAddTraits(.isHeader)
+                if !takes.isEmpty {
+                    Text("\(takes.count)")
+                        .font(.system(size: 12, design: .monospaced).monospacedDigit())
                         .foregroundStyle(Theme.textMuted)
                 }
-                .accessibilityElement(children: .combine)
-            } else if case let .failed(message) = recorder.phase {
-                Text(message)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.error)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help(message)
+                Spacer(minLength: 0)
+            }
+            if takes.isEmpty {
+                emptyState
             } else {
-                Text("⌘⇧R from anywhere")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-                    .lineLimit(1)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: Theme.Space.md)],
+                          spacing: Theme.Space.md) {
+                    ForEach(takes, id: \.folder) { take in
+                        TakeCard(take: take, generation: generation) { open(take) }
+                    }
+                }
             }
-            // Black like every primary pill, live or not.
-            Button(recorder.phase.isLive ? "Stop" : "Record") {
-                Task { await recorder.toggle() }
-            }
-            .buttonStyle(PillButtonStyle(kind: .primary))
-            .disabled(recorder.phase.isBusy)
-            .help(recorder.phase.isLive ? "Stop recording (⌘⇧R)" : "Start recording (⌘⇧R)")
         }
-        .padding(.horizontal, Theme.Space.lg)
-        .frame(height: 52)
-        .background(Theme.paper)
+        .padding(Theme.Space.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var emptyState: some View {
-        VStack(spacing: Theme.Space.sm) {
+        HStack(spacing: Theme.Space.sm) {
             Circle()
                 .strokeBorder(Theme.textMuted, style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
-                .frame(width: 32, height: 32)
+                .frame(width: 20, height: 20)
                 .accessibilityHidden(true)
-            Text("No recordings yet. Press ⌘⇧R or Record to make your first take.")
+            Text("No recordings yet. Press ⌘⇧R or the record button to make your first take.")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.textMuted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, Theme.Space.lg)
+        .frame(maxWidth: .infinity)
     }
 }
 
