@@ -3,7 +3,7 @@ import CoreImage
 import VisionOneKit
 
 /// Something drawn on top of every exported frame: burned-in captions,
-/// later the camera bubble and click highlights. Draws in output pixels,
+/// later click highlights. Draws in output pixels,
 /// origin bottom left, at a time on the edited timeline.
 protocol ExportOverlay: Sendable {
     func draw(in context: CGContext, size: CGSize, at outputTime: Double)
@@ -51,6 +51,8 @@ struct VideoExporter {
     /// Set for a short clip: renders at the clip format's size, cut out
     /// of the screen with `framing`, instead of following the preset.
     var clip: (format: ClipFormat, framing: ClipFraming)?
+    /// Colour of the ring around the camera bubble (the builder's ring).
+    var ring: RingColour = .black
 
     /// Exports and returns the file's URL and size. `progress` is called
     /// from a background queue with 0...1.
@@ -137,6 +139,21 @@ struct VideoExporter {
         return effects.isEmpty ? nil : effects
     }
 
+    /// The take's camera.mov and camera.json, or nil when it has none or
+    /// either can't be read (the export then shows the screen alone).
+    static func camera(for take: Take) async -> (track: AVAssetTrack, range: CMTimeRange, info: CameraTrack)? {
+        guard let info = try? CameraTrack.read(from: take.cameraInfoURL), !info.placements.isEmpty else { return nil }
+        let asset = AVURLAsset(url: take.cameraURL)
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let range = try? await track.load(.timeRange), range.duration > .zero else { return nil }
+        return (track, range, info)
+    }
+
+    static func cgColor(_ ring: RingColour) -> CGColor {
+        CGColor(srgbRed: CGFloat((ring.hex >> 16) & 0xFF) / 255, green: CGFloat((ring.hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(ring.hex & 0xFF) / 255, alpha: 1)
+    }
+
     private func render(timeline: ExportTimeline, plan: TemplatePlan, cards: BrandCardSet,
                         sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
                         effects: FrameEffects?, settings: ExportSettings, crop: NormalisedRect?, to url: URL,
@@ -153,11 +170,27 @@ struct VideoExporter {
             audioSources.append((track, try await track.load(.timeRange)))
         }
 
+        // The camera, on its own track, cut the same way as the screen.
+        // Clips skip it for now: their crop would cut the bubble in half.
+        let camera = clip == nil ? await Self.camera(for: take) : nil
+        var cameraTrack: AVMutableCompositionTrack?
+        if camera != nil {
+            cameraTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
+        }
+
         for segment in timeline.segments {
             let range = CMTimeRange(start: Self.time(segment.source.lowerBound),
                                     end: Self.time(segment.source.upperBound))
             let at = Self.time(segment.outputStart)
             try video.insertTimeRange(range, of: sourceVideo, at: at)
+            if let camera, let cameraTrack {
+                let wanted = CMTimeRange(start: Self.time(camera.info.cameraTime(forScreen: segment.source.lowerBound)),
+                                         end: Self.time(camera.info.cameraTime(forScreen: segment.source.upperBound)))
+                let available = wanted.intersection(camera.range)
+                if available.duration > .zero {
+                    try cameraTrack.insertTimeRange(available, of: camera.track, at: at + (available.start - wanted.start))
+                }
+            }
             for (index, track) in audio.enumerated() {
                 // A track can be shorter than the video (the mic starts a
                 // moment late); insert only the part it has.
@@ -200,7 +233,11 @@ struct VideoExporter {
                                              // "Fit" clips sit on the canvas, ink on paper.
                                              background: crop == .full
                                                 ? CIColor(red: 0xF4 / 255.0, green: 0xF4 / 255.0, blue: 0xF1 / 255.0)
-                                                : .black))
+                                                : .black,
+                                             camera: cameraTrack.flatMap { track in
+                                                 camera.map { CameraLayer(trackID: track.trackID, track: $0.info,
+                                                                          timeline: timeline, ringColour: Self.cgColor(ring)) }
+                                             }))
         if let outro = cards.outro, let range = plan.outro {
             // Cover the composition to its very end, whatever rounding did.
             let end = CMTimeMaximum(videoEnd + Self.time(range.upperBound - range.lowerBound), composition.duration)
@@ -236,19 +273,20 @@ struct VideoExporter {
         }
         audioMix.inputParameters = recorded + soundTracks.parameters
 
-        return try await encode(composition: composition, video: video, audio: audio + soundTracks.tracks,
+        return try await encode(composition: composition, videoTracks: [video] + (cameraTrack.map { [$0] } ?? []),
+                                audio: audio + soundTracks.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
                                 duration: duration.seconds, settings: settings, to: url, progress: progress)
     }
 
     // MARK: - Encoding
 
-    private func encode(composition: AVComposition, video: AVCompositionTrack, audio: [AVCompositionTrack],
+    private func encode(composition: AVComposition, videoTracks: [AVCompositionTrack], audio: [AVCompositionTrack],
                         videoComposition: AVVideoComposition, audioMix: AVAudioMix,
                         duration: Double, settings: ExportSettings, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
         let reader = try AVAssetReader(asset: composition)
-        let videoOutput = AVAssetReaderVideoCompositionOutput(videoTracks: [video], videoSettings: [
+        let videoOutput = AVAssetReaderVideoCompositionOutput(videoTracks: videoTracks, videoSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
         ])
         videoOutput.videoComposition = videoComposition

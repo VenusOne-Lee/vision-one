@@ -95,4 +95,32 @@ final class CameraBubbleTests: XCTestCase {
             XCTAssertEqual(x, y, accuracy: 1e-9, file: file, line: line)
         }
     }
+
+    func testOutputRectFlipsToBottomLeftAndStaysInside() {
+        let frame = CaptureRect(x: 0, y: 0, width: 1920, height: 1080)
+        let bottomLeft = CameraTrack.Placement(t: 0, x: 0.02, y: 0.7, size: 0.15)
+        let rect = CameraTrack.outputRect(for: bottomLeft, in: frame)
+        assertSame(rect, CaptureRect(x: 38.4, y: 1080 - 756 - 288, width: 288, height: 288))
+
+        let offEdge = CameraTrack.Placement(t: 0, x: 0.95, y: 0.95, size: 0.2)
+        let kept = CameraTrack.outputRect(for: offEdge, in: frame)
+        assertSame(kept, CaptureRect(x: 1920 - 384, y: 0, width: 384, height: 384))
+    }
+
+    func testOutputRectUsesTheLetterboxedFrame() {
+        let frame = CaptureRect(x: 240, y: 0, width: 1440, height: 1080)
+        let rect = CameraTrack.outputRect(for: .init(t: 0, x: 0, y: 0, size: 0.1), in: frame)
+        assertSame(rect, CaptureRect(x: 240, y: 1080 - 144, width: 144, height: 144))
+    }
+
+    func testPlacementFollowsTheRecordingThroughCuts() {
+        var track = CameraTrack(cameraName: "Cam", startOffset: -0.1)
+        track.record(.init(t: 0, x: 0.1, y: 0.1, size: 0.2))
+        track.record(.init(t: 10, x: 0.7, y: 0.1, size: 0.2))
+        // Keep 0-5 s and 12-20 s: output 6 s is source 13 s.
+        let timeline = ExportTimeline(keep: [0..<5, 12..<20], sourceDuration: 20, frameRate: 30)
+        XCTAssertEqual(track.placement(atOutput: 2, timeline: timeline)?.x, 0.1)
+        XCTAssertEqual(track.placement(atOutput: 6, timeline: timeline)?.x, 0.7)
+        XCTAssertEqual(track.cameraTime(forScreen: 13), 13.1, accuracy: 1e-9)
+    }
 }
