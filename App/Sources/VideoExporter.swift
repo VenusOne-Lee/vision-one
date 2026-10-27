@@ -12,6 +12,7 @@ protocol ExportOverlay: Sendable {
 /// system sound, mic) are spliced into one AVMutableComposition, frames
 /// go through `FrameCompositor` to be scaled and overlaid, and
 /// AVAssetWriter encodes H.264 + AAC at the bitrate `ExportPlanner` chose.
+/// Music and sound effects from sound.json are mixed in by `SoundComposer`.
 /// AVAssetExportSession can't set a bitrate, so it can't promise the
 /// WhatsApp size; this pipeline can.
 struct VideoExporter {
@@ -116,6 +117,11 @@ struct VideoExporter {
             }
         }
 
+        // Music and sound effects from sound.json go on their own tracks.
+        let sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
+        let words: [TimeSpan] = sound.isEmpty ? [] : ((try? Transcript.read(from: take.transcriptURL))?.words.map(\.span) ?? [])
+        let soundTracks = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition)
+
         let duration = Self.time(timeline.duration)
         let videoComposition = AVMutableVideoComposition()
         videoComposition.customVideoCompositorClass = FrameCompositor.self
@@ -127,7 +133,7 @@ struct VideoExporter {
         ]
 
         let audioMix = AVMutableAudioMix()
-        audioMix.inputParameters = audio.map { track in
+        let recorded: [AVMutableAudioMixInputParameters] = audio.map { track in
             let parameters = AVMutableAudioMixInputParameters(track: track)
             for join in timeline.joins {
                 let fade = Self.time(Self.joinFade)
@@ -137,8 +143,9 @@ struct VideoExporter {
             }
             return parameters
         }
+        audioMix.inputParameters = recorded + soundTracks.parameters
 
-        return try await encode(composition: composition, video: video, audio: audio,
+        return try await encode(composition: composition, video: video, audio: audio + soundTracks.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
                                 duration: timeline.duration, settings: settings, to: url, progress: progress)
     }
