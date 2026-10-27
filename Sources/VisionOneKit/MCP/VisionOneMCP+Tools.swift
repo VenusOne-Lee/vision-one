@@ -10,7 +10,8 @@ extension VisionOneMCP {
     start_recording, keep_changes and share_video wait for the user to say yes in Vision One; if they say no, the reply says why. \
     Jobs that take longer than about 40 seconds return a task_id: call wait_for_task with it. \
     To record yourself using this Mac (computer use, a browser agent), call start_agent_recording before you start, \
-    log_step with a few words before each part, and stop_recording when you're done.
+    log_step with a few words before each part, and stop_recording when you're done. \
+    list_demos and rerecord_demo re-record Autopilot demos (scripted click-throughs of an app).
     """
 
     // Small schema builders keep the tool list readable and quick to compile.
@@ -171,5 +172,18 @@ extension VisionOneMCP {
                 description: "Gives a take a title. An empty title goes back to the date.",
                 input: ["take": takeArg, "title": text("The new title.")],
                 required: ["title"], idempotent: true),
+
+        // Autopilot demos
+        MCPTool("list_demos", title: "List demos",
+                description: "The Autopilot demos Vision One can record on its own: name, app, steps and roughly how long.",
+                input: ["search": text("Words in the demo's name or app.")],
+                readOnly: true, idempotent: true),
+        MCPTool("rerecord_demo", title: "Re-record a demo",
+                description: "Autopilot opens the demo's app, records its window and clicks through the steps. Vision One asks the user first unless they already let these steps run on their own. Returns a task_id; the run takes a while, so call wait_for_task.",
+                input: [
+                    "demo": text("The demo's name, from list_demos."),
+                    "release": text("The release it's for, like v1.4.0."),
+                ],
+                required: ["demo"]),
     ]
 }

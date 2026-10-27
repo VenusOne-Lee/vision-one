@@ -274,6 +274,11 @@ final class HarnessModel: ObservableObject {
         case .yesAlways: effect = .allowAlways; note = nil
         case let .no(feedback): effect = .deny; note = feedback.isEmpty ? nil : feedback
         }
+        // An agent driving the Mac can't say yes for you (see PersonInput).
+        if effect != .deny, !PersonInput.pressedByPerson() {
+            NSSound.beep()
+            return
+        }
         let choice = card.options.firstIndex { $0.effect == effect } ?? card.preselected
         let desk = self.desk
         Task { await desk.answer(card.id, in: taskID, choice: choice, note: note) }

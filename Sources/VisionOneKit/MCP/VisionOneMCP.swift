@@ -64,6 +64,8 @@ public final class VisionOneMCP: Sendable {
             case "export_video": return try await exportVideo(args, client: client)
             case "share_video": return try await shareVideo(args, client: client)
             case "rename_take": return try renameTake(args)
+            case "list_demos": return await listDemos(args)
+            case "rerecord_demo": return try await rerecordDemo(args, client: client)
             default: return .failed("Vision One has no tool called \(name).")
             }
         } catch let failure as Failure {
@@ -770,26 +772,33 @@ public final class VisionOneMCP: Sendable {
 
     // MARK: Approvals
 
-    /// Asks the user, unless they allowed this agent until quit. The
-    /// task shows it's waiting while the card is up.
     /// Asks the user, unless they allowed this agent until quit. With a
-    /// task, the question is a card on it as well as the floating card;
-    /// whichever the user answers first counts and the other goes away.
+    /// task, the question is a card on it, waiting on the job board. The
+    /// floating card asks too only when the host says the task's card is
+    /// out of view; then whichever the user answers counts and the other
+    /// goes away. A "no" note comes back from either.
     func permit(_ question: MCPQuestion, destination: String, onTask: Bool = true) async -> MCPAnswer {
         if await permissions.allows(question.client, question.action) { return MCPAnswer(.allowForSession) }
         let answer: MCPAnswer
         if onTask, let jobID = question.jobID {
             let floating = AnswerBox()
             let host = self.host
-            let decision = await board.requestApproval(jobID: jobID,
-                                                       approval: AgentJob.Approval(question, destination: destination)) {
-                let reply = await host.ask(question)
-                await floating.set(reply)
-                return reply.decision
+            let showsCard = await host.showsCard(for: question)
+            var alsoAsk: (@Sendable () async -> OutboundDecision)?
+            if showsCard {
+                alsoAsk = {
+                    let reply = await host.ask(question)
+                    await floating.set(reply)
+                    return reply.decision
+                }
             }
-            await host.dismiss(question.id)
-            let note = await floating.answer?.note
-            answer = MCPAnswer(decision, note: decision == .deny ? note : nil)
+            let decision = await board.requestApproval(jobID: jobID,
+                                                       approval: AgentJob.Approval(question, destination: destination),
+                                                       alsoAsk: alsoAsk)
+            if showsCard { await host.dismiss(question.id) }
+            let fromTask = await board.takeNote(jobID: jobID)
+            let fromCard = await floating.answer?.note
+            answer = MCPAnswer(decision, note: decision == .deny ? (fromTask ?? fromCard) : nil)
         } else {
             answer = await host.ask(question)
         }
@@ -806,6 +815,55 @@ public final class VisionOneMCP: Sendable {
     // MARK: Formatting
 
     /// "1:05".
+    // MARK: Autopilot demos
+
+    func listDemos(_ args: [String: JSONValue]) async -> MCPToolResult {
+        var demos = await host.demos()
+        if let search = args["search"]?.stringValue?.trimmingCharacters(in: .whitespaces), !search.isEmpty {
+            demos = demos.filter {
+                $0.demo.name.localizedCaseInsensitiveContains(search)
+                    || $0.demo.app.displayName.localizedCaseInsensitiveContains(search)
+            }
+        }
+        let list: [JSONValue] = demos.map { file in
+            var item: [String: JSONValue] = [
+                "name": .string(file.demo.name),
+                "app": .string(file.demo.app.displayName),
+                "steps": .number(Double(file.demo.steps.count)),
+                "about_seconds": .number(Self.rounded(file.demo.estimatedSeconds)),
+                "rerecords_on_release": .bool(file.demo.rerecordOnRelease),
+            ]
+            if let repo = file.demo.repo { item["repo"] = .string(repo) }
+            return .object(item)
+        }
+        let text = demos.isEmpty
+            ? "No demos yet. The user makes them in Vision One (Autopilot), or adds .visionone/demos/*.json to a linked repo."
+            : "\(demos.count) \(demos.count == 1 ? "demo" : "demos")."
+        return .done(text, ["demos": .array(list)])
+    }
+
+    func rerecordDemo(_ args: [String: JSONValue], client: MCPClient) async throws -> MCPToolResult {
+        guard let name = args["demo"]?.stringValue?.trimmingCharacters(in: .whitespaces), !name.isEmpty else {
+            throw Failure("Say which demo. list_demos shows them.")
+        }
+        let release = args["release"]?.stringValue?.trimmingCharacters(in: .whitespaces)
+        guard let id = await host.rerecordDemo(name, release: (release?.isEmpty == false) ? release : nil,
+                                               requestedBy: client.displayName) else {
+            let names = await host.demos().map(\.demo.name)
+            throw Failure("There's no demo called “\(name)”."
+                + (names.isEmpty ? "" : " Demos: " + names.joined(separator: ", ") + "."))
+        }
+        if let desk, let taskID = await deskTask(for: nil, title: "Re-record “\(name)”", client: client) {
+            await desk.attach(jobID: id, to: taskID)
+        }
+        // A run takes a minute or more; answer quickly with the id.
+        guard let job = await settle(id, within: min(patience, 5)) else {
+            return .done("Autopilot is starting “\(name)”. Call wait_for_task to follow it.",
+                         ["task_id": .string(id.uuidString), "state": "running"])
+        }
+        return describe(job)
+    }
+
     /// The same folder, even when one path goes through /var and the other /private/var.
     static func same(_ a: URL?, _ b: URL) -> Bool {
         guard let a else { return false }

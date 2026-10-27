@@ -4,13 +4,11 @@ A free, open source Mac screen recorder that edits itself. Record, pick what it'
 
 Made for South African builders, as the sibling of [Version One](https://versionone.co.za).
 
-> **Status: v0.1 is built and in testing on a real Mac.** Vision One records your screen, a window or an area (with your camera in a bubble) from the menu bar or its main window, transcribes the take on your Mac, and opens it in the editor: delete words to cut the video, review the suggested filler and pause cuts, ask for changes in plain words, then export with captions. Several v0.2 pieces are already in: music and sound effects, a brand kit with intro and outro cards, auto zoom and secret blur, clips and thumbnails, and the AI agents.
+> **Status: v1 is coming together on main.** Vision One opens on a New task page in one window laid out like a coding agent: projects and tasks on the left, a task thread in the middle where the Producer plans and agents work, and a panel on the right that swaps between Video, Changes, Clips, Sound and Post. Record from anywhere (⇧⌘R); stopping files the take as a new task. The editor and sound mixer open in full mode, you can edit by talking or drawing, try changes in a copy, and the AI asks for your approval once, in the thread. Six preset looks (Paper is the default), a script teleprompter, Autopilot demos that re-record themselves, share pages on your own Cloudflare, and an MCP server so Claude Code or Codex can record, edit and share are all in.
 
 ## How it works
 
-Pick what you're making → record → stop → the editor opens on the take → the transcript and suggested cuts appear → review → Export. What you picked is saved with the take (plan.json), so the agents and export know what it's for.
-
-Vision One has a main window (the Library of takes, and the editor) with a Dock icon, plus the menu bar panel for quick recording.
+Press record (or ⇧⌘R from any app) → stop → the take opens as a task → the transcript and suggested cuts appear in Changes → keep or undo each one, or just ask → Post. Each project keeps its own house style and script sources (right-click it in the sidebar). The menu bar icon shows when a task needs you or an agent is working.
 
 ## v0.1 plan
 
@@ -70,12 +68,18 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | Path | What |
 | --- | --- |
 | `App/Sources` | The Mac app: menu bar, recorder, export, theme |
+| `App/Sources/Harness` | The main window: projects and tasks sidebar, task thread, composer, swappable panels, empty states, project settings |
+| `App/Sources/Autopilot` | Autopilot: demos that click through your app and re-record on each release |
+| `App/Sources/MCP` | The MCP server bridge, so Claude Code or Codex can drive Vision One |
+| `App/Sources/Share` | Share step, approvals for outbound posts, and share pages |
+| `App/Sources/Recording` | Countdown, pause, mic meter, area shapes and the script teleprompter |
+| `App/Sources/DesignSystem` | Tokens, components and the six preset looks |
 | `App/Sources/Editor` | The editor window: takes, preview, timeline, transcript, sound panel |
 | `App/Sources/Captions` | Caption drawing for the preview and burn-in, and .srt/.vtt files |
 | `App/Sources/Brand` | Brand kit settings, intro and outro cards, corner logo |
 | `App/Sources/Sound` | Music and sound effect mixing for preview and export |
 | `App/Sources/Effects` | Auto zoom and secret blur |
-| `Sources/VisionOneKit` | Testable logic: recording state, take folders, cursor log, transcript, cleanup, captions, sound, brand, AI, export plans |
+| `Sources/VisionOneKit` | Testable logic: the Desk (projects, tasks, approvals), recording state, take folders, cursor log, transcript, cleanup, captions, sound, brand, AI, export plans |
 | `docs/RECORDER.md` | How recording works, and what a take folder holds |
 | `docs/TRANSCRIPT.md` | The transcript format every take gets |
 | `docs/CLEANUP.md` | How fillers, stutters and long pauses are found and proposed |
@@ -89,6 +93,9 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | `docs/AUTOPILOT.md` | Autopilot and self-updating demos: the demo file, plain-words steps, safety, releases and the GitHub Action |
 | `docs/IPHONE.md` | Recording a plugged-in iPhone's screen, and the iPhone as a camera |
 | `docs/PRESETS.md` | Prompt presets: the file format and how a prompt is put together |
+| `docs/MCP.md` | The MCP server: tools, approvals, and setup in Claude Code and Codex |
+| `docs/SHARE-PAGE.md` | Share pages on your own Cloudflare: notes, reactions, insights |
+| `docs/AUTOPILOT.md` | Autopilot and self-updating demos |
 | `docs/RELEASING.md` | Signing, notarised DMG, Sparkle updates, Homebrew, and the one-time setup |
 | `scripts/release` | The release scripts the workflow runs |
 | `docs/DESIGN.md` | Design system: tokens, type, components, do's and don'ts |

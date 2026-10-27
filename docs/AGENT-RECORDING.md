@@ -21,7 +21,7 @@ Agents that drive a browser from inside (Claude in Chrome, Playwright or Puppete
 - Mouse events need no permission. Seeing the agent's typing needs Accessibility, which Autopilot also asks for. Without it, only clicks are marked.
 - Typing while macOS secure input is on (a password field) is saved as *Typed a password (hidden)*, with no text.
 - Text that looks like a key, token or card number is masked with `SecretScanner`, the same scanner that blurs secrets on screen.
-- An agent can't approve its own requests. A yes on Vision One's approval card only counts from the real keyboard, mouse or trackpad. A posted click on Allow just beeps. (`PersonInput` in `App/Sources/AgentRecording/AgentSession.swift`.)
+- An agent can't approve its own requests. A yes on the floating approval card or on the card in a task's thread only counts from the real keyboard, mouse or trackpad. A posted click on Allow just beeps. (`PersonInput` in `App/Sources/AgentRecording/AgentSession.swift`.)
 
 ## actions.json
 

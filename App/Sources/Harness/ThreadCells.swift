@@ -28,7 +28,7 @@ struct ThreadCellView: View {
         case let .receipt(jobID, agent, text):
             let job = model.snapshot.jobs.first { $0.id == jobID }
             let review = job?.state == .needsReview
-            ReceiptCell(agent: agent, text: text, canKeep: review,
+            ReceiptCell(agent: agent, from: job?.requestedBy, text: text, canKeep: review,
                         canUndo: review && !(job?.changes.isEmpty ?? true),
                         undone: job?.state == .undone,
                         keep: { model.settle(jobID, keep: true) },
@@ -225,6 +225,8 @@ struct StatusCell: View {
 /// Undo, solid once kept, faint once undone.
 struct ReceiptCell: View {
     let agent: AgentKind
+    /// The outside agent that asked for it over MCP, like "Claude Code".
+    var from: String? = nil
     let text: String
     let canKeep: Bool
     let canUndo: Bool
@@ -237,6 +239,9 @@ struct ReceiptCell: View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             HStack(spacing: Theme.Space.sm) {
                 Text(agent.title).textStyle(.label).foregroundStyle(Theme.textFaint)
+                if let from {
+                    Text("from \(from)").textStyle(.label).foregroundStyle(Theme.textMuted)
+                }
                 if undone {
                     Text("Undone").textStyle(.label).foregroundStyle(Theme.textMuted)
                 } else if !canKeep {

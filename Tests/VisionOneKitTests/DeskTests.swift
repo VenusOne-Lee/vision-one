@@ -155,6 +155,74 @@ final class DeskTests: XCTestCase {
         XCTAssertEqual(snap.tasks(in: snap.projects[0]).map(\.title), ["Driver onboarding v2"])
     }
 
+    // MARK: Project settings
+
+    func testProjectSettingsSaveThroughTheDesk() async throws {
+        let url = folder.appendingPathComponent("desk.json")
+        let desk = Desk(board: AgentJobBoard(), storeURL: url)
+        let project = await desk.newProject("New project")
+
+        var draft = project
+        draft.name = "  RankRide  "
+        draft.notes = "For drivers in Joburg. Say rand, not dollars.\n\n"
+        draft.presetName = "Builder"
+        draft.sources = [ScriptSourceRef(.github, "https://github.com/rankride/app.git"),
+                         ScriptSourceRef(.github, "RankRide/App"),
+                         ScriptSourceRef(.linear, "eng", enabled: false),
+                         ScriptSourceRef(.github, "not a repo")]
+        let settings = draft
+        await desk.updateProject(project.id) { $0.applySettings(settings) }
+
+        let saved = Desk(board: AgentJobBoard(), storeURL: url)
+        let loaded = await saved.project(project.id)
+        let reloaded = try XCTUnwrap(loaded)
+        XCTAssertEqual(reloaded.name, "RankRide")
+        XCTAssertEqual(reloaded.notes, "For drivers in Joburg. Say rand, not dollars.")
+        XCTAssertEqual(reloaded.presetName, "Builder")
+        XCTAssertEqual(reloaded.sources, [ScriptSourceRef(.github, "rankride/app"),
+                                          ScriptSourceRef(.linear, "ENG", enabled: false)])
+        XCTAssertEqual(reloaded.createdAt.timeIntervalSince1970, project.createdAt.timeIntervalSince1970, accuracy: 1)
+
+        var blank = reloaded
+        blank.name = "   "
+        blank.presetName = " "
+        var applied = reloaded
+        applied.applySettings(blank)
+        XCTAssertEqual(applied.name, "RankRide")
+        XCTAssertNil(applied.presetName)
+    }
+
+    func testSourceRefReadsWhatPeopleType() {
+        XCTAssertEqual(DeskProject.sourceRef(.github, from: "rankride/app")?.id, "rankride/app")
+        XCTAssertEqual(DeskProject.sourceRef(.github, from: " https://github.com/rankride/app/releases ")?.id, "rankride/app")
+        XCTAssertEqual(DeskProject.sourceRef(.github, from: "github.com/rankride/app.git")?.id, "rankride/app")
+        XCTAssertNil(DeskProject.sourceRef(.github, from: "rankride"))
+        XCTAssertNil(DeskProject.sourceRef(.github, from: "a/b/c"))
+        XCTAssertNil(DeskProject.sourceRef(.github, from: "rank ride/app"))
+        XCTAssertEqual(DeskProject.sourceRef(.linear, from: "eng")?.id, "ENG")
+        XCTAssertEqual(DeskProject.sourceRef(.linear, from: "https://linear.app/rankride/team/ENG/active")?.id, "ENG")
+        XCTAssertNil(DeskProject.sourceRef(.linear, from: "linear.app/rankride"))
+        XCTAssertNil(DeskProject.sourceRef(.linear, from: "Eng team"))
+        XCTAssertNil(DeskProject.sourceRef(.linear, from: ""))
+    }
+
+    func testOlderProjectsWithoutSettingsStillLoad() throws {
+        let id = UUID()
+        let json = #"{"id":"\#(id.uuidString)","name":"Weekly updates","createdAt":"2026-10-01T08:00:00Z"}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let project = try decoder.decode(DeskProject.self, from: Data(json.utf8))
+        XCTAssertEqual(project.id, id)
+        XCTAssertEqual(project.name, "Weekly updates")
+        XCTAssertEqual(project.notes, "")
+        XCTAssertEqual(project.sources, [])
+        XCTAssertNil(project.presetName)
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        XCTAssertEqual(try decoder.decode(DeskProject.self, from: encoder.encode(project)), project)
+    }
+
     func testScriptStepRepliesWithTheScript() async throws {
         let desk = await makeDesk()
         let board = await desk.board

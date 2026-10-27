@@ -73,6 +73,9 @@ public enum ShortcutMap {
     /// Loom's pause keys; ⇧⌘P is too many apps' command palette.
     public static let pauseRecording = ShortcutSpec("pauseRecording", "Pause or resume recording", menu: "Recording",
                                                     key: .character("p"), modifiers: [.option, .shift], isGlobal: true)
+    /// File › New, which in Vision One is a new task.
+    public static let newTask = ShortcutSpec("newTask", "New task", menu: "File",
+                                             key: .character("n"), modifiers: [.command])
     public static let library = ShortcutSpec("library", "Show Library", menu: "File",
                                              key: .character("l"), modifiers: [.command, .shift])
     public static let export = ShortcutSpec("export", "Export", menu: "File",
@@ -92,6 +95,10 @@ public enum ShortcutMap {
                                                key: .character("3"), modifiers: [.command])
     public static let focusVideo = ShortcutSpec("focusVideo", "Focus video", menu: "View",
                                                 key: .character("0"), modifiers: [.command])
+    public static let toggleSidebar = ShortcutSpec("toggleSidebar", "Show or hide sidebar", menu: "View",
+                                                   key: .character("b"), modifiers: [.command])
+    public static let togglePanel = ShortcutSpec("togglePanel", "Show or hide panel", menu: "View",
+                                                 key: .character("b"), modifiers: [.command, .option])
     public static let textBigger = ShortcutSpec("textBigger", "Bigger text", menu: "View",
                                                 key: .character("+"), modifiers: [.command])
     public static let textSmaller = ShortcutSpec("textSmaller", "Smaller text", menu: "View",
@@ -108,8 +115,8 @@ public enum ShortcutMap {
                                                key: .character("/"), modifiers: [.command])
 
     public static let all: [ShortcutSpec] = [
-        record, pauseRecording, library, export, undo, redo, find, cutWords,
-        showTakes, showTranscript, showSound, focusVideo, textBigger, textSmaller,
+        record, pauseRecording, newTask, library, export, undo, redo, find, cutWords,
+        showTakes, showTranscript, showSound, focusVideo, toggleSidebar, togglePanel, textBigger, textSmaller,
         playPause, back, pause, forward, stepBack, stepForward, acceptAll, shortcuts,
     ]
 
@@ -119,11 +126,13 @@ public enum ShortcutMap {
     public static func spec(_ id: String) -> ShortcutSpec? { all.first { $0.id == id } }
 
     /// Chords macOS gives every app; nothing here may take one over.
+    /// ⌘N isn't listed: it keeps its usual meaning, File › New, which
+    /// here makes a new task (`newTask`).
     static let reserved: Set<String> = [
         "command|character(\"q\")", "command|character(\"w\")", "command|character(\"h\")",
         "command|character(\"m\")", "command|character(\"c\")", "command|character(\"v\")",
         "command|character(\"x\")", "command|character(\"a\")", "command|character(\",\")",
-        "command|character(\"n\")", "command|character(\"o\")", "command|character(\"s\")",
+        "command|character(\"o\")", "command|character(\"s\")",
         "command|character(\"p\")", "command|character(\"`\")", "command|space",
     ]
 

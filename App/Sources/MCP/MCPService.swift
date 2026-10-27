@@ -176,6 +176,13 @@ struct AppMCPHost: VisionOneMCPHost {
         await AgentAskCenter.shared.dismiss(questionID)
     }
 
+    /// The floating card asks only when the task's card is out of view.
+    func showsCard(for question: MCPQuestion) async -> Bool {
+        guard let jobID = question.jobID else { return true }
+        let desk = await MainActor.run { AIServices.shared.desk }
+        return await ApprovalPlacement.panelAsks(jobID: jobID, desk: desk)
+    }
+
     func connected(_ client: MCPClient) async {
         await MCPService.shared.connected(client)
     }
@@ -221,6 +228,14 @@ struct AppMCPHost: VisionOneMCPHost {
 
     func share(_ file: URL, text: String?, to target: ShareTarget) async throws {
         await Self.share(file, text: text, to: target)
+    }
+
+    func demos() async -> [DemoFile] {
+        await MainActor.run { AutopilotService.shared.library.all() }
+    }
+
+    func rerecordDemo(_ name: String, release: String?, requestedBy: String) async -> UUID? {
+        await MainActor.run { AutopilotService.shared.rerecord(name: name, release: release, requestedBy: requestedBy) }
     }
 
     @MainActor

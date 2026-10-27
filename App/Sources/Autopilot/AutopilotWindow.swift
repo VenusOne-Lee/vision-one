@@ -192,7 +192,7 @@ struct AutopilotView: View {
         .frame(minWidth: 720, minHeight: 520)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 
     private var sidebar: some View {
@@ -363,7 +363,6 @@ final class AutopilotWindowController {
                                   backing: .buffered, defer: false)
             window.title = "Autopilot"
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.sharingType = .none
             window.setFrameAutosaveName("VisionOneAutopilot")
             window.contentViewController = NSHostingController(rootView: AutopilotView())
