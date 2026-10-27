@@ -40,6 +40,9 @@ struct VideoExporter {
     var keep: [Range<Double>]?
     let preset: ExportPreset
     var overlays: [ExportOverlay] = []
+    /// Set for a short clip: renders at the clip format's size, cut out
+    /// of the screen with `framing`, instead of following the preset.
+    var clip: (format: ClipFormat, framing: ClipFraming)?
 
     /// Exports and returns the file's URL and size. `progress` is called
     /// from a background queue with 0...1.
@@ -64,14 +67,23 @@ struct VideoExporter {
         let source = ExportSource(width: Int(naturalSize.width), height: Int(naturalSize.height), frameRate: Double(frameRate))
         var settings: ExportSettings
         do {
-            settings = try ExportPlanner.settings(for: preset, source: source, duration: timeline.duration)
+            if let clip {
+                settings = try ExportPlanner.settings(for: clip.format, sourceFrameRate: Double(frameRate), duration: timeline.duration)
+            } else {
+                settings = try ExportPlanner.settings(for: preset, source: source, duration: timeline.duration)
+            }
         } catch let error as ExportPlanError {
             throw Failure.plan(error)
+        }
+        let crop = clip.map { clip in
+            ClipFrame.rect(format: clip.format,
+                           sourceAspect: naturalSize.height > 0 ? Double(naturalSize.width / naturalSize.height) : 0,
+                           framing: clip.framing)
         }
 
         let url = outputURL ?? take.exportURL(for: preset)
         var bytes = try await render(timeline: timeline, sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     settings: settings, to: url, progress: progress)
+                                     settings: settings, crop: crop, to: url, progress: progress)
 
         // A single-pass encoder only roughly meets its average bitrate.
         // If a size-limited export overshoots, go again a little lower.
@@ -79,7 +91,7 @@ struct VideoExporter {
             let scale = Double(limit) * 0.85 / Double(bytes)
             settings.videoBitRate = Int(Double(settings.videoBitRate) * scale)
             bytes = try await render(timeline: timeline, sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     settings: settings, to: url, progress: progress)
+                                     settings: settings, crop: crop, to: url, progress: progress)
         }
         return (url, bytes)
     }
@@ -87,7 +99,7 @@ struct VideoExporter {
     // MARK: - Composition
 
     private func render(timeline: ExportTimeline, sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
-                        settings: ExportSettings, to url: URL,
+                        settings: ExportSettings, crop: NormalizedRect?, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
@@ -117,13 +129,22 @@ struct VideoExporter {
         }
 
         let duration = Self.time(timeline.duration)
+        let cropAt: (@Sendable (Double) -> NormalizedRect?)?
+        if let crop {
+            cropAt = { @Sendable _ in crop }
+        } else {
+            cropAt = nil
+        }
         let videoComposition = AVMutableVideoComposition()
         videoComposition.customVideoCompositorClass = FrameCompositor.self
         videoComposition.renderSize = CGSize(width: settings.width, height: settings.height)
         videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(settings.frameRate))
         videoComposition.instructions = [
             FrameInstruction(timeRange: CMTimeRange(start: .zero, duration: duration),
-                             trackID: video.trackID, overlays: overlays),
+                             trackID: video.trackID, overlays: overlays,
+                             crop: cropAt,
+                             // "Fit" clips sit on the canvas, ink on paper.
+                             background: crop == .full ? CIColor(red: 0xF4 / 255.0, green: 0xF4 / 255.0, blue: 0xF1 / 255.0) : .black),
         ]
 
         let audioMix = AVMutableAudioMix()

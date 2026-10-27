@@ -29,5 +29,5 @@ Exports sit in the take folder, named after the take: `Vision One 2026-10-27 at 
 ## Not yet
 
 - Camera bubble overlay (needs `camera.mov`)
-- Vertical and square formats with reframing (v0.2)
+- Vertical and square clips are in [CLIPS.md](CLIPS.md); full-length vertical exports come with the reframe planner
 - Captions file next to the video (captions thread)

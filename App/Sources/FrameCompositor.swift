@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import VisionOneKit
 
 /// One instruction for the whole export: which track is the screen and
 /// what to draw on top. AVVideoCompositionCoreAnimationTool would be
@@ -14,11 +15,20 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
 
     let trackID: CMPersistentTrackID
     let overlays: [ExportOverlay]
+    /// The part of the frame to show, normalized with origin top left, at
+    /// an output time. Clips use it to cut a 9:16 or 1:1 window out of
+    /// the wide screen. nil shows the whole frame.
+    let crop: (@Sendable (Double) -> NormalizedRect?)?
+    /// Fills the space around a frame that doesn't match the output shape.
+    let background: CIColor
 
-    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay]) {
+    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay],
+         crop: (@Sendable (Double) -> NormalizedRect?)? = nil, background: CIColor = .black) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
+        self.crop = crop
+        self.background = background
         requiredSourceTrackIDs = [NSNumber(value: trackID)]
     }
 }
@@ -49,22 +59,37 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         }
 
         let size = request.renderContext.size
-        let image = CIImage(cvPixelBuffer: source)
+        var image = CIImage(cvPixelBuffer: source)
+        if let rect = instruction.crop?(request.compositionTime.seconds) {
+            image = Self.crop(image, to: rect)
+        }
         let scale = min(size.width / image.extent.width, size.height / image.extent.height)
         let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        // Centre it; the shape matches in v0.1, so this only matters once
-        // reframing to 9:16 and 1:1 arrives.
+        // Centre it. A clip's window matches the output shape; "fit"
+        // clips show the whole screen on the background.
         let x = (size.width - scaled.extent.width) / 2
         let y = (size.height - scaled.extent.height) / 2
         let placed = scaled
             .transformed(by: CGAffineTransform(translationX: x, y: y))
-            .composited(over: CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: size)))
+            .composited(over: CIImage(color: instruction.background).cropped(to: CGRect(origin: .zero, size: size)))
         context.render(placed, to: output, bounds: CGRect(origin: .zero, size: size), colorSpace: colorSpace)
 
         if !instruction.overlays.isEmpty {
             draw(instruction.overlays, on: output, size: size, at: request.compositionTime.seconds)
         }
         request.finish(withComposedVideoFrame: output)
+    }
+
+    /// Cuts `rect` (normalized, origin top left) out of the image and
+    /// moves it to the origin. Core Image's origin is bottom left.
+    static func crop(_ image: CIImage, to rect: NormalizedRect) -> CIImage {
+        let e = image.extent
+        let r = CGRect(x: e.minX + rect.x * e.width,
+                       y: e.minY + (1 - rect.y - rect.height) * e.height,
+                       width: rect.width * e.width,
+                       height: rect.height * e.height)
+        guard r.width >= 2, r.height >= 2 else { return image }
+        return image.cropped(to: r).transformed(by: CGAffineTransform(translationX: -r.minX, y: -r.minY))
     }
 
     private func draw(_ overlays: [ExportOverlay], on buffer: CVPixelBuffer, size: CGSize, at time: Double) {
