@@ -135,8 +135,8 @@ final class MCPService: ObservableObject {
             let output = Pipe()
             process.standardOutput = output
             process.standardError = output
-            var ok = false
-            var said = ""
+            let ok: Bool
+            let said: String
             do {
                 try process.run()
                 process.waitUntilExit()
@@ -144,6 +144,7 @@ final class MCPService: ObservableObject {
                 ok = process.terminationStatus == 0
             } catch {
                 said = error.localizedDescription
+                ok = false
             }
             let alreadyThere = said.lowercased().contains("already exists")
             await MainActor.run {

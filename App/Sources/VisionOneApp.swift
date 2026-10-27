@@ -149,8 +149,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Claude Code, Codex and other agents connect through here.
         MCPService.shared.start()
         AgentWatcher.shared.start()
-        // Opened in the background by an agent: stay out of the way.
-        if CommandLine.arguments.contains(MCPService.backgroundFlag) { return }
+        // Opened in the background by an agent: stay out of the way, and
+        // get a Dock icon back once the person opens a real window.
+        if CommandLine.arguments.contains(MCPService.backgroundFlag) {
+            NSApp.setActivationPolicy(.accessory)
+            _ = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeMainNotification, object: nil,
+                                                   queue: .main) { _ in
+                MainActor.assumeIsolated {
+                    if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
+                }
+            }
+            return
+        }
         // First launch, or access was turned off: show only what's
         // missing, then New task once it's done. Otherwise open straight
         // on New task, ready to record or ask.
@@ -175,6 +185,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Clicking the Dock icon with no window open brings the main window
     /// back, on New task (closing it ends the open task).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // Opened in the background by an agent, now opened by the person.
+        if sender.activationPolicy() != .regular { sender.setActivationPolicy(.regular) }
         if !flag { EditorWindowController.shared.show() }
         return true
     }
