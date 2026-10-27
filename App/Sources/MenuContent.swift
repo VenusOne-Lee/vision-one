@@ -9,6 +9,7 @@ struct MenuContent: View {
     @ObservedObject private var exports = ExportController.shared
     @ObservedObject private var transcriber = Transcriber.shared
     @ObservedObject private var updater = Updater.shared
+    @ObservedObject private var devices = CaptureDevices.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
@@ -39,6 +40,15 @@ struct MenuContent: View {
 
             CapturePicker()
                 .disabled(recorder.phase.isLive || recorder.phase.isBusy)
+            SourcesRow(devices: devices)
+                .disabled(recorder.phase.isLive || recorder.phase.isBusy)
+
+            ForEach(recorder.trackNotes, id: \.self) { note in
+                Text(note)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if case let .failed(message) = recorder.phase {
                 ErrorAlert(message: message) { recorder.openSetup() }
