@@ -121,6 +121,17 @@ struct TranscriptTextView: NSViewRepresentable {
             model.toggleCut(words: range)
         }
 
+        /// The suggested cut over the word at `index`, if it's dashed.
+        func proposedCut(atCharacter index: Int) -> Cut? {
+            guard let word = word(atCharacter: index), word < model.wordSpans.count else { return nil }
+            let span = model.wordSpans[word]
+            return model.proposedCut(at: (span.start + span.end) / 2)
+        }
+
+        func decide(_ id: UUID, accept: Bool) {
+            model.decide(id, accept: accept)
+        }
+
         func clicked(character index: Int) {
             guard let word = word(atCharacter: index), word < model.wordSpans.count else { return }
             model.seek(toSource: model.wordSpans[word].start)
@@ -234,7 +245,8 @@ final class DashedLayoutManager: NSLayoutManager {
 }
 
 /// Keys: Delete cuts or restores the selection, Space plays, J K L
-/// shuttle, ⌘Z undoes. A plain click moves the playhead to the word.
+/// shuttle, ⌘Z undoes. A plain click moves the playhead to the word;
+/// right-clicking a dashed word cuts or keeps that suggestion.
 final class TranscriptNSTextView: NSTextView {
     weak var coordinator: TranscriptTextView.Coordinator?
 
@@ -276,6 +288,17 @@ final class TranscriptNSTextView: NSTextView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
+        if let index = characterIndex(at: event), let cut = coordinator?.proposedCut(atCharacter: index) {
+            let accept = NSMenuItem(title: "Cut these words", action: #selector(acceptSuggestion(_:)), keyEquivalent: "")
+            accept.representedObject = cut.id
+            accept.target = self
+            menu.addItem(accept)
+            let reject = NSMenuItem(title: "Keep these words", action: #selector(rejectSuggestion(_:)), keyEquivalent: "")
+            reject.representedObject = cut.id
+            reject.target = self
+            menu.addItem(reject)
+            menu.addItem(.separator())
+        }
         let item = NSMenuItem(title: "Cut from Video / Restore", action: #selector(cutFromMenu), keyEquivalent: "")
         item.target = self
         menu.addItem(item)
@@ -286,5 +309,25 @@ final class TranscriptNSTextView: NSTextView {
 
     @objc private func cutFromMenu() {
         coordinator?.cutSelection()
+    }
+
+    @objc private func acceptSuggestion(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        coordinator?.decide(id, accept: true)
+    }
+
+    @objc private func rejectSuggestion(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        coordinator?.decide(id, accept: false)
+    }
+
+    /// The character under the pointer, not the nearest insertion point,
+    /// so the right half of a word still counts as that word.
+    private func characterIndex(at event: NSEvent) -> Int? {
+        guard let layoutManager, let textContainer else { return nil }
+        let point = convert(event.locationInWindow, from: nil)
+        let inContainer = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+        return layoutManager.characterIndex(for: inContainer, in: textContainer,
+                                            fractionOfDistanceBetweenInsertionPoints: nil)
     }
 }

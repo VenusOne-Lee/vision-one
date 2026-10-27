@@ -25,6 +25,16 @@ extension CaptionBuilder {
     }
 }
 
+extension CaptionBuilder {
+    /// Cues for the video export renders: words placed on the frame-snapped
+    /// timeline, so captions stay on the frames where they're said however
+    /// many cuts there are, then moved later by `offset` (a brand intro's
+    /// length, for subtitle files).
+    public func cues(for transcript: Transcript, timeline: ExportTimeline, offset: Double = 0) -> [CaptionCue] {
+        cues(for: transcript) { source in timeline.outputTime(forSource: source).map { $0 + offset } }
+    }
+}
+
 extension Take {
     /// captions.srt or captions.vtt in the take folder.
     public func captionsURL(_ format: SubtitleFile.Format) -> URL {
@@ -58,12 +68,30 @@ extension Take {
         return settings.builder.cues(for: transcript, edits: edits)
     }
 
+    /// Captions for one export, timed on the timeline it rendered and
+    /// moved later by `offset` (the brand intro), from transcript.json.
+    public func captionCues(settings: CaptionSettings, timeline: ExportTimeline, offset: Double = 0) throws -> [CaptionCue] {
+        let transcript = try Transcript.read(from: transcriptURL)
+        return settings.builder.cues(for: transcript, timeline: timeline, offset: offset)
+    }
+
     /// Writes captions.srt and captions.vtt (with word timings) into
     /// `folder`, usually next to the exported video. Returns the files.
     @discardableResult
     public func writeCaptionFiles(settings: CaptionSettings, to folder: URL, name: String = "captions") throws -> [URL] {
-        let cues = try captionCues(settings: settings)
-        return try SubtitleFile.Format.allCases.map { format in
+        try Self.writeSubtitles(captionCues(settings: settings), to: folder, name: name)
+    }
+
+    /// Writes the .srt and .vtt for one export, timed to match the video
+    /// it made: the same timeline, moved later by the intro's length.
+    @discardableResult
+    public func writeCaptionFiles(settings: CaptionSettings, timeline: ExportTimeline, offset: Double = 0,
+                                  to folder: URL, name: String = "captions") throws -> [URL] {
+        try Self.writeSubtitles(captionCues(settings: settings, timeline: timeline, offset: offset), to: folder, name: name)
+    }
+
+    private static func writeSubtitles(_ cues: [CaptionCue], to folder: URL, name: String) throws -> [URL] {
+        try SubtitleFile.Format.allCases.map { format in
             try SubtitleFile.write(cues, format: format, to: folder, name: name, wordTimings: format == .vtt)
         }
     }

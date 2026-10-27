@@ -144,6 +144,29 @@ final class CaptionBuilderTests: XCTestCase {
         _ = proposed.add(Cut(span: TimeSpan(start: 0.5, end: 1.0), reason: Cut.Reason.filler, state: .proposed))
         XCTAssertEqual(CaptionBuilder(layout: .subtitle).cues(for: transcript, edits: proposed).map(\.text), ["Ship um, it."])
     }
+
+    func testFollowsTheSnappedExportTimelineAndIntro() {
+        let transcript = Transcript(
+            language: "en", engine: "test", audioTrack: "mic", duration: 4,
+            createdAt: Date(timeIntervalSince1970: 0),
+            segments: [TranscriptSegment(words: [
+                TranscriptWord(id: 0, text: "Ship", start: 0, end: 0.5),
+                TranscriptWord(id: 1, text: "um,", start: 0.55, end: 1.0),
+                TranscriptWord(id: 2, text: "it.", start: 1.01, end: 1.5),
+            ])]
+        )
+        // At 10 fps the edges snap to 0.5 and 1.0, so "it." lands at 0.51
+        // in the video, not the 0.54 the unsnapped spans would say.
+        let timeline = ExportTimeline(keep: [0..<0.54, 1.01..<4], sourceDuration: 4, frameRate: 10)
+        let cues = CaptionBuilder(layout: .subtitle).cues(for: transcript, timeline: timeline)
+        XCTAssertEqual(cues.map(\.text), ["Ship it."])
+        XCTAssertEqual(cues[0].words[1].start, 0.51, accuracy: 0.0001)
+
+        // A 2 s intro moves everything later in the subtitle files.
+        let shifted = CaptionBuilder(layout: .subtitle).cues(for: transcript, timeline: timeline, offset: 2)
+        XCTAssertEqual(shifted[0].start, cues[0].start + 2, accuracy: 0.0001)
+        XCTAssertEqual(shifted[0].words[1].start, 2.51, accuracy: 0.0001)
+    }
 }
 
 final class TakeCaptionsTests: XCTestCase {
@@ -168,6 +191,27 @@ final class TakeCaptionsTests: XCTestCase {
         let files = try take.writeCaptionFiles(settings: settings, to: folder)
         XCTAssertEqual(files.map(\.lastPathComponent), ["captions.srt", "captions.vtt"])
         XCTAssertTrue(try String(contentsOf: files[0], encoding: .utf8).contains("Hello there."))
+    }
+
+    func testWritesFilesTimedToAnExport() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let take = Take(folder: folder)
+        let transcript = Transcript(
+            language: "en", engine: "test", duration: 2,
+            segments: [TranscriptSegment(words: [
+                TranscriptWord(id: 0, text: "Hello", start: 0, end: 0.4),
+                TranscriptWord(id: 1, text: "there.", start: 0.4, end: 0.9),
+            ])]
+        )
+        try transcript.write(to: take.transcriptURL)
+
+        let timeline = ExportTimeline(keep: nil, sourceDuration: 2, frameRate: 30)
+        let files = try take.writeCaptionFiles(settings: CaptionSettings(style: .subtitle), timeline: timeline,
+                                               offset: 3, to: folder, name: "Take (WhatsApp)")
+        XCTAssertEqual(files.map(\.lastPathComponent), ["Take (WhatsApp).srt", "Take (WhatsApp).vtt"])
+        XCTAssertTrue(try String(contentsOf: files[0], encoding: .utf8).contains("00:00:03,000 --> "))
     }
 }
 

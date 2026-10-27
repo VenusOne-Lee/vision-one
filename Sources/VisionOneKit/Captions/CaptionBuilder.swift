@@ -3,8 +3,9 @@ import Foundation
 /// Turns transcript words into caption cues on the edited timeline.
 ///
 /// 1. Words the user cut are dropped and the rest are retimed with
-///    `outputTime`, the same source-to-output mapping export uses
-///    (EditList.outputTime(forSource:)), so captions always match the cut.
+///    `outputTime`: the editor passes EditList.outputTime(forSource:);
+///    export passes its frame-snapped ExportTimeline.outputTime(forSource:),
+///    so captions always match the cut that's rendered.
 /// 2. Words are grouped into cues, breaking at sentence ends, at pauses,
 ///    and when the lines are full.
 /// 3. Each cue is split into balanced lines and stretched to a readable

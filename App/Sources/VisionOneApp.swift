@@ -22,7 +22,7 @@ struct VisionOneApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let hotKey = GlobalHotKey()
+    private let hotKey = GlobalHotKey.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // ⌘⇧R from anywhere starts or stops recording.

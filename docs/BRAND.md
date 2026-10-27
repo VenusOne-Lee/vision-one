@@ -19,6 +19,8 @@ A missing field falls back to its default, so old files keep working.
 
 ## Templates
 
+> **Not yet.** `TemplateLook` and `template.json` are in VisionOneKit and the card renderer can take one, but nothing loads a template folder and there is no template picker. Export always uses the brand kit's own cards. Everything in this section is the plan.
+
 A template's look is a folder that HyperFrames tooling can read too:
 
 ```
@@ -55,6 +57,8 @@ If anything fails (load, snapshot, a blank result), the export uses `NativeCard`
 Export puts the cards around the edited video (`TemplatePlan`): a gap at the start of every track for the intro and one after the video for the outro, drawn by `FrameCompositor`. Captions and other overlays keep the edited video's clock.
 
 ## Formats and reframing
+
+> **Not yet.** `VideoFormat`, `ReframePlanner` and `ReframePlan` are in VisionOneKit with tests, but export and the editor don't use them: every export keeps the recording's shape. Everything in this section is the plan.
 
 `VideoFormat` is the shape (16:9, 9:16, 1:1, 4:5), separate from the preset, which decides size and bitrate. `ReframePlanner` turns what should stay in frame (cursor and clicks from `events.json`, faces later) into a `ReframePlan` per format:
 

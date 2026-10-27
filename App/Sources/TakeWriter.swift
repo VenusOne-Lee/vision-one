@@ -1,10 +1,13 @@
 import AVFoundation
 import ScreenCaptureKit
+import VisionOneKit
 
 /// Writes ScreenCaptureKit's sample buffers to screen.mov with one video
 /// track and separate system sound and mic tracks, each left out when
 /// switched off. The file is written in fragments every 2 seconds, so a
-/// crash loses seconds, not the take.
+/// crash loses seconds, not the take. Next to it, audio-tracks.json
+/// lists which source each audio track holds, so the transcriber picks
+/// the mic without guessing.
 ///
 /// Used only from the capture queue, so it needs no locking.
 final class TakeWriter: @unchecked Sendable {
@@ -48,11 +51,23 @@ final class TakeWriter: @unchecked Sendable {
             mic = nil
         }
 
-        for input in [video, systemAudio, mic].compactMap({ $0 }) where writer.canAdd(input) {
+        // Tracks are numbered in the order they are added, so the list
+        // below is in the same order as the audio tracks in the file.
+        let inputs: [(AVAssetWriterInput?, TakeAudioSource?)] = [(video, nil), (systemAudio, .system), (mic, .mic)]
+        var audioTracks: [TakeAudioSource] = []
+        for (input, source) in inputs {
+            guard let input, writer.canAdd(input) else { continue }
             writer.add(input)
+            if let source { audioTracks.append(source) }
         }
+        // The take still records without the list: the transcriber then
+        // tells the tracks apart by channel count (mic mono, system stereo).
+        let take = Take(folder: url.deletingLastPathComponent())
+        try? TakeAudioTracks(tracks: audioTracks).write(to: take.audioTracksURL)
     }
 
+    /// The mic is always mono and system sound always stereo; the
+    /// transcriber relies on this for takes without audio-tracks.json.
     private static func aac(channels: Int) -> [String: Any] {
         [
             AVFormatIDKey: kAudioFormatMPEG4AAC,

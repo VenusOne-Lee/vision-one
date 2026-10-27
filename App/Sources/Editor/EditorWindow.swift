@@ -12,8 +12,10 @@ struct EditorView: View {
     @ObservedObject var clips: ClipsModel
     @ObservedObject var thumbnail: ThumbnailModel
     @ObservedObject private var exports = ExportController.shared
-    let takes: [Take]
     let open: (Take) -> Void
+    /// Read again whenever the window comes forward or a take finishes,
+    /// so a new recording shows up in the sidebar.
+    @State private var takes: [Take] = TakeLibrary.standard.takes()
 
     @AppStorage("editor.showTakes") private var showTakes = true
     @AppStorage("editor.showTranscript") private var showTranscript = true
@@ -74,6 +76,15 @@ struct EditorView: View {
             await model.load()
             await clips.load()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            refreshTakes()
+        }
+        .onReceive(ScreenRecorder.shared.$lastTake) { _ in refreshTakes() }
+    }
+
+    private func refreshTakes() {
+        let latest = TakeLibrary.standard.takes()
+        if latest != takes { takes = latest }
     }
 
     // MARK: Toolbar (44 px)
@@ -92,6 +103,7 @@ struct EditorView: View {
                     .font(.system(size: 12, design: .monospaced).monospacedDigit())
                     .foregroundStyle(Theme.textMuted)
                     .help("Length of the take → length after your cuts")
+                if model.proposedCount > 0 { suggestions }
                 EditorExportStatus(exports: exports)
                 Button("Agents") { AgentsWindowController.shared.show(for: model.take) }
                     .buttonStyle(PillButtonStyle(kind: .secondary))
@@ -136,6 +148,29 @@ struct EditorView: View {
     }
 
     private var focusVideo: Bool { !showTakes && !showTranscript && !showSound }
+
+    /// Auto-clean's suggestions, in the toolbar so they stay in reach
+    /// with the transcript hidden. Dashed, like the cuts themselves,
+    /// until you decide.
+    private var suggestions: some View {
+        HStack(spacing: 6) {
+            Text("\(model.proposedCount) suggested \(model.proposedCount == 1 ? "cut" : "cuts")")
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundStyle(Theme.textMuted)
+                .lineLimit(1)
+            Button("Accept all") { model.acceptAllProposed() }
+                .buttonStyle(PillButtonStyle(kind: .secondary))
+            Button("Reject all") { model.rejectAllProposed() }
+                .buttonStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textMuted)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 4)
+        .padding(.vertical, 3)
+        .overlay(Capsule().strokeBorder(Theme.textMuted, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+        .help("Dashed until you decide. Right-click a dashed word or part of the timeline to cut or keep just that one.")
+    }
 
     // MARK: Stage
 
@@ -207,22 +242,6 @@ struct EditorView: View {
 
     private var transcriptPane: some View {
         VStack(spacing: 0) {
-            if model.proposedCount > 0 {
-                HStack(spacing: Theme.Space.sm) {
-                    Text("\(model.proposedCount) suggested \(model.proposedCount == 1 ? "cut" : "cuts"), dashed until you accept")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.textMuted)
-                    Spacer()
-                    Button("Accept all") { model.acceptAllProposed() }
-                        .buttonStyle(PillButtonStyle(kind: .secondary))
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(.clear).frame(height: 1)
-                        .overlay(Line().stroke(Theme.line, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
-                }
-            }
             switch model.transcriptState {
             case .loading:
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -237,7 +256,7 @@ struct EditorView: View {
             case .ready:
                 if model.words.isEmpty {
                     EditorNotice(title: "No words found",
-                                 message: "Nothing was said in this take, or the mic was off. You can still trim it on the timeline once trimming lands.",
+                                 message: "Nothing was said in this take, or the mic was off. You can still play it and export it as it is.",
                                  isError: false)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -246,15 +265,6 @@ struct EditorView: View {
             }
         }
         .background(Theme.paper)
-    }
-}
-
-private struct Line: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        return path
     }
 }
 
@@ -387,16 +397,11 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     private var model: EditorModel?
     private var clips: ClipsModel?
 
-    /// Opens the newest take, or says there is nothing to edit yet.
+    /// Opens the newest take. With none, there's nothing to open: the
+    /// menu only offers Review once a take exists.
     func openLatest() {
-        if let take = TakeLibrary.standard.takes().first {
-            open(take)
-        } else {
-            let alert = NSAlert()
-            alert.messageText = "No recordings yet"
-            alert.informativeText = "Record something with ⌘⇧R, then open the editor to cut it."
-            alert.runModal()
-        }
+        guard let take = TakeLibrary.standard.takes().first else { return }
+        open(take)
     }
 
     func open(_ take: Take) {
@@ -407,8 +412,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         let thumbnail = ThumbnailModel(take: take, editor: model, clips: clips)
         self.model = model
         self.clips = clips
-        let view = EditorView(model: model, clips: clips, thumbnail: thumbnail,
-                              takes: TakeLibrary.standard.takes()) { [weak self] next in
+        let view = EditorView(model: model, clips: clips, thumbnail: thumbnail) { [weak self] next in
             self?.open(next)
         }
         if window == nil {

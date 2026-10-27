@@ -23,6 +23,8 @@ struct VideoExporter {
         case reader(Error?)
         case writer(Error?)
         case blurs(Error)
+        /// Still over the preset's size limit after every retry.
+        case tooBig(limit: Int64)
 
         var errorDescription: String? {
             switch self {
@@ -31,6 +33,7 @@ struct VideoExporter {
             case let .reader(error): return "Couldn't read the recording. \(error?.localizedDescription ?? "")"
             case let .writer(error): return "Couldn't write the video. \(error?.localizedDescription ?? "")"
             case let .blurs(error): return "Couldn't read this take's blurs, so it wasn't exported. Open it in the editor to check them. \(error.localizedDescription)"
+            case let .tooBig(limit): return ExportPhase.stillTooBig(limitBytes: limit)
             }
         }
     }
@@ -44,6 +47,11 @@ struct VideoExporter {
     var keep: [Range<Double>]?
     let preset: ExportPreset
     var overlays: [ExportOverlay] = []
+    /// Burn in the take's captions (captions.json, when on and set to burn
+    /// in) with keywords in this 0xRRGGBB colour; nil leaves them out.
+    /// They're built here, from the frame-snapped timeline this export
+    /// renders, so they stay on the frames where the words are said.
+    var captionRingHex: UInt32?
     /// Brand intro and outro around the edited video; nil for none.
     var cards: CardMaker?
     /// Draw the take's zooms (zooms.json) and blurs (blurs.json).
@@ -54,9 +62,22 @@ struct VideoExporter {
     /// Colour of the ring around the camera bubble (the builder's ring).
     var ring: RingColour = .black
 
-    /// Exports and returns the file's URL and size. `progress` is called
-    /// from a background queue with 0...1.
-    func run(to outputURL: URL? = nil, progress: @escaping @Sendable (Double) -> Void) async throws -> (URL, Int64) {
+    /// What a finished export made, and what's needed to line other files
+    /// (subtitles) up with it.
+    struct Output {
+        let url: URL
+        let bytes: Int64
+        /// The kept spans as rendered, edges snapped to frames.
+        let timeline: ExportTimeline
+        /// Seconds into the file where the edited video starts: the brand
+        /// intro's length, or 0 without one.
+        let videoStart: Double
+    }
+
+    /// Exports and returns the file and how it was laid out. `progress` is
+    /// called from a background queue with 0...1, and only goes forward,
+    /// even when a size-limited export has to go again.
+    func run(to outputURL: URL? = nil, progress: @escaping @Sendable (Double) -> Void) async throws -> Output {
         let asset = AVURLAsset(url: take.screenURL)
         guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else { throw Failure.noVideo }
         let sourceAudio = try await asset.loadTracks(withMediaType: .audio)
@@ -65,13 +86,15 @@ struct VideoExporter {
         let frameRate = try await sourceVideo.load(.nominalFrameRate)
 
         // Without explicit spans, export what the editor kept (edits.json;
-        // no file means no cuts).
+        // no file means no cuts). The recording's own length always wins:
+        // an older edits.json can store a shorter one (the mic's length),
+        // which would trim the end of the video.
         let timeline: ExportTimeline
         if let keep {
             timeline = ExportTimeline(keep: keep, sourceDuration: assetDuration.seconds, frameRate: Double(frameRate))
         } else {
             var edits = try EditList.load(from: take.editsURL, sourceDuration: assetDuration.seconds)
-            edits.sourceDuration = min(edits.sourceDuration, assetDuration.seconds)
+            edits.sourceDuration = assetDuration.seconds
             timeline = ExportTimeline(edits: edits, frameRate: Double(frameRate))
         }
         let plan = cards?.plan(bodyDuration: timeline.duration)
@@ -104,21 +127,36 @@ struct VideoExporter {
         }
 
         let effects = try appliesEffects ? Self.effects(for: take, timeline: timeline) : nil
+        let captions = captionRingHex.map { CaptionExport.overlays(for: take, timeline: timeline, ringHex: $0) } ?? []
+        let allOverlays = captions + overlays
         let url = outputURL ?? take.exportURL(for: preset)
-        var bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
-                                     sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     effects: effects, settings: settings, crop: crop, to: url, progress: progress)
 
-        // A single-pass encoder only roughly meets its average bitrate.
-        // If a size-limited export overshoots, go again a little lower.
-        if let limit = preset.sizeLimitBytes, bytes > limit {
-            let scale = Double(limit) * 0.85 / Double(bytes)
-            settings.videoBitRate = Int(Double(settings.videoBitRate) * scale)
+        // A single-pass encoder only roughly meets its average bitrate. If
+        // a size-limited export overshoots, go again lower, up to
+        // `sizeLimitAttempts` tries, each filling its own slice of the ring.
+        let attempts = preset.sizeLimitBytes == nil ? 1 : ExportPlanner.sizeLimitAttempts
+        var attempt = 0
+        var bytes: Int64 = 0
+        while true {
+            let slice = attempt
             bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
                                      sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     effects: effects, settings: settings, crop: crop, to: url, progress: progress)
+                                     overlays: allOverlays, effects: effects, settings: settings, crop: crop, to: url) { fraction in
+                progress(ExportPlanner.overallProgress(fraction, attempt: slice, of: attempts))
+            }
+            guard let limit = preset.sizeLimitBytes, bytes > limit else { break }
+            attempt += 1
+            guard attempt < attempts else {
+                // Too big to send isn't a WhatsApp export; don't leave it.
+                try? FileManager.default.removeItem(at: url)
+                throw Failure.tooBig(limit: limit)
+            }
+            try Task.checkCancellation()
+            settings.videoBitRate = ExportPlanner.retryVideoBitRate(after: settings, bytes: bytes, limit: limit,
+                                                                    duration: plan.duration, attempt: attempt)
         }
-        return (url, bytes)
+        let videoStart = cardSet.intro != nil ? plan.body.lowerBound : 0
+        return Output(url: url, bytes: bytes, timeline: timeline, videoStart: videoStart)
     }
 
     // MARK: - Composition
@@ -156,7 +194,8 @@ struct VideoExporter {
 
     private func render(timeline: ExportTimeline, plan: TemplatePlan, cards: BrandCardSet,
                         sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
-                        effects: FrameEffects?, settings: ExportSettings, crop: NormalisedRect?, to url: URL,
+                        overlays: [ExportOverlay], effects: FrameEffects?, settings: ExportSettings,
+                        crop: NormalisedRect?, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {

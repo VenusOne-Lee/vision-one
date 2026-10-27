@@ -1,8 +1,14 @@
 import Carbon.HIToolbox
+import Combine
 
 /// Registers ⌘⇧R as a system-wide shortcut with the Carbon hot key API,
-/// which needs no Accessibility permission.
-final class GlobalHotKey {
+/// which needs no Accessibility permission. `isRegistered` says whether
+/// it took, so the panel can say when another app already owns ⌘⇧R.
+final class GlobalHotKey: ObservableObject {
+    static let shared = GlobalHotKey()
+
+    @Published private(set) var isRegistered = false
+
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private var action: (() -> Void)?
@@ -23,7 +29,11 @@ final class GlobalHotKey {
         }, 1, &eventType, selfPointer, &handlerRef)
 
         let id = EventHotKeyID(signature: OSType(0x5649_4F4E), id: 1) // "VION"
-        RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(), 0, &hotKeyRef)
+        // Exclusive, so it fails (instead of silently never firing) when
+        // another app already holds the same keys.
+        let status = RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(),
+                                         OptionBits(kEventHotKeyExclusive), &hotKeyRef)
+        isRegistered = status == noErr && hotKeyRef != nil
     }
 
     deinit {

@@ -99,3 +99,80 @@ final class TranscriptionPhaseTests: XCTestCase {
         XCTAssertFalse(TranscriptionPhase.failed(takeName: "x", message: "m").isWorking)
     }
 }
+
+final class TakeAudioTracksTests: XCTestCase {
+    func testUsesTheRecordedListWhenItMatches() {
+        let recorded = TakeAudioTracks(tracks: [.mic])
+        XCTAssertEqual(TakeAudioTracks.sources(recorded: recorded, channelCounts: [2]), [.mic])
+        XCTAssertEqual(TakeAudioTracks.sources(recorded: TakeAudioTracks(tracks: [.system, .mic]),
+                                               channelCounts: [2, 1]), [.system, .mic])
+    }
+
+    func testFallsBackToChannelCount() {
+        // A mic-only take from before audio-tracks.json: one mono track.
+        XCTAssertEqual(TakeAudioTracks.sources(recorded: nil, channelCounts: [1]), [.mic])
+        XCTAssertEqual(TakeAudioTracks.sources(recorded: nil, channelCounts: [2]), [.system])
+        XCTAssertEqual(TakeAudioTracks.sources(recorded: nil, channelCounts: [2, 1]), [.system, .mic])
+        // The list says two tracks, but only one made it into the file.
+        XCTAssertEqual(TakeAudioTracks.sources(recorded: TakeAudioTracks(tracks: [.system, .mic]),
+                                               channelCounts: [2]), [.system])
+        XCTAssertEqual(TakeAudioTracks.sources(recorded: nil, channelCounts: []), [])
+    }
+
+    func testPrefersSystemOnlyWhenTheMicIsNearlyEmpty() {
+        XCTAssertTrue(TakeAudioTracks.prefersSystem(micSeconds: 0.2, systemSeconds: 30))
+        XCTAssertFalse(TakeAudioTracks.prefersSystem(micSeconds: 0.2, systemSeconds: 0.1))
+        XCTAssertFalse(TakeAudioTracks.prefersSystem(micSeconds: 5, systemSeconds: 30))
+    }
+
+    func testRoundTrips() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let tracks = TakeAudioTracks(tracks: [.system, .mic])
+        try tracks.write(to: url)
+        XCTAssertEqual(try TakeAudioTracks.read(from: url), tracks)
+    }
+
+    func testTimelineCountsOnlyDecodedSamples() {
+        var t = SampleTimeline(sampleRate: 10)
+        t.append([1, 1], at: 5.0)
+        XCTAssertEqual(t.samples.count, 52)
+        XCTAssertEqual(t.decodedCount, 2)
+        XCTAssertEqual(t.decodedDuration, 0.2, accuracy: 0.0001)
+    }
+}
+
+final class TranscriptionFailuresTests: XCTestCase {
+    func testKeepsEachTakesFailure() {
+        var failures = TranscriptionFailures()
+        XCTAssertNil(failures.latest)
+        failures.record("A failed", for: "A")
+        failures.record("B failed", for: "B")
+        XCTAssertEqual(failures["A"], "A failed")
+        XCTAssertEqual(failures.latest?.takeName, "B")
+
+        failures.record("A again", for: "A")
+        XCTAssertEqual(failures.latest?.takeName, "A")
+        XCTAssertEqual(failures.latest?.message, "A again")
+
+        failures.clear("A")
+        XCTAssertEqual(failures.latest?.takeName, "B")
+        failures.clear("B")
+        XCTAssertTrue(failures.isEmpty)
+    }
+
+    func testErrorTextReadsTheUnderlyingChain() {
+        let offline = NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)
+        XCTAssertEqual(TranscriptionErrorText.message(forUnderlying: offline), TranscriptionErrorText.offline)
+        let wrapped = NSError(domain: "Wrapper", code: 1, userInfo: [NSUnderlyingErrorKey: offline])
+        XCTAssertEqual(TranscriptionErrorText.message(forUnderlying: wrapped), TranscriptionErrorText.offline)
+        let full = NSError(domain: NSCocoaErrorDomain, code: CocoaError.Code.fileWriteOutOfSpace.rawValue)
+        XCTAssertEqual(TranscriptionErrorText.message(forUnderlying: full), TranscriptionErrorText.outOfSpace)
+        XCTAssertNil(TranscriptionErrorText.message(forUnderlying: NSError(domain: "HTTP", code: 500)))
+    }
+
+    func testTranscriptErrorsSayHowToFix() {
+        XCTAssertTrue(TranscriptError.newerVersion(2).localizedDescription.contains("Update Vision One"))
+        XCTAssertTrue(TranscriptError.badTiming(1).localizedDescription.contains("Try again"))
+    }
+}

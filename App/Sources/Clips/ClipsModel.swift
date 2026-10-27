@@ -254,13 +254,13 @@ final class ClipsModel: ObservableObject {
         exporter.clip = (clip.format, ClipFrame.resolved(clip, events: events))
         exports[id] = .exporting(0)
         do {
-            let (url, bytes) = try await exporter.run(to: take.clipURL(for: clip)) { progress in
+            let output = try await exporter.run(to: take.clipURL(for: clip)) { progress in
                 Task { @MainActor in
                     guard case .exporting = self.exports[id] else { return }
                     self.exports[id] = .exporting(progress)
                 }
             }
-            exports[id] = .done(url, bytes)
+            exports[id] = .done(output.url, output.bytes)
         } catch is CancellationError {
             exports[id] = nil
         } catch {

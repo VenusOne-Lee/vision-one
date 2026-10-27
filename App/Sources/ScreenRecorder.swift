@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import ScreenCaptureKit
 import VisionOneKit
 
@@ -68,7 +69,17 @@ final class ScreenRecorder: NSObject, ObservableObject {
             SetupWindowController.shared.show()
             return
         }
+        // Ask for the mic the first time it's wanted, so the first take
+        // isn't silently voiceless.
+        if choice.includeMicrophone, access.checklist.state(of: .microphone) == .notAsked {
+            _ = await AVCaptureDevice.requestAccess(for: .audio)
+            access.refresh()
+        }
         let withMicrophone = choice.includeMicrophone && access.checklist.state(of: .microphone) == .granted
+        var notes: [String] = []
+        if choice.includeMicrophone, !withMicrophone {
+            notes.append("Recording without your voice. Turn on Microphone in Access.")
+        }
         let withSystemSound = choice.includeSystemSound
 
         do {
@@ -121,9 +132,12 @@ final class ScreenRecorder: NSObject, ObservableObject {
             // The camera starts first, so it's ready when the screen's
             // first frame arrives and camera.json can line the two up.
             let cameraNote = CameraBubble.shared.startRecording(for: take, captureFrame: target.captureFrame)
-            cursor.start()
             try await stream.startCapture()
-            trackNotes = await deviceTracks.start(for: take, devices: .shared)
+            // Only once capture is running, so a failed start doesn't
+            // leave the global mouse monitor behind.
+            cursor.start()
+            let deviceNotes = await deviceTracks.start(for: take, devices: .shared)
+            trackNotes = notes + deviceNotes
             if let cameraNote { trackNotes.append(cameraNote) }
 
             self.stream = stream
@@ -190,6 +204,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
             lastTake = take
             Transcriber.shared.transcribe(take)
             phase = .idle
+            // Straight to review. The editor waits for the transcript.
+            EditorWindowController.shared.open(take)
         } else {
             phase = .failed(message: sink.writerError?.localizedDescription
                 ?? "Nothing was recorded. Try again, and check Screen Recording access.")
