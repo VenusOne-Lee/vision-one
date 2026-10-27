@@ -12,7 +12,17 @@ let package = Package(
         .library(name: "VisionOneKit", targets: ["VisionOneKit"]),
     ],
     targets: [
-        .target(name: "VisionOneKit"),
+        .target(
+            name: "VisionOneKit",
+            // The share page viewers open (SharePageBundle fills it in), and
+            // the Worker and database schema Vision One sets up on the
+            // creator's own Cloudflare account.
+            resources: [
+                .copy("Share/Page/share-page.html"),
+                .copy("Share/Page/Cloudflare/worker.js"),
+                .copy("Share/Page/Cloudflare/schema.sql"),
+            ]
+        ),
         .testTarget(name: "VisionOneKitTests", dependencies: ["VisionOneKit"]),
     ],
     swiftLanguageModes: [.v5]

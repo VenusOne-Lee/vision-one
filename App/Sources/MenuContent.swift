@@ -18,6 +18,8 @@ struct MenuContent: View {
     @AppStorage("panel.recordOpen") private var recordOpen = true
     @AppStorage("panel.sourcesOpen") private var sourcesOpen = true
     @AppStorage("panel.takeOpen") private var takeOpen = true
+    @AppStorage("panel.tasksOpen") private var tasksOpen = true
+    @ObservedObject private var desk = DeskFeed.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -64,6 +66,7 @@ struct MenuContent: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !recorder.phase.isLive {
+                    PanelAskBox(feed: desk)
                     FooterLink("Before you record…", action: MenuPanel.closing { EditorWindowController.shared.showLibrary() })
                 }
             }
@@ -71,7 +74,13 @@ struct MenuContent: View {
             .padding(.top, 4)
             .padding(.bottom, 14)
 
-            if let take = recorder.lastTake, !recorder.phase.isLive {
+            // Tasks from the Desk, the ones waiting on you first. Until the
+            // first task exists, the last take stands in.
+            if desk.hasTasks, !recorder.phase.isLive {
+                PanelSection(title: "Tasks", summary: desk.summary, isOpen: $tasksOpen) {
+                    PanelTasksList(feed: desk)
+                }
+            } else if let take = recorder.lastTake, !recorder.phase.isLive {
                 PanelSection(title: "Last take", summary: take.shortLabel(), isOpen: $takeOpen) {
                     LastTakeCard(take: take, exports: exports, transcriber: transcriber,
                                  isBusy: recorder.phase.isBusy)

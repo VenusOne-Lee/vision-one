@@ -2,10 +2,9 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
-// The Codex-style harness from the signed-off spec: projects and tasks on
-// the left, the task's thread in the middle, and a component panel on
-// the right that drags, hides or goes full screen. These are its parts;
-// Agents.swift has the task rows, steps, cards and dividers.
+// Shared parts of the Codex-style harness from the signed-off spec. The
+// harness itself (HarnessView, its Composer, PanelHost and TaskRow) is in
+// App/Sources/Harness; Agents.swift has rings, steps, cards and dividers.
 
 // MARK: Sidebar
 
@@ -198,8 +197,7 @@ struct StatusLine: View {
 }
 
 /// A message typed while an agent is still working: a dashed chip above
-/// the composer, because it hasn't been sent yet. ↑ in an empty composer
-/// edits it (Composer's `onEditQueued`).
+/// the composer, because it hasn't been sent yet.
 struct QueuedInput: View {
     let text: String
     var onCancel: () -> Void
@@ -303,7 +301,7 @@ struct ApprovalChoices: View {
     }
 }
 
-// MARK: Composer
+// MARK: Slash commands
 
 /// A job the agents can do, typed after "/".
 struct SlashCommand: Identifiable, Hashable {
@@ -330,8 +328,8 @@ struct SlashCommand: Identifiable, Hashable {
     }
 }
 
-/// The popup above the composer while you type "/": command and meaning,
-/// arrows move, Return picks, Esc closes.
+/// A popup of slash commands: command and meaning, with the highlighted
+/// row at `selection`. The caller moves it with the arrows.
 struct SlashMenu: View {
     let commands: [SlashCommand]
     let selection: Int
@@ -367,226 +365,5 @@ struct SlashMenu: View {
         .background(RoundedRectangle(cornerRadius: Theme.Radius.md).fill(Theme.paper))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.line))
         .floatShadow()
-    }
-}
-
-/// How agents act on an ask: straight away, or with a plan you approve.
-enum AskMode: String, CaseIterable {
-    case justDoIt, planFirst
-
-    var title: String { self == .justDoIt ? "Just do it" : "Plan first" }
-}
-
-/// One box to ask the agents for anything. Rounded 14, a mode pill, "@"
-/// for a take, "/" for the slash menu, Return sends, and the record
-/// button beside Send. Chips (attached takes, the AI in use) sit above
-/// the text.
-///
-///     Composer(text: $ask, mode: $mode, onSend: send) { RecordButton(size: .extraSmall) { record() } }
-struct Composer<Trailing: View>: View {
-    @Binding var text: String
-    @Binding var mode: AskMode
-    var placeholder = "Ask for anything, / for jobs, @ for a take"
-    var chips: [String] = []
-    var commands: [SlashCommand] = SlashCommand.standard
-    let onSend: () -> Void
-    var onMention: (() -> Void)?
-    /// ↑ in an empty composer, to edit a QueuedInput.
-    var onEditQueued: (() -> Void)?
-    let trailing: Trailing
-    @FocusState private var focused: Bool
-    @State private var slashIndex = 0
-
-    init(text: Binding<String>, mode: Binding<AskMode>,
-         placeholder: String = "Ask for anything, / for jobs, @ for a take",
-         chips: [String] = [], commands: [SlashCommand] = SlashCommand.standard,
-         onSend: @escaping () -> Void, onMention: (() -> Void)? = nil, onEditQueued: (() -> Void)? = nil,
-         @ViewBuilder trailing: () -> Trailing = { EmptyView() }) {
-        self._text = text
-        self._mode = mode
-        self.placeholder = placeholder
-        self.chips = chips
-        self.commands = commands
-        self.onSend = onSend
-        self.onMention = onMention
-        self.onEditQueued = onEditQueued
-        self.trailing = trailing()
-    }
-
-    private var canSend: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
-    /// "/cl" shows the menu filtered to "cl"; a space closes it.
-    private var slashQuery: String? {
-        guard text.hasPrefix("/"), !text.contains(" ") else { return nil }
-        return String(text.dropFirst())
-    }
-
-    private var matches: [SlashCommand] {
-        slashQuery.map { SlashCommand.matching($0, in: commands) } ?? []
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            if !chips.isEmpty {
-                HStack(spacing: Theme.Space.xs) {
-                    ForEach(chips, id: \.self) { Tag($0) }
-                }
-            }
-            TextField(placeholder, text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .textStyle(.body)
-                .lineLimit(1...6)
-                .focused($focused)
-                .onSubmit(submit)
-                .onChange(of: text) { _, new in
-                    slashIndex = 0
-                    if new.hasSuffix("@"), let onMention { onMention() }
-                }
-                .onKeyPress(.downArrow) { moveSlash(1) }
-                .onKeyPress(.upArrow) {
-                    if text.isEmpty, let onEditQueued {
-                        onEditQueued()
-                        return .handled
-                    }
-                    return moveSlash(-1)
-                }
-                .onKeyPress(.escape) {
-                    guard slashQuery != nil else { return .ignored }
-                    text = ""
-                    return .handled
-                }
-                .accessibilityLabel("Ask the agents")
-            HStack(spacing: Theme.Space.sm) {
-                Menu {
-                    ForEach(AskMode.allCases, id: \.self) { m in
-                        Button(m.title) { mode = m }
-                    }
-                } label: {
-                    Text(mode.title).textStyle(.caption).fontWeight(.medium)
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .fixedSize()
-                .foregroundStyle(Theme.textMuted)
-                .help("Just do it acts straight away. Plan first shows a plan to approve.")
-                if let onMention {
-                    Button("@", action: onMention)
-                        .buttonStyle(PillButtonStyle(kind: .quiet, size: .small))
-                        .help("Point at a take, clip or moment")
-                }
-                Spacer(minLength: 0)
-                trailing
-                Button(action: submit) {
-                    Image(systemName: "arrow.up").font(.system(size: 12, weight: .bold))
-                }
-                .buttonStyle(PillButtonStyle(kind: .primary, size: .small))
-                .disabled(!canSend)
-                .accessibilityLabel("Send")
-            }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.composer).fill(Theme.paper))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.composer)
-            .strokeBorder(focused ? Theme.selection : Theme.lineStrong,
-                          lineWidth: focused ? Theme.Stroke.focus : Theme.Stroke.hairline))
-        .overlay(alignment: .topLeading) {
-            if slashQuery != nil {
-                SlashMenu(commands: matches, selection: slashIndex) { pick($0) }
-                    .alignmentGuide(.top) { $0[.bottom] + Theme.Space.xs }
-                    .transition(.opacity)
-            }
-        }
-    }
-
-    private func moveSlash(_ by: Int) -> KeyPress.Result {
-        guard slashQuery != nil, !matches.isEmpty else { return .ignored }
-        slashIndex = (slashIndex + by + matches.count) % matches.count
-        return .handled
-    }
-
-    private func pick(_ command: SlashCommand) {
-        text = "/\(command.name) "
-        focused = true
-    }
-
-    private func submit() {
-        if slashQuery != nil, matches.indices.contains(slashIndex) {
-            pick(matches[slashIndex])
-            return
-        }
-        if canSend { onSend() }
-    }
-}
-
-// MARK: Panels
-
-/// The right-hand component panel's tabs.
-enum PanelTab: String, CaseIterable, Identifiable {
-    case video, changes, clips, sound, post
-
-    var id: String { rawValue }
-    var title: String { rawValue.capitalized }
-}
-
-/// The component panel: ptabs along the top (Video · Changes · Clips ·
-/// Sound · Post), ⤢ for full mode and a button to hide it. Put it beside
-/// the thread with a ResizableDivider so it drags; Settings › Appearance
-/// › Panel side says which side.
-///
-///     PanelHost(selection: $tab, isFull: $full, onHide: { shown = false }) { tab in … }
-struct PanelHost<Content: View>: View {
-    var tabs: [PanelTab] = PanelTab.allCases
-    @Binding var selection: PanelTab
-    @Binding var isFull: Bool
-    var onHide: (() -> Void)?
-    let content: (PanelTab) -> Content
-
-    init(tabs: [PanelTab] = PanelTab.allCases, selection: Binding<PanelTab>, isFull: Binding<Bool>,
-         onHide: (() -> Void)? = nil, @ViewBuilder content: @escaping (PanelTab) -> Content) {
-        self.tabs = tabs
-        self._selection = selection
-        self._isFull = isFull
-        self.onHide = onHide
-        self.content = content
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: Theme.Space.xs) {
-                SegmentedTabs(selection: $selection, options: tabs) { $0.title }
-                Spacer(minLength: Theme.Space.xs)
-                IconButton(isFull ? "Leave full mode" : "Full mode",
-                           systemImage: isFull ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
-                    withAnimation(Theme.Motion.reduced ? nil : Theme.Motion.move) { isFull.toggle() }
-                }
-                if let onHide {
-                    IconButton("Hide panel", systemImage: "sidebar.right", action: onHide)
-                }
-            }
-            .padding(.horizontal, Theme.Space.sm)
-            .frame(height: Theme.Size.toolbar)
-            Rectangle().fill(Theme.line).frame(height: 1)
-            content(selection)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .background(Theme.paper)
-    }
-}
-
-/// The harness modes, switched in the title bar.
-enum HarnessMode: String, CaseIterable, Identifiable {
-    case tasks, editor, sound
-
-    var id: String { rawValue }
-    var title: String { rawValue.capitalized }
-}
-
-/// Tasks / Editor / Sound in the title bar. ⌘1 to ⌘3 follow ShortcutMap.
-struct TitleModeSwitch: View {
-    @Binding var selection: HarnessMode
-
-    var body: some View {
-        SegmentedTabs(selection: $selection, options: HarnessMode.allCases) { $0.title }
-            .accessibilityLabel("Mode")
     }
 }

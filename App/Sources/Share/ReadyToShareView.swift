@@ -234,9 +234,11 @@ final class ReadyToShareWindowController: NSObject, NSWindowDelegate {
 
     /// What ScreenRecorder.stop() calls once the take is saved.
     func afterStop(_ take: Take) {
+        // The take's task, with the Post panel in front, or straight
+        // into the editor.
         switch AfterStop.current {
-        case .ready: open(take)
-        case .editor: EditorWindowController.shared.open(take)
+        case .ready: EditorWindowController.shared.open(take, panel: .post)
+        case .editor: EditorWindowController.shared.edit(take)
         }
     }
 

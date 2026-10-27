@@ -123,16 +123,26 @@ public actor AgentJobBoard {
     /// Parks the request on the job and waits for the user's answer. With
     /// `alsoAsk`, that approver (the floating panel) asks too, and
     /// whichever answers first wins.
-    func requestApproval(jobID: UUID, request: OutboundRequest,
+    public func requestApproval(jobID: UUID, request: OutboundRequest,
                          alsoAsk: (any OutboundApprover)? = nil) async -> OutboundDecision {
+        var ask: (@Sendable () async -> OutboundDecision)?
+        if let alsoAsk { ask = { await alsoAsk.approve(request) } }
+        return await requestApproval(jobID: jobID, approval: AgentJob.Approval(request), alsoAsk: ask)
+    }
+
+    /// The same, for anything shown as an approval: an MCP agent asking
+    /// to record or share. `alsoAsk` is another place to answer (the
+    /// floating card); whichever answers first wins.
+    public func requestApproval(jobID: UUID, approval: AgentJob.Approval,
+                                alsoAsk: (@Sendable () async -> OutboundDecision)? = nil) async -> OutboundDecision {
         guard let job = job(jobID), job.state.isActive else { return .deny }
         let before = job.state
-        update(jobID) { $0.state = .needsApproval; $0.approval = AgentJob.Approval(request) }
+        update(jobID) { $0.state = .needsApproval; $0.approval = approval }
         let decision = await withCheckedContinuation { continuation in
             waiting[jobID] = continuation
             if let alsoAsk {
                 Task {
-                    let answer = await alsoAsk.approve(request)
+                    let answer = await alsoAsk()
                     self.resolveApproval(jobID: jobID, decision: answer)
                 }
             }
@@ -179,12 +189,13 @@ public actor AgentJobBoard {
         let cuts = job.changes.compactMap { if case let .cut(id) = $0 { return id } else { return nil } }
         let clips = job.changes.compactMap { if case let .clip(id) = $0 { return id } else { return nil } }
         let fm = FileManager.default
-        if !cuts.isEmpty, fm.fileExists(atPath: take.editsURL.path) {
-            var list = try EditList.read(from: take.editsURL)
+        let editsURL = job.editsFile.map { take.folder.appendingPathComponent($0) } ?? take.editsURL
+        if !cuts.isEmpty, fm.fileExists(atPath: editsURL.path) {
+            var list = try EditList.read(from: editsURL)
             for id in cuts {
                 if keep { list.setState(.accepted, for: id) } else { list.remove(id: id) }
             }
-            try list.write(to: take.editsURL)
+            try list.write(to: editsURL)
         }
         if !clips.isEmpty, fm.fileExists(atPath: take.clipsURL.path) {
             var list = try ClipList.read(from: take.clipsURL)

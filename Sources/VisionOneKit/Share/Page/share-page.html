@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="generator" content="Vision One">
+<title>Video</title>
+<!--
+  Vision One share page. SharePageBundle puts the page's data in the
+  script tag below. Everything runs in the viewer's browser: no fonts,
+  trackers or cookies from anywhere else. Light only, like Vision One.
+  The ask code mirrors VideoAnswerer.swift; keep the two in step.
+-->
+<style>
+:root{
+  --f-sans:"Bricolage Grotesque",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-serif:"Source Serif 4",ui-serif,Georgia,"Times New Roman",serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --s-bg:#F4F4F1;--s-card:#FFFFFF;--s-line:#E2E1DC;--s-ink:#121212;--s-muted:#5C5B57;
+  --s-accent:#121212;--s-on:#FFFFFF;--s-soft:#E4E8FA;--s-ring:#1F3FBF;--s-body:var(--f-serif);--s-r:12px;
+  --focus:#1F3FBF;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--s-bg);color:var(--s-ink);font:15px/1.5 var(--f-sans);-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+[hidden]{display:none!important}
+.wrap{max-width:1180px;margin:0 auto;padding:20px max(16px,env(safe-area-inset-left)) 40px max(16px,env(safe-area-inset-right));display:flex;flex-direction:column;gap:14px}
+.head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.who{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.ring{width:12px;height:12px;border-radius:50%;border:3px solid var(--s-ring);flex:none}
+h1{margin:0;font-size:clamp(1.25rem,2.6vw,1.7rem);line-height:1.15;letter-spacing:-.02em;font-weight:750;text-wrap:balance}
+.by{font-size:13px;color:var(--s-muted)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 16px;border-radius:999px;border:0;background:var(--s-accent);color:var(--s-on);font-weight:600;font-size:14px;text-decoration:none;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--s-ink);box-shadow:inset 0 0 0 1px var(--s-line)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+.place-below .grid,.place-hidden .grid{grid-template-columns:minmax(0,1fr)}
+.place-hidden .side{display:none}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--s-card);border-radius:var(--s-r);box-shadow:0 0 0 1px var(--s-line);overflow:hidden;min-width:0}
+video{display:block;width:100%;max-width:100%;aspect-ratio:16/9;background:#000;object-fit:contain}
+.bar{display:flex;align-items:center;gap:10px;padding:8px 12px;flex-wrap:wrap}
+.track{position:relative;flex:1;min-width:160px;height:24px}
+.track .base{position:absolute;left:0;right:0;top:10px;height:4px;border-radius:4px;background:var(--s-line)}
+.track .fill{position:absolute;left:0;top:10px;height:4px;border-radius:4px;background:var(--s-accent);width:0;opacity:.35}
+.track .mark{position:absolute;top:-2px;font-size:12px;transform:translateX(-50%);pointer-events:none}
+.track .ch{position:absolute;top:8px;width:2px;height:8px;background:var(--s-card)}
+.track input{position:absolute;inset:0;width:100%;margin:0;opacity:0;cursor:pointer}
+.tc{font:12px var(--f-mono);font-variant-numeric:tabular-nums;color:var(--s-muted)}
+.chapters{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px 10px}
+.chip{border:0;border-radius:999px;padding:3px 11px;font-size:13px;background:transparent;box-shadow:inset 0 0 0 1px var(--s-line)}
+.chip.on{background:var(--s-ink);color:var(--s-card);box-shadow:none}
+.react{display:flex;align-items:center;gap:6px;padding:8px 12px;border-top:1px solid var(--s-line);flex-wrap:wrap}
+.react button{border:0;background:var(--s-bg);border-radius:999px;width:38px;height:34px;font-size:18px}
+.react .said{margin-left:auto;font-size:13px;color:var(--s-muted)}
+.desc{padding:12px 14px;border-top:1px solid var(--s-line);font-size:14px;color:var(--s-muted);white-space:pre-wrap}
+.side{display:flex;flex-direction:column;max-height:calc(100vh - 120px);position:sticky;top:14px}
+.place-below .side{max-height:none;position:static}
+.tabs{display:flex;gap:4px;padding:8px;border-bottom:1px solid var(--s-line)}
+.tabs button{border:0;background:transparent;border-radius:999px;padding:4px 12px;font-weight:600;font-size:13px;color:var(--s-muted)}
+.tabs button[aria-selected=true]{background:var(--s-bg);color:var(--s-ink)}
+.lines{overflow:auto;padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-height:120px;flex:1}
+.ln{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:6px;border-radius:8px}
+.ln:hover{background:var(--s-bg)}
+.ln.now{background:var(--s-soft)}
+.ln .t{font:12px var(--f-mono);font-variant-numeric:tabular-nums;color:var(--s-muted);border:0;background:none;padding:0;text-align:left}
+.ln .w{font-family:var(--s-body);font-size:15.5px;line-height:1.6;cursor:pointer}
+.ln .w mark{background:var(--s-soft);color:inherit;border-radius:3px;box-shadow:inset 0 -1.5px var(--s-accent)}
+.ln .note{border:0;background:none;font-size:12px;color:var(--s-muted);opacity:0;padding:0 4px}
+.ln:hover .note,.ln:focus-within .note{opacity:1}
+@media (hover:none){.ln .note{opacity:1}}
+.mine{grid-column:2/4;font-size:13px;background:var(--s-bg);border-radius:8px;padding:6px 8px}
+.ask{border-top:1px solid var(--s-line);padding:10px;display:flex;flex-direction:column;gap:8px}
+.askrow{display:flex;gap:6px;align-items:center;background:var(--s-bg);border-radius:999px;padding:4px 4px 4px 14px}
+.askrow input{border:0;background:transparent;flex:1;min-width:0;font-size:14px;outline:none}
+.askrow:focus-within{box-shadow:0 0 0 2px var(--focus)}
+.answer{background:var(--s-bg);border-radius:10px;padding:10px;font-size:14px;display:flex;flex-direction:column;gap:6px}
+.answer .q{font-weight:650}
+.answer button{border:0;background:none;padding:0;text-align:left;display:flex;gap:8px;align-items:baseline;font-family:var(--s-body);font-size:14.5px}
+.answer button .t{font:12px var(--f-mono);color:var(--s-muted);text-decoration:underline;text-underline-offset:2px;flex:none}
+.small{font-size:12px;color:var(--s-muted)}
+.compose{border-top:1px solid var(--s-line);padding:10px;display:flex;flex-direction:column;gap:6px}
+.compose textarea,.compose input{border:0;border-radius:10px;background:var(--s-bg);padding:8px 10px;font-size:14px;width:100%}
+.compose textarea{min-height:64px;resize:vertical}
+.compose .row{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.foot{font-size:12px;color:var(--s-muted);display:flex;gap:12px;flex-wrap:wrap}
+.foot a{color:inherit}
+.toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--s-ink);color:var(--s-card);padding:8px 14px;border-radius:999px;font-size:14px}
+.float{position:absolute;font-size:28px;pointer-events:none;animation:up 1.6s ease-out forwards}
+@keyframes up{from{transform:translateY(0);opacity:1}to{transform:translateY(-120px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.float{display:none}}
+</style>
+</head>
+<body>
+<script type="application/json" id="page-data">__VISION_ONE_PAGE_DATA__</script>
+<div class="wrap" id="app">
+  <header class="head">
+    <div class="who"><span class="ring" aria-hidden="true"></span><div style="min-width:0"><h1 id="title"></h1><div class="by" id="by"></div></div></div>
+    <div class="actions"><button class="btn ghost" type="button" id="copy">Copy link</button><a class="btn" id="cta" hidden target="_blank" rel="noopener"></a></div>
+  </header>
+  <div class="grid">
+    <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+      <div class="card" style="position:relative" id="player">
+        <video id="video" controls playsinline preload="metadata"></video>
+        <div class="bar">
+          <span class="small">Moments</span><div class="track" id="track"><div class="base"></div><div class="fill" id="fill"></div><div id="marks"></div><input id="seek" type="range" min="0" step="0.1" value="0" aria-label="Jump to a moment"></div>
+          <span class="tc" id="tc">0:00</span>
+        </div>
+        <div class="chapters" id="chapters" hidden></div>
+        <div class="react" id="react" hidden>
+          <button type="button" data-e="👍" aria-label="React with thumbs up">👍</button>
+          <button type="button" data-e="🔥" aria-label="React with fire">🔥</button>
+          <button type="button" data-e="😂" aria-label="React with laughter">😂</button>
+          <button type="button" data-e="🤔" aria-label="React with thinking">🤔</button>
+          <button type="button" data-e="👏" aria-label="React with applause">👏</button>
+          <span class="said" id="said">React at this moment</span>
+        </div>
+        <div class="desc" id="desc" hidden></div>
+      </div>
+      <div class="foot"><span id="privacy"></span><span>Made with <a href="https://github.com/VenusOne-Lee/vision-one" target="_blank" rel="noopener">Vision One</a></span></div>
+    </div>
+    <aside class="card side" id="side" aria-label="Transcript">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="true" data-tab="lines">Transcript</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="mine" id="minetab" hidden>Your notes</button>
+      </div>
+      <div class="lines" id="lines" role="tabpanel"></div>
+      <div class="compose" id="compose" hidden>
+        <div class="small" id="about"></div>
+        <textarea id="noteText" aria-label="Your note" placeholder="What should change here?" maxlength="1000"></textarea>
+        <input id="noteName" type="text" aria-label="Your name (optional)" placeholder="Your name (optional)" maxlength="60">
+        <div class="row"><button class="btn ghost" type="button" id="cancel">Cancel</button><button class="btn" type="button" id="send">Send note</button></div>
+      </div>
+      <div class="ask" id="ask" hidden>
+        <form class="askrow" id="askForm"><input id="askIn" type="text" placeholder="Ask this video a question" aria-label="Ask this video a question" maxlength="200"><button class="btn" type="submit">Ask</button></form>
+        <div id="answer" aria-live="polite"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var page;
+  try { page = JSON.parse(document.getElementById("page-data").textContent); } catch (e) { page = null; }
+  if (!page || !page.lines) { document.getElementById("app").textContent = "This page couldn't load its video details."; return; }
+
+  var $ = function(id){ return document.getElementById(id); };
+  var api = page.api ? String(page.api).replace(/\/+$/, "") : null;
+  var f = page.features || {};
+  var lines = page.lines;
+  var duration = page.duration || 0;
+  var video = $("video");
+  var visit = (function(){ try { var v = sessionStorage.getItem("v1-visit"); if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem("v1-visit", v); } return v; } catch (e) { return Math.random().toString(36).slice(2); } })();
+
+  // Look
+  var root = document.documentElement;
+  Object.keys(page.theme || {}).forEach(function(k){ if (/^--s-[a-z]+$/.test(k)) root.style.setProperty(k, page.theme[k]); });
+  document.body.classList.add("place-" + (page.transcriptPlace || "beside"));
+  document.documentElement.lang = page.language || "en";
+
+  // Header
+  document.title = page.title;
+  $("title").textContent = page.title;
+  $("by").textContent = [page.author, clock(duration)].filter(Boolean).join(" · ");
+  if (page.description) { $("desc").hidden = false; $("desc").textContent = page.description; }
+  if (f.callToAction && page.callToAction && /^https?:\/\//.test(page.callToAction.url)) {
+    $("cta").hidden = false; $("cta").textContent = page.callToAction.label; $("cta").href = page.callToAction.url;
+  }
+  $("privacy").textContent = api
+    ? "No sign-in. Vision One counts how far people watch, without names or cookies. Notes go to " + (page.author || "the creator") + " only."
+    : "No sign-in, no tracking.";
+  $("copy").onclick = function(){
+    var url = location.href.split("#")[0];
+    (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function(){ toast("Link copied"); }, function(){ toast(url); });
+  };
+
+  // Video
+  video.src = page.video;
+  if (page.poster) video.poster = page.poster;
+  if (page.captions) { var tr = document.createElement("track"); tr.kind = "captions"; tr.src = page.captions; tr.srclang = page.language || "en"; tr.label = "Captions"; video.appendChild(tr); }
+  var seek = $("seek");
+  seek.max = duration;
+  seek.oninput = function(){ video.currentTime = +seek.value; };
+  video.addEventListener("loadedmetadata", function(){ if (!duration && isFinite(video.duration)) { duration = video.duration; seek.max = duration; marks(); } });
+
+  // Chapters
+  var chapters = page.chapters || [];
+  if (chapters.length) {
+    $("chapters").hidden = false;
+    chapters.forEach(function(c){ var b = el("button", "chip"); b.type = "button"; b.textContent = c.title + " " + clock(c.start); b.onclick = function(){ jump(c.start); }; $("chapters").appendChild(b); });
+  }
+
+  // Transcript
+  var lineEls = [];
+  var notesOn = !!(api && f.notes);
+  function renderLines(highlight){
+    var box = $("lines"); box.textContent = "";
+    lineEls = lines.map(function(l, i){
+      var row = el("div", "ln");
+      var t = el("button", "t"); t.type = "button"; t.textContent = clock(l.start); t.setAttribute("aria-label", "Play from " + clock(l.start)); t.onclick = function(){ jump(l.start); };
+      var w = el("span", "w"); w.onclick = function(){ jump(l.start); };
+      fillHighlighted(w, l.text, highlight);
+      row.appendChild(t); row.appendChild(w);
+      if (notesOn) { var n = el("button", "note"); n.type = "button"; n.textContent = "Note"; n.setAttribute("aria-label", "Leave a note on this line"); n.onclick = function(){ openNote(i); }; row.appendChild(n); }
+      else row.appendChild(el("span"));
+      box.appendChild(row);
+      return row;
+    });
+    syncLine(true);
+  }
+  function fillHighlighted(node, text, terms){
+    if (!terms || !terms.length) { node.textContent = text; return; }
+    text.split(/(\s+)/).forEach(function(part){
+      var key = stem(part.toLowerCase().replace(/[^a-z0-9]/g, ""));
+      if (key && terms.indexOf(key) >= 0) { var m = el("mark"); m.textContent = part; node.appendChild(m); }
+      else node.appendChild(document.createTextNode(part));
+    });
+  }
+  var current = -1;
+  function syncLine(force){
+    var t = video.currentTime || 0, idx = -1;
+    for (var i = 0; i < lines.length; i++) if (lines[i].start <= t + 0.05) idx = i;
+    if (idx === current && !force) return;
+    if (lineEls[current]) lineEls[current].classList.remove("now");
+    current = idx;
+    if (lineEls[idx]) { lineEls[idx].classList.add("now"); if (!force && !video.paused) lineEls[idx].scrollIntoView({block: "nearest", behavior: "smooth"}); }
+    var chips = $("chapters").children, ci = -1;
+    for (var c = 0; c < chapters.length; c++) if (chapters[c].start <= t) ci = c;
+    for (var k = 0; k < chips.length; k++) chips[k].classList.toggle("on", k === ci);
+  }
+  video.addEventListener("timeupdate", function(){
+    var t = video.currentTime;
+    seek.value = t; $("fill").style.width = (duration ? t / duration * 100 : 0) + "%";
+    $("tc").textContent = clock(t) + " / " + clock(duration);
+    syncLine(false); progress(t);
+  });
+  function jump(t){ video.currentTime = t; video.play().catch(function(){}); }
+
+  // Ask the video: the same steps as VideoAnswerer.swift.
+  var STOP = "a an the is are was were it its to of in on for and or do does did how what when where who why which can could i you your my me this that be with at by from much many there about will would should have has tell please say said video".split(" ");
+  var RELATED = {cost:["cost","price","rand","free","pay","fee"],price:["price","cost","rand","free","fee"],pay:["pay","paid","price","rand"],paid:["paid","pay"],expensive:["price","cost","rand","free"],cheap:["price","cost","rand","free"],where:["live","available","in"],available:["available","live"],when:["when","today","now","next","soon"],start:["start","open","sign","download","try"],download:["download","install","free"],help:["help","support","contact"]};
+  function words(s){ return s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean); }
+  function stem(w){ if (w.length > 5 && /ing$/.test(w)) return w.slice(0, -3); if (w.length > 3 && /s$/.test(w) && !/ss$/.test(w)) return w.slice(0, -1); return w; }
+  function terms(q){ var out = []; words(q).forEach(function(w){ if (STOP.indexOf(w) >= 0) return; (RELATED[w] || [w]).map(stem).forEach(function(t){ if (out.indexOf(t) < 0) out.push(t); }); }); return out; }
+  var lineWords = lines.map(function(l){ var s = {}; words(l.text).map(stem).forEach(function(w){ s[w] = 1; }); return s; });
+  function answer(q, limit){
+    var ts = terms(q); if (!ts.length) return {terms: ts, hits: []};
+    var weight = {}; ts.forEach(function(t){ var n = lineWords.filter(function(s){ return s[t]; }).length; weight[t] = n ? Math.log((lines.length + 1) / n) + 1 : 0; });
+    var hits = lines.map(function(l, i){ return {i: i, s: ts.reduce(function(a, t){ return a + (lineWords[i][t] ? weight[t] : 0); }, 0)}; })
+      .filter(function(x){ return x.s > 0; }).sort(function(a, b){ return b.s - a.s || a.i - b.i; }).slice(0, limit || 2);
+    return {terms: ts, hits: hits};
+  }
+  if (f.ask !== false && lines.length) {
+    $("ask").hidden = false;
+    $("askForm").onsubmit = function(e){
+      e.preventDefault();
+      var q = $("askIn").value.trim(); if (!q) return;
+      var r = answer(q), box = $("answer"); box.textContent = "";
+      var a = el("div", "answer"), qq = el("span", "q"); qq.textContent = q; a.appendChild(qq);
+      if (!r.hits.length) {
+        var none = el("span"); none.textContent = "The video doesn't say." + (notesOn ? " Leave " + (page.author || "the creator") + " a note to ask." : ""); a.appendChild(none);
+      } else {
+        r.hits.forEach(function(h){ var l = lines[h.i], b = el("button"); b.type = "button"; var t = el("span", "t"); t.textContent = clock(l.start); var w = el("span"); w.textContent = "“" + l.text + "”"; b.appendChild(t); b.appendChild(w); b.onclick = function(){ jump(l.start); }; a.appendChild(b); });
+        var s = el("small", "small"); s.textContent = "Quoted from the video. Tap a time to watch that part."; a.appendChild(s);
+      }
+      box.appendChild(a);
+      renderLines(r.terms);
+      send({kind: "question", text: q.slice(0, 200)});
+    };
+  }
+
+  // Tabs
+  var mine = [];
+  document.querySelector(".tabs").onclick = function(e){
+    var b = e.target.closest("button"); if (!b) return;
+    document.querySelectorAll(".tabs button").forEach(function(x){ x.setAttribute("aria-selected", String(x === b)); });
+    if (b.dataset.tab === "mine") { var box = $("lines"); box.textContent = ""; mine.forEach(function(n){ var r = el("div", "ln"), t = el("span", "t"), w = el("span", "w"); t.textContent = clock(n.at); w.textContent = n.text; r.appendChild(t); r.appendChild(w); box.appendChild(r); }); }
+    else renderLines();
+  };
+
+  // Notes
+  var noteLine = null;
+  function openNote(i){ noteLine = i; $("compose").hidden = false; $("about").textContent = "Note at " + clock(lines[i].start) + " on “" + lines[i].text + "”. Only " + (page.author || "the creator") + " sees it."; $("noteText").focus(); }
+  $("cancel").onclick = function(){ $("compose").hidden = true; $("noteText").value = ""; };
+  $("send").onclick = function(){
+    var text = $("noteText").value.trim(); if (!text || noteLine === null) return;
+    var l = lines[noteLine], note = {name: $("noteName").value.trim() || null, text: text, at: l.start, quote: l.text};
+    $("send").disabled = true;
+    post("/notes", {page: page.slug, note: note}).then(function(){
+      mine.push(note); $("minetab").hidden = false; $("compose").hidden = true; $("noteText").value = ""; toast("Sent to " + (page.author || "the creator"));
+    }, function(){ toast("Couldn't send. Check your connection and try again."); }).then(function(){ $("send").disabled = false; });
+  };
+
+  // Reactions
+  var reactions = [];
+  if (api && f.react) {
+    $("react").hidden = false;
+    $("react").onclick = function(e){
+      var b = e.target.closest("[data-e]"); if (!b) return;
+      var at = Math.round((video.currentTime || 0) * 10) / 10;
+      reactions.push({at: at, emoji: b.dataset.e}); marks();
+      send({kind: "reaction", at: at, emoji: b.dataset.e});
+      $("said").textContent = b.dataset.e + " at " + clock(at);
+      var fl = el("span", "float"); fl.textContent = b.dataset.e; fl.style.left = (10 + Math.random() * 30) + "%"; fl.style.bottom = "90px"; $("player").appendChild(fl); setTimeout(function(){ fl.remove(); }, 1700);
+    };
+    fetch(api + "/reactions?page=" + encodeURIComponent(page.slug)).then(function(r){ return r.ok ? r.json() : {reactions: []}; }).then(function(d){ reactions = reactions.concat((d.reactions || []).slice(0, 300)); marks(); }).catch(function(){});
+  }
+  function marks(){
+    var m = $("marks"); m.textContent = ""; if (!duration) return;
+    chapters.slice(1).forEach(function(c){ var s = el("span", "ch"); s.style.left = (c.start / duration * 100) + "%"; m.appendChild(s); });
+    reactions.forEach(function(r){ if (typeof r.at !== "number" || typeof r.emoji !== "string") return; var s = el("span", "mark"); s.textContent = r.emoji.slice(0, 4); s.style.left = Math.min(100, r.at / duration * 100) + "%"; m.appendChild(s); });
+  }
+
+  // Watch progress, so the creator can see where people stop. No names.
+  var queue = [], lastPing = -1, sentView = false;
+  function send(ev){ if (!api) return; ev.visit = visit; ev.time = new Date().toISOString(); queue.push(ev); if (queue.length >= 10) flush(); }
+  function flush(beacon){
+    if (!api || !queue.length) return;
+    var body = JSON.stringify({page: page.slug, events: queue.splice(0)});
+    if (beacon && navigator.sendBeacon) { navigator.sendBeacon(api + "/events", new Blob([body], {type: "text/plain"})); return; }
+    fetch(api + "/events", {method: "POST", headers: {"Content-Type": "text/plain"}, body: body, keepalive: true}).catch(function(){});
+  }
+  function progress(t){ var b = Math.floor(t / 5); if (b > lastPing) { lastPing = b; send({kind: "progress", at: b * 5}); } }
+  video.addEventListener("play", function(){ if (!sentView) { sentView = true; send({kind: "view"}); flush(); } });
+  video.addEventListener("ended", function(){ send({kind: "finish", at: duration}); flush(); });
+  setInterval(function(){ flush(); }, 15000);
+  addEventListener("pagehide", function(){ flush(true); });
+  document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "hidden") flush(true); });
+
+  function post(path, data){ return fetch(api + path, {method: "POST", headers: {"Content-Type": "text/plain"}, body: JSON.stringify(data)}).then(function(r){ if (!r.ok) throw new Error(r.status); return r; }); }
+  function el(tag, cls){ var n = document.createElement(tag); if (cls) n.className = cls; return n; }
+  function clock(s){ s = Math.max(0, Math.floor(s || 0)); var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); }
+  var tt; function toast(msg){ var t = $("toast") || document.body.appendChild(Object.assign(el("div", "toast"), {id: "toast"})); t.setAttribute("role", "status"); t.textContent = msg; t.hidden = false; clearTimeout(tt); tt = setTimeout(function(){ t.hidden = true; }, 2200); }
+
+  renderLines(); marks();
+})();
+</script>
+</body>
+</html>

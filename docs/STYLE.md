@@ -36,7 +36,14 @@ On Home, saved templates sit after **Just record**. Picking one sets `ai.nextPur
 
 ## Links
 
-YouTube, TikTok, Instagram, X, LinkedIn, Vimeo and Facebook only allow watching, so Vision One never downloads from them (no yt-dlp). `StyleSource` sorts what was pasted: a file or a direct `.mp4`/`.mov` link is read straight away; a video site or other page is meant to play in a Vision One window and be read as it plays. That part is not built yet, so for now the window asks for the file instead.
+YouTube, TikTok, Instagram, X, LinkedIn, Vimeo and Facebook only allow watching, so Vision One never downloads from them (no yt-dlp). `StyleSource` sorts what was pasted: a file or a direct `.mp4`/`.mov` link is read straight away; anything else is **watched as it plays**:
+
+1. The link opens in a Vision One window (`StyleWatcher`, a `WKWebView` that may play with sound). If the page needs a sign-in or a cookie click, do it there; it waits a minute and a half for a video.
+2. `StyleWatch.playScript` starts the biggest video on the page from the top, unmuted and not looping. `probeScript` reports its time, size and place on the page four times a second.
+3. ScreenCaptureKit captures only that window, cropped to the picture (bars from `object-fit: contain` left out), at 4 fps with 16 kHz mono sound. Frames are measured in memory and stamped with the video's own clock, and only while it plays, so buffering doesn't count as a long shot.
+4. It stops at the end, after 3 minutes, when a looping video starts over, or when you press **Stop and use what's read** or close the window.
+
+Needs Screen Recording access, which recording already asks for.
 
 ## AI
 
@@ -44,7 +51,6 @@ The scan needs no AI. `StyleNamer` asks the AI ladder (task `style.name`) for a 
 
 ## Still to do
 
-- Watch-it-play for links (web view + ScreenCaptureKit of that window)
 - Template picker in the editor reading `ai.nextTemplate`, and the Editor, zooms and music using `CopiedStyle`'s numbers
 - Font guess with Apple's on-device model once it reads images (macOS 27)
-- Check on a Mac: scan speed for a 3 minute video, SoundAnalysis labels on real music
+- Check on a Mac: scan speed for a 3 minute video, SoundAnalysis labels on real music, whether ScreenCaptureKit hears the web view's sound with a window filter (if not, links read without music and say so), the crop on YouTube and TikTok pages

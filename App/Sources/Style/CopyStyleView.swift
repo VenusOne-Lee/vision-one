@@ -100,7 +100,7 @@ struct CopyStyleView: View {
                 Text("Reading \(model.source?.label ?? "the video") on this Mac")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Button("Stop") { model.stop() }
+                Button(model.isWatching ? "Stop and use what's read" : "Stop") { model.stop() }
                     .buttonStyle(PillButtonStyle(kind: .secondary))
             }
             ProgressView(value: progress)
@@ -117,7 +117,9 @@ struct CopyStyleView: View {
                 .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg).strokeBorder(Theme.line))
             }
-            Text("Four frames a second for cuts and colour, one a second for faces and words. Sound is checked for speech and music by macOS.")
+            Text(model.isWatching
+                 ? "It plays in its own window; only the video's part is read, four times a second. Nothing is downloaded or saved."
+                 : "Four frames a second for cuts and colour, one a second for faces and words. Sound is checked for speech and music by macOS.")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)

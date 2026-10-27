@@ -6,7 +6,7 @@ import VisionOneKit
 /// each. Ink pills along the top pick the pane; the window remembers its
 /// size and the last pane.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case appearance, brand, ai, access
+    case appearance, brand, ai, agents, access
 
     var id: String { rawValue }
 
@@ -15,6 +15,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .appearance: return "Appearance"
         case .brand: return "Brand"
         case .ai: return "AI"
+        case .agents: return "Agents"
         case .access: return "Access"
         }
     }
@@ -58,6 +59,8 @@ struct SettingsView: View {
                     BrandSettingsView(store: BrandStore.shared)
                 case .ai:
                     AISettingsView()
+                case .agents:
+                    AgentsSettingsView(service: MCPService.shared)
                 case .access:
                     ScrollView {
                         SetupView(access: AccessCenter.shared)

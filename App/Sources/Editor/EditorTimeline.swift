@@ -19,6 +19,8 @@ struct EditorTimeline: View {
     var showWaveform = true
     var showEffects = true
     var showSound = true
+    /// The Cut tool: a stretch dragged across the picture is cut on release.
+    var cutsOnRelease = false
 
     @State private var position = ScrollPosition(edge: .leading)
     @State private var offset: CGFloat = 0
@@ -209,6 +211,8 @@ struct EditorTimeline: View {
                 if !scrubbing, abs(value.translation.width) < 3 {
                     model.selection = nil
                     model.seek(toSource: time(at: value.location.x, width: width))
+                } else if !scrubbing, cutsOnRelease, model.selection != nil {
+                    model.cutSelection()
                 }
                 anchor = nil
                 scrubbing = false

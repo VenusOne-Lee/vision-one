@@ -6,7 +6,8 @@ import VisionOneKit
 /// (the Library, and the editor once a take is open), plus a menu bar
 /// panel for quick recording, like Loom. The menu bar icon is the
 /// builder's ring: dashed when idle, filled while live.
-@main
+/// Started from main.swift, which runs the MCP bridge instead when the
+/// app is launched as `Vision One --mcp`.
 struct VisionOneApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ObservedObject private var recorder = ScreenRecorder.shared
@@ -44,6 +45,11 @@ struct AppCommands: Commands {
                 Task { await recorder.toggle() }
             }
             .disabled(recorder.phase.isBusy)
+            Button(recorder.isPaused ? "Resume Recording  \(ShortcutMap.pauseRecording.display)"
+                                     : "Pause Recording  \(ShortcutMap.pauseRecording.display)") {
+                recorder.togglePause()
+            }
+            .disabled(!recorder.phase.isLive)
             Button("Show Library") { EditorWindowController.shared.showLibrary() }
                 .keyboardShortcut(ShortcutMap.library)
             Button("Copy a Style…") { CopyStyleWindowController.shared.show() }
@@ -85,12 +91,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey.register {
             Task { @MainActor in await ScreenRecorder.shared.toggle() }
         }
+        // ⌥⇧P pauses and resumes while live.
+        hotKey.registerPause {
+            Task { @MainActor in ScreenRecorder.shared.togglePause() }
+        }
+        FrontmostApp.shared.start()
         // Release builds check for updates once a day (Sparkle).
         Updater.shared.start()
         CameraBubble.shared.start()
         RecordingBarController.shared.start()
         // Finish any transcript a quit left undone.
         Task { @MainActor in Transcriber.shared.catchUp(in: ScreenRecorder.shared.library) }
+        // Claude Code, Codex and other agents connect through here.
+        MCPService.shared.start()
+        // Opened in the background by an agent: stay out of the way.
+        if CommandLine.arguments.contains(MCPService.backgroundFlag) { return }
         // First launch, or access was turned off: show only what's
         // missing. Otherwise open on the Library.
         if !AccessCenter.shared.checklist.canRecord {

@@ -34,6 +34,18 @@ final class Transcriber: ObservableObject {
     private var queue: [Take] = []
     private var running = false
 
+    /// A few seconds said while holding Space in the editor, as text.
+    /// Uses the same on-device model as transcripts; loads it if needed.
+    func transcribeCommand(_ samples: [Float]) async throws -> String {
+        if !(await engine.isLoaded) { try await engine.load { _ in } }
+        // Parakeet needs a second or more; pad short asks with silence.
+        let padded = samples.count >= 16_000 ? samples : samples + Array(repeating: 0, count: 16_000 - samples.count + 1_600)
+        let pieces = try await engine.transcribe(padded)
+        return pieces.map(\.text).joined()
+            .replacingOccurrences(of: "▁", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     func transcribe(_ take: Take) {
         guard !queue.contains(take) else { return }
         queue.append(take)
@@ -95,6 +107,10 @@ final class Transcriber: ObservableObject {
             let loudness = LoudnessEnvelope.measure(samples: audio.samples, sampleRate: TakeAudio.sampleRate)
             // The editor draws the waveform and finds silence from these.
             try? loudness.write(to: take.levelsURL)
+            // Recorded from a script: keep the best attempt at each line
+            // first, so auto-clean's own retake guesses don't overlap.
+            try? ScriptRetakes.run(on: take, transcript: transcript,
+                                    sourceDuration: audio.videoDuration ?? transcript.duration)
             try? AutoClean.run(on: take, transcript: transcript, sourceDuration: audio.videoDuration,
                                loudness: loudness)
             activity = .idle

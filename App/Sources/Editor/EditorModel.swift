@@ -46,10 +46,25 @@ final class EditorModel: ObservableObject {
     @Published private(set) var videoSize: CGSize = .zero
     /// Mic loudness every 10 ms, for the waveform and finding silence.
     /// Nil until levels.json is read or measured.
-    @Published private(set) var levels: LoudnessEnvelope?
+    @Published private(set) var levels: LoudnessEnvelope? {
+        didSet { if levels != oldValue { voiceLoudness = levels?.integratedLoudness() } }
+    }
+    /// The mic's integrated loudness, for the sound full mode's meter.
+    @Published private(set) var voiceLoudness: Float?
     /// A stretch picked on the timeline, in seconds of the take. Delete
     /// cuts it.
     @Published var selection: TimeSpan?
+    /// What you said or drew while watching, newest last.
+    @Published var steerLog: [SteerEntry] = []
+    /// Something said while holding Space that Ask should handle.
+    @Published var pendingAsk: String?
+    /// A tool a spoken edit asked for ("blur this" picks the pen).
+    @Published var requestedTool: EditorTool?
+    /// Mute and solo while listening in the sound full mode. Only the
+    /// preview changes; exports always have every lane.
+    @Published var laneMix = LaneMix() {
+        didSet { if laneMix != oldValue { player.currentItem?.audioMix = previewAudioMix() } }
+    }
 
     /// Words in time order and their spans, cached from the transcript.
     private(set) var words: [TranscriptWord] = []
@@ -72,6 +87,11 @@ final class EditorModel: ObservableObject {
     /// The preview as last built, so zooms and blurs can be redrawn
     /// without rebuilding it.
     private var preview: (composition: AVComposition, trackID: CMPersistentTrackID, renderSize: CGSize)?
+    /// Which preview audio tracks belong to which lane, and the music and
+    /// effects volume ramps, so mute and solo can be applied live.
+    private var mixTracks: [MixLane: [CMPersistentTrackID]] = [:]
+    private var soundParameters: [AVMutableAudioMixInputParameters] = []
+    private var loadStarted = false
 
     init(take: Take) {
         self.take = take
@@ -79,6 +99,14 @@ final class EditorModel: ObservableObject {
     }
 
     // MARK: Loading
+
+    /// Loads once, however many views (the full editor, the side panel)
+    /// ask for it.
+    func loadIfNeeded() async {
+        guard !loadStarted else { return }
+        loadStarted = true
+        await load()
+    }
 
     func load() async {
         let asset = AVURLAsset(url: take.screenURL)
@@ -379,6 +407,7 @@ final class EditorModel: ObservableObject {
         let keep = sourceTime
         do {
             let composition = try await PreviewComposition.make(from: asset, keeping: edits.keptSpans)
+            let voiceTracks = composition.tracks(withMediaType: .audio).map(\.trackID)
             let timeline = ExportTimeline(keep: edits.keptSpans.map { $0.start..<$0.end },
                                           sourceDuration: edits.sourceDuration, frameRate: 0)
             let added = await SoundComposer.add(sound, timeline: timeline, words: wordSpans, to: composition)
@@ -396,11 +425,14 @@ final class EditorModel: ObservableObject {
             }
             let item = AVPlayerItem(asset: composition)
             item.videoComposition = previewVideoComposition()
-            if !added.parameters.isEmpty {
-                let mix = AVMutableAudioMix()
-                mix.inputParameters = added.parameters
-                item.audioMix = mix
-            }
+            let soundTracks = added.tracks.map(\.trackID)
+            mixTracks = [
+                .voice: voiceTracks,
+                .music: added.musicTrackID.map { [$0] } ?? [],
+                .effects: soundTracks.filter { $0 != added.musicTrackID },
+            ]
+            soundParameters = added.parameters
+            item.audioMix = previewAudioMix()
             soundProblem = added.problem
             player.replaceCurrentItem(with: item)
             seek(toSource: keep)
@@ -415,6 +447,28 @@ extension EditorModel {
     /// Redraws zooms and blurs on the current preview, keeping its place.
     func refreshEffects() {
         player.currentItem?.videoComposition = previewVideoComposition()
+    }
+
+    /// The music and effects ramps, with muted lanes silenced.
+    fileprivate func previewAudioMix() -> AVAudioMix? {
+        func silent(_ id: CMPersistentTrackID) -> AVMutableAudioMixInputParameters {
+            let parameters = AVMutableAudioMixInputParameters()
+            parameters.trackID = id
+            parameters.setVolume(0, at: .zero)
+            return parameters
+        }
+        var inputs: [AVAudioMixInputParameters] = []
+        for parameters in soundParameters {
+            let lane: MixLane = (mixTracks[.music] ?? []).contains(parameters.trackID) ? .music : .effects
+            inputs.append(laneMix.isAudible(lane) ? parameters : silent(parameters.trackID))
+        }
+        if !laneMix.isAudible(.voice) {
+            inputs += (mixTracks[.voice] ?? []).map(silent)
+        }
+        guard !inputs.isEmpty else { return nil }
+        let mix = AVMutableAudioMix()
+        mix.inputParameters = inputs
+        return mix
     }
 
     /// The export compositor, drawing this take's zooms and blurs, or nil

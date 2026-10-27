@@ -96,51 +96,6 @@ struct TaskRing: View {
     }
 }
 
-/// One task in the sidebar, nested under its ProjectRow: ring, title,
-/// and "Agent · status" in words, so needs-you never relies on colour.
-///
-///     TaskRow(job: job, isSelected: job.id == selected)
-struct TaskRow: View {
-    let job: AgentJob
-    var isSelected = false
-    @State private var hovering = false
-
-    init(job: AgentJob, isSelected: Bool = false) {
-        self.job = job
-        self.isSelected = isSelected
-    }
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.sm) {
-            TaskRing(job.state, size: 11)
-                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(job.title)
-                    .textStyle(.bodyStrong)
-                    .foregroundStyle(Theme.text)
-                    .lineLimit(2)
-                Text(job.statusLine)
-                    .textStyle(.caption)
-                    .foregroundStyle(job.state == .failed ? Theme.error : Theme.textMuted)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.leading, Theme.Space.md)
-        .padding(.trailing, Theme.Space.sm)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.Radius.md)
-                .fill(isSelected ? Theme.canvas : (hovering ? Theme.canvas.opacity(0.6) : .clear))
-        )
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(job.title). \(job.statusLine)")
-        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-    }
-}
-
 // MARK: Steps
 
 /// The Producer's plan, Codex-style: ✓ done (struck through), ◌ running,
