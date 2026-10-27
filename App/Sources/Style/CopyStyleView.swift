@@ -37,7 +37,7 @@ struct CopyStyleView: View {
         .frame(minWidth: 460, minHeight: 420)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light) // light only, always
+        .themed()
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first else { return false }
             model.open(url)
@@ -307,7 +307,6 @@ final class CopyStyleWindowController: NSObject {
             window.title = "Copy a Style"
             window.isReleasedWhenClosed = false
             window.contentViewController = NSHostingController(rootView: CopyStyleView(model: model))
-            window.appearance = NSAppearance(named: .aqua)
             window.setFrameAutosaveName("VisionOneCopyStyleWindow")
             window.center()
             self.window = window

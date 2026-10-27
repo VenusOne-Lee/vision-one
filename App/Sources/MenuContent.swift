@@ -101,7 +101,7 @@ struct MenuContent: View {
         .frame(width: Theme.Panel.width)
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light) // light only, always
+        .themed()
         .background(PanelWindowReader())
     }
 

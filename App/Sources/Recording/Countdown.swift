@@ -56,7 +56,6 @@ final class Countdown {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.appearance = NSAppearance(named: .aqua)
         panel.contentView = CountdownHostingView(rootView: view)
         panel.setFrame(screen.frame, display: true)
         panel.onKey = { [weak self] key in
@@ -167,7 +166,7 @@ private struct CountdownView: View {
                 .padding(.bottom, 48)
             }
         }
-        .environment(\.colorScheme, .light)
+        .themed()
         .onAppear {
             // The ring drains once over the whole countdown.
             if reduceMotion {

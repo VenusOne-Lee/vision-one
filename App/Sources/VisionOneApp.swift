@@ -86,6 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotKey = GlobalHotKey.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The look from Settings → Appearance (theme.json), before any window.
+        ThemeStore.shared.start()
         // ⌘⇧R from anywhere starts or stops recording.
         hotKey.register {
             Task { @MainActor in await ScreenRecorder.shared.toggle() }
