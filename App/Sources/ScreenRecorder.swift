@@ -44,6 +44,9 @@ final class ScreenRecorder: NSObject, ObservableObject {
         lastTake = library.takes().first
     }
 
+    /// The take being recorded, while live.
+    var currentTake: Take? { phase.isLive ? take : nil }
+
     func toggle() async {
         if Countdown.shared.isRunning {
             // Pressing record again during the countdown starts at once.

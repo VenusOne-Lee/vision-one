@@ -125,14 +125,24 @@ public actor AgentJobBoard {
     /// whichever answers first wins.
     public func requestApproval(jobID: UUID, request: OutboundRequest,
                          alsoAsk: (any OutboundApprover)? = nil) async -> OutboundDecision {
+        var ask: (@Sendable () async -> OutboundDecision)?
+        if let alsoAsk { ask = { await alsoAsk.approve(request) } }
+        return await requestApproval(jobID: jobID, approval: AgentJob.Approval(request), alsoAsk: ask)
+    }
+
+    /// The same, for anything shown as an approval: an MCP agent asking
+    /// to record or share. `alsoAsk` is another place to answer (the
+    /// floating card); whichever answers first wins.
+    public func requestApproval(jobID: UUID, approval: AgentJob.Approval,
+                                alsoAsk: (@Sendable () async -> OutboundDecision)? = nil) async -> OutboundDecision {
         guard let job = job(jobID), job.state.isActive else { return .deny }
         let before = job.state
-        update(jobID) { $0.state = .needsApproval; $0.approval = AgentJob.Approval(request) }
+        update(jobID) { $0.state = .needsApproval; $0.approval = approval }
         let decision = await withCheckedContinuation { continuation in
             waiting[jobID] = continuation
             if let alsoAsk {
                 Task {
-                    let answer = await alsoAsk.approve(request)
+                    let answer = await alsoAsk()
                     self.resolveApproval(jobID: jobID, decision: answer)
                 }
             }

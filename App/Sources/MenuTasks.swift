@@ -108,7 +108,7 @@ struct PanelTasksList: View {
                             Text(task.title)
                                 .font(.system(size: 12.5, weight: .medium))
                                 .lineLimit(1)
-                            Text(feed.snapshot.statusLine(of: task))
+                            Text(feed.snapshot.statusLine(of: task) + (task.requestedBy.map { " · from \($0)" } ?? ""))
                                 .font(.system(size: 11))
                                 .foregroundStyle(Theme.textMuted)
                                 .lineLimit(1)

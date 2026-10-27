@@ -1,0 +1,18 @@
+# For deploying by hand with `npx wrangler deploy`. Vision One sets the
+# same things up through the Cloudflare API when you connect an account.
+name = "vision-one-share"
+main = "../../Sources/VisionOneKit/Share/Page/Cloudflare/worker.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "vision-one-share"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vision-one-share"
+database_id = "replace-with-your-database-id"
+
+# Set with `npx wrangler secret put CREATOR_KEY`. Vision One keeps the
+# same key in your Mac's keychain to upload pages and read notes.
