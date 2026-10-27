@@ -192,10 +192,20 @@ public struct Transcript: Codable, Equatable, Sendable {
     }
 }
 
-public enum TranscriptError: Error, Equatable {
+public enum TranscriptError: Error, Equatable, LocalizedError {
     case duplicateID(Int)
     case badTiming(Int)
     case outOfOrder(Int)
     /// Written by a newer Vision One; this one can't read it safely.
     case newerVersion(Int)
+
+    /// Says how to fix, per docs/DESIGN.md.
+    public var errorDescription: String? {
+        switch self {
+        case .duplicateID, .badTiming, .outOfOrder:
+            return "The speech model gave word times that don't line up. Try again, and if it keeps happening, record the take again."
+        case .newerVersion:
+            return "This transcript was made by a newer Vision One. Update Vision One from the menu bar to open it."
+        }
+    }
 }
