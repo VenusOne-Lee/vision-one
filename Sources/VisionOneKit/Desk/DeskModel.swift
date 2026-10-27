@@ -235,7 +235,8 @@ public struct DeskTask: Codable, Equatable, Identifiable, Sendable {
     }
 
     func plan(before cardID: UUID) -> DeskPlan? {
-        guard let i = cells.firstIndex(where: { $0.id == cardID }) else { return nil }
+        guard let i = cells.firstIndex(where: { if case let .approval(card) = $0.kind { return card.id == cardID } else { return false } })
+        else { return nil }
         return cells[..<i].reversed().compactMap { if case let .plan(plan) = $0.kind { return plan } else { return nil } }.first
     }
 }
