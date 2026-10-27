@@ -7,14 +7,17 @@ import VisionOneKit
 /// with the camera bubble in the corner; solid ones are picked, dashed
 /// ones are suggestions. Caption style sits beside them. "Export N" runs
 /// the picked presets one after another, each format filling its own
-/// ring. `keep` overrides the kept spans; nil uses the take's edits.json,
-/// like the Export menu.
+/// ring. The batch runs in the app's one queue, so the sheet can close
+/// while it goes. Once done, the sheet becomes the share step: drag or
+/// copy a file, or send it to WhatsApp, LinkedIn, X or YouTube with the
+/// Sharer's words, approved one post at a time. `keep` overrides the
+/// kept spans; nil uses the take's edits.json, like the Export menu.
 struct ExportSheet: View {
     let take: Take
     let keep: [Range<Double>]?
     let close: () -> Void
 
-    @StateObject private var queue = ExportQueue()
+    @ObservedObject private var queue = ExportQueue.shared
     @ObservedObject private var brand = BrandStore.shared
 
     @State private var picked: Set<ExportPreset>
@@ -32,8 +35,27 @@ struct ExportSheet: View {
         self.close = close
         let purpose = TakePlan.load(for: take)?.purpose
         self.purpose = purpose
-        _picked = State(initialValue: Set(purpose.map { ExportPreset.suggested(for: $0) } ?? [.hd1080]))
+        _picked = State(initialValue: Set(purpose.map { ExportPreset.suggested(for: $0) } ?? Self.lastPicked))
     }
+
+    /// What was exported last time, for takes with no purpose.
+    private static var lastPicked: [ExportPreset] {
+        let saved = (UserDefaults.standard.stringArray(forKey: lastPickedKey) ?? []).compactMap(ExportPreset.init(rawValue:))
+        return saved.isEmpty ? [.hd1080] : saved
+    }
+
+    private static let lastPickedKey = "export.lastPicked"
+
+    /// This take's batch, if the queue is on it.
+    private var batch: ExportBatch? { queue.batch(for: take) }
+
+    private var isExporting: Bool { batch?.isRunning == true }
+
+    /// Another take is exporting; this one waits its turn.
+    private var otherIsExporting: Bool { queue.isRunning && batch == nil }
+
+    /// Done with at least one file: the sheet shows the share step.
+    private var finishedFiles: Bool { batch?.isFinished == true && !(batch?.exported.isEmpty ?? true) }
 
     /// The order the design shows caption styles in.
     private static let captionStyles: [CaptionStyle] = [.wordByWord, .keyword, .boldPop, .subtitle]
@@ -42,14 +64,22 @@ struct ExportSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Rectangle().fill(Theme.line).frame(height: 1)
-            HStack(alignment: .top, spacing: Theme.Space.lg) {
-                formats
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                captionPanel
-                    .frame(width: 228)
+            if let batch, finishedFiles {
+                ScrollView {
+                    FinishedPanel(take: take, batch: batch, aspect: { $0.format?.aspect ?? sourceAspect })
+                        .padding(Theme.Space.lg)
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
+            } else {
+                HStack(alignment: .top, spacing: Theme.Space.lg) {
+                    formats
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    captionPanel
+                        .frame(width: 228)
+                }
+                .padding(Theme.Space.lg)
+                .frame(maxHeight: .infinity, alignment: .top)
             }
-            .padding(Theme.Space.lg)
-            .frame(maxHeight: .infinity, alignment: .top)
             Rectangle().fill(Theme.line).frame(height: 1)
             footer
         }
@@ -59,6 +89,10 @@ struct ExportSheet: View {
         .foregroundStyle(Theme.text)
         .tint(Theme.text)
         .environment(\.colorScheme, .light)
+        .onAppear {
+            // Opened again while this take exports: show what's running.
+            if let batch { picked = Set(batch.presets) }
+        }
         .task(id: take.folder) {
             let loaded = take.loadCaptionSettings()
             savedCaptions = loaded
@@ -112,11 +146,11 @@ struct ExportSheet: View {
                         aspect: preset.format?.aspect ?? sourceAspect,
                         isPicked: picked.contains(preset),
                         ring: ringColor,
-                        progress: queue.batch?.status(of: preset)?.progress,
+                        progress: batch?.status(of: preset)?.progress,
                         help: help(for: preset),
                         action: { toggle(preset) }
                     )
-                    .disabled(queue.isRunning)
+                    .disabled(isExporting)
                 }
             }
             if let loadProblem {
@@ -146,7 +180,7 @@ struct ExportSheet: View {
 
     /// Ratio · length · size, or how the export went once it has run.
     private func detail(for preset: ExportPreset) -> String {
-        switch queue.batch?.status(of: preset) {
+        switch batch?.status(of: preset) {
         case let .done(_, bytes)?:
             return ExportPhase.size(bytes)
         case .failed?:
@@ -161,19 +195,19 @@ struct ExportSheet: View {
     }
 
     private func isFailed(_ preset: ExportPreset) -> Bool {
-        if case .failed? = queue.batch?.status(of: preset) { return true }
+        if case .failed? = batch?.status(of: preset) { return true }
         return false
     }
 
     private func help(for preset: ExportPreset) -> String {
-        if case let .failed(message)? = queue.batch?.status(of: preset) { return message }
+        if case let .failed(message)? = batch?.status(of: preset) { return message }
         if let problem = estimate(for: preset)?.problem { return problem }
         return preset.detail
     }
 
     private func toggle(_ preset: ExportPreset) {
         // Picking again after an export starts a fresh batch.
-        queue.reset()
+        if batch != nil { queue.reset() }
         if picked.contains(preset) {
             picked.remove(preset)
         } else {
@@ -213,7 +247,7 @@ struct ExportSheet: View {
         }
         // Each preset reads captions.json as it starts, so they stay put
         // until the batch is done.
-        .disabled(queue.isRunning)
+        .disabled(isExporting)
     }
 
     private func switchRow(_ title: String, isOn: Binding<Bool>) -> some View {
@@ -231,31 +265,42 @@ struct ExportSheet: View {
         HStack(spacing: Theme.Space.md) {
             footerNote
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button("Cancel") {
-                if queue.isRunning {
-                    queue.cancel()
-                } else {
-                    close()
-                }
-            }
-            .buttonStyle(.plain)
-            .font(.system(size: 12))
-            .foregroundStyle(Theme.textMuted)
-            .keyboardShortcut(.cancelAction)
-            .help(queue.isRunning ? "Stop exporting" : "Close without exporting")
-
-            if queue.batch?.isFinished == true {
+            if isExporting {
+                Button("Stop") { queue.cancel() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
+                    .help("Stop exporting")
+                // Closing doesn't stop it: the queue keeps going.
+                Button("Close", action: close)
+                    .buttonStyle(PillButtonStyle(kind: .primary))
+                    .keyboardShortcut(.defaultAction)
+                    .help("Keeps exporting. Open Export again to see it.")
+            } else if batch?.isFinished == true {
+                Button("Export more") { queue.reset() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
+                    .help("Pick other formats")
                 Button("Done", action: close)
                     .buttonStyle(PillButtonStyle(kind: .primary))
                     .keyboardShortcut(.defaultAction)
             } else {
+                Button("Cancel", action: close)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
+                    .keyboardShortcut(.cancelAction)
+                    .help("Close without exporting")
                 Button("Export \(picked.count)") {
-                    queue.export(take, presets: ExportPreset.allCases.filter(picked.contains), keep: keep)
+                    let presets = ExportPreset.allCases.filter(picked.contains)
+                    UserDefaults.standard.set(presets.map(\.rawValue), forKey: Self.lastPickedKey)
+                    queue.export(take, presets: presets, keep: keep)
                 }
                 .buttonStyle(PillButtonStyle(kind: .primary))
                 .keyboardShortcut(.defaultAction)
-                .disabled(picked.isEmpty || queue.isRunning)
-                .opacity(picked.isEmpty || queue.isRunning ? 0.5 : 1)
+                .disabled(picked.isEmpty || otherIsExporting)
+                .opacity(picked.isEmpty || otherIsExporting ? 0.5 : 1)
             }
         }
         .padding(.horizontal, Theme.Space.lg)
@@ -264,27 +309,26 @@ struct ExportSheet: View {
 
     @ViewBuilder
     private var footerNote: some View {
-        if let batch = queue.batch, batch.isRunning {
-            Text(runningText(batch))
-                .font(.system(size: 11, design: .monospaced).monospacedDigit())
-                .foregroundStyle(Theme.textMuted)
-                .lineLimit(1)
-        } else if let batch = queue.batch, batch.isFinished {
-            HStack(spacing: Theme.Space.sm) {
-                Text(finishedText(batch))
-                    .font(.system(size: 11))
-                    .foregroundStyle(batch.failures.isEmpty ? Theme.textMuted : Theme.error)
-                    .lineLimit(2)
-                    .help(batch.failures.joined(separator: "\n"))
-                if !batch.exported.isEmpty {
-                    Button("Show in Finder") { queue.revealExports() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11, weight: .medium))
-                        .underline()
-                        .foregroundStyle(Theme.text)
-                        .fixedSize()
-                }
+        if let batch, batch.isRunning {
+            // Ticks every second so the time left counts down between
+            // progress updates.
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(runningText(batch, now: context.date))
+                    .font(.system(size: 11, design: .monospaced).monospacedDigit())
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
             }
+        } else if let batch, batch.isFinished {
+            Text(finishedText(batch))
+                .font(.system(size: 11))
+                .foregroundStyle(batch.failures.isEmpty ? Theme.textMuted : Theme.error)
+                .lineLimit(2)
+                .help(batch.failures.joined(separator: "\n"))
+        } else if otherIsExporting {
+            Text("Another take is exporting. This one can go when it's done.")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textMuted)
+                .lineLimit(2)
         } else {
             Text("Solid shapes are picked. Dashed ones are suggestions: tap to add.")
                 .font(.system(size: 11))
@@ -294,18 +338,27 @@ struct ExportSheet: View {
         }
     }
 
-    /// "Exporting 1080p · 1 of 3"
-    private func runningText(_ batch: ExportBatch) -> String {
+    /// "Exporting 1080p · 1 of 3 · about 40 s left"
+    private func runningText(_ batch: ExportBatch, now: Date) -> String {
         guard let current = batch.current, let index = batch.presets.firstIndex(of: current) else {
             return "Waiting for the export that's running"
         }
-        return "Exporting \(current.title) · \(index + 1) of \(batch.presets.count)"
+        var text = "Exporting \(current.title) · \(index + 1) of \(batch.presets.count)"
+        // Bigger frames take longer, so each format counts by its pixels.
+        let progress = ExportProgress.overall(batch) { preset in
+            estimate(for: preset).map { Double($0.width * $0.height) } ?? 1
+        }
+        if let started = queue.startedAt,
+           let left = ExportProgress.remaining(progress: progress, elapsed: now.timeIntervalSince(started)) {
+            text += " · " + ExportProgress.remainingText(left)
+        }
+        return text
     }
 
     private func finishedText(_ batch: ExportBatch) -> String {
         let done = batch.exported.count
         var parts: [String] = []
-        if done > 0 { parts.append(done == 1 ? "1 video exported." : "\(done) videos exported.") }
+        if done > 0 { parts.append(done == 1 ? "1 video exported, saved next to the take." : "\(done) videos exported, saved next to the take.") }
         if let first = batch.failures.first { parts.append(first) }
         if done == 0, batch.failures.isEmpty { parts.append("Export stopped.") }
         return parts.joined(separator: " ")

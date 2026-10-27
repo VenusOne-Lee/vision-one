@@ -39,7 +39,18 @@ Burned-in captions are built inside `VideoExporter` from the same frame-snapped 
 
 With **Also save .srt and .vtt** on in the caption controls, subtitle files go next to the video with the same name (`… (WhatsApp).srt` and `.vtt`, the VTT with word timings). They're written only after the video has finished, from the timeline the export used, and moved later by the brand intro's length so they line up with the file. A cancelled or failed export writes none, and one that leaves no video behind also removes subtitle files an earlier export left under that name.
 
+### Sharing
+
+The export sheet runs its batch in the app's one `ExportQueue`, so closing the sheet doesn't stop it, and opening Export again for that take shows where it's got to. The footer guesses the time left (`ExportProgress`, each format weighted by its pixels). Takes with no purpose start with whatever was exported last.
+
+Once the batch is done, the sheet becomes the share step (`FinishedPanel`):
+
+- **Drag** any file row into WhatsApp, Slack, Mail or Finder. **Copy** puts the file itself on the clipboard, so ⌘V pastes the video. **Show** reveals it. **More** is the Mac's share menu (AirDrop, Messages, Mail).
+- **WhatsApp, LinkedIn, X, YouTube** (`ShareTarget`, VisionOneKit) each pick the file that suits them (WhatsApp the ≤16 MB one, LinkedIn Square, X and YouTube 1080p, falling back to whatever was exported) and the Sharer's words for that network from share.json. YouTube gets the title, description and chapters.
+- Tapping one opens a dashed post card with those words, editable, and "Draft with Sharer" when there's no draft yet. **Approve and open** turns it solid, records the approval with `OutboundGate.approvedInPlace` (the card showed the exact words and destination, so it isn't asked twice), copies the words, shows the file in Finder and opens the network's composer. Nothing posts until you press Post there. Posting straight through each network's API comes with the MCP server.
+
 ## Not yet
 
 - The camera bubble in short clips, and moving or hiding it in the editor
-- Vertical and square clips: see [CLIPS.md](CLIPS.md). `VideoFormat` and `ReframePlanner` are in (see [BRAND.md](BRAND.md)); full-length vertical exports and a window that moves with the cursor come next
+- A share link (Loom style). It needs storage the builder brings, such as their own Drive or S3
+- A notification when a background export finishes while the sheet is closed
