@@ -271,6 +271,8 @@ private struct ModeSwitch: View {
         }
         .padding(2)
         .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 1))
+    }
+}
 
 /// Exports the last take, with the cuts saved in its edits.json.
 struct ExportRow: View {
