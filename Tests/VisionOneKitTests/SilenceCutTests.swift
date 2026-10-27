@@ -96,9 +96,11 @@ final class SilenceCutTests: XCTestCase {
 
     func testGapsBetweenWordsWithoutLevels() {
         let cuts = SilenceCut.proposals(words: words([("a", 1, 1.5), ("b", 4, 4.5)]), duration: 6, loudness: nil)
-        XCTAssertEqual(cuts.map(\.reason), [.pause, .deadAir])
-        XCTAssertEqual(cuts[0].start, 1.7, accuracy: 0.001)
-        XCTAssertEqual(cuts[0].end, 3.8, accuracy: 0.001)
+        XCTAssertEqual(cuts.map(\.reason), [.deadAir, .pause, .deadAir])
+        XCTAssertEqual(cuts[0].end, 0.75, accuracy: 0.001)
+        XCTAssertEqual(cuts[1].start, 1.7, accuracy: 0.001)
+        XCTAssertEqual(cuts[1].end, 3.8, accuracy: 0.001)
+        XCTAssertEqual(cuts[2].start, 4.75, accuracy: 0.001)
     }
 
     func testApplyReplacesStaleSuggestionsAndAccepts() {
