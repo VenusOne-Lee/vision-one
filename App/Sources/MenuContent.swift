@@ -765,10 +765,13 @@ struct ExportMenu: View {
         Menu("Export") {
             ForEach(ExportPreset.allCases) { preset in
                 Button("\(preset.title) · \(preset.detail)") {
+                    // Captions are built inside the export, from the
+                    // timeline it renders; subtitle files follow once the
+                    // video is done.
                     let brand = BrandStore.shared
-                    CaptionExport.writeFiles(for: take, preset: preset)
                     exports.export(take, preset: preset, keep: keep,
-                                   overlays: CaptionExport.overlays(for: take, ringHex: brand.kit.ring.hex) + brand.overlays(),
+                                   overlays: brand.overlays(),
+                                   captionRingHex: brand.kit.ring.hex,
                                    cards: brand.cardMaker())
                 }
             }

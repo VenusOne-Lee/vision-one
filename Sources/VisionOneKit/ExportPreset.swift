@@ -199,3 +199,51 @@ public enum ExportPlanner {
         return (even(Double(width)), even(Double(height)))
     }
 }
+
+// MARK: - Size-limited retries
+
+extension ExportPlanner {
+    /// Encodes a size-limited export may take, the first one included. A
+    /// single-pass encoder only roughly meets its average bitrate, so each
+    /// retry aims lower, from what the last try actually wrote.
+    public static let sizeLimitAttempts = 3
+
+    /// Never ask the encoder for less video than this, however far over.
+    static let minRetryVideoBitRate = 100_000
+
+    /// Video bitrate for retry number `attempt` (1 for the first retry)
+    /// after an encode with `settings` came out at `bytes` against `limit`.
+    /// Sound doesn't shrink with the video bitrate, so only the video's
+    /// share is scaled, aiming at 85% of the limit and 5% lower each
+    /// retry after that, so each try asks for less than the last.
+    public static func retryVideoBitRate(after settings: ExportSettings, bytes: Int64, limit: Int64,
+                                         duration: Double, attempt: Int) -> Int {
+        let target = Double(limit) * max(0.5, 0.85 - 0.05 * Double(max(0, attempt - 1)))
+        let audioBytes = Double(settings.audioBitRate) * max(0, duration) / 8 * 1.02
+        let videoBytes = max(1, Double(bytes) - audioBytes)
+        // Never more than the last try, even if `bytes` wasn't over.
+        let scale = min(0.95, max(0, target - audioBytes) / videoBytes)
+        return max(minRetryVideoBitRate, Int(Double(settings.videoBitRate) * scale))
+    }
+
+    /// The slice of the progress ring try number `attempt` (0 based) fills,
+    /// so the ring only moves forward when an export goes again. A single
+    /// try gets the whole ring; otherwise the first gets 70% and the
+    /// retries share the rest.
+    public static func progressRange(attempt: Int, of attempts: Int) -> ClosedRange<Double> {
+        guard attempts > 1 else { return 0...1 }
+        let first = 0.7
+        let index = min(max(attempt, 0), attempts - 1)
+        if index == 0 { return 0...first }
+        let share = (1 - first) / Double(attempts - 1)
+        let lower = first + share * Double(index - 1)
+        let upper = index == attempts - 1 ? 1 : min(1, lower + share)
+        return lower...upper
+    }
+
+    /// `progress` (0...1) of try `attempt` as a point on the whole ring.
+    public static func overallProgress(_ progress: Double, attempt: Int, of attempts: Int) -> Double {
+        let range = progressRange(attempt: attempt, of: attempts)
+        return range.lowerBound + (range.upperBound - range.lowerBound) * min(max(progress, 0), 1)
+    }
+}
