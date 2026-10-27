@@ -8,9 +8,17 @@ Each recording is one folder in `~/Movies/Vision One`:
 
 | File | What |
 | --- | --- |
-| `screen.mov` | Screen video (HEVC), a system sound track and a mic track (AAC), in that order |
-| `events.json` | Cursor moves and clicks, in seconds from the first frame, positions in display points (origin top left) |
+| `screen.mov` | Video (HEVC), then a system sound track and a mic track (AAC), each left out when switched off |
+| `events.json` | Cursor moves and clicks, in seconds from the first frame. Positions are in points from the top left of what was recorded (display, window or area) |
 | `camera.mov` | Coming next: the camera, drawn in the ring bubble at export |
+
+## What to record
+
+The menu bar panel picks Screen, Window or Area, plus Mic and System sound. The choice is saved, so ⌘⇧R records the same way next time. See the [visual](https://claude.ai/artifact/HStjcoNPxsMVh3FVaXq4Sd) (source in `docs/visuals/record-picker.html`).
+
+- **Screen:** the chosen display, minus Vision One's own windows.
+- **Window:** `SCContentFilter(desktopIndependentWindow:)`, which follows the window when it's moved or covered.
+- **Area:** the display filter with `sourceRect` set to the dragged rectangle. Sides are rounded down to even pixels for HEVC. A thin orange frame marks the area while live; it isn't recorded.
 
 ## Pipeline
 
@@ -23,5 +31,6 @@ Each recording is one folder in `~/Movies/Vision One`:
 
 - Camera recording, and the ring bubble at export
 - Picking a mic, and a level meter
+- Following a window's moves in the cursor log (v1 uses its frame at start)
 - Lower frame rate and resolution on 8 GB Macs
 - Hiding the real cursor and drawing a smooth one (v0.2, needs export)

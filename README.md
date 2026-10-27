@@ -4,13 +4,14 @@ A free, open source Mac screen recorder that edits itself. Record, pick what it'
 
 Made for South African builders, as the sibling of [Version One](https://versionone.co.za).
 
-> **Status: v0.1 in progress.** Right now Vision One records your whole screen from the menu bar. Screen, system sound and mic each go on their own track, and your cursor and clicks are logged for later zooms. The transcript editor comes next.
+> **Status: v0.1 in progress.** Right now Vision One records your whole screen, one window or an area you drag, from the menu bar. Screen, system sound and mic each go on their own track, and your cursor and clicks are logged for later zooms. The transcript editor comes next.
 
 ## v0.1 plan
 
 - [x] Menu bar recorder, ⌘⇧R from anywhere
 - [x] Screen, system sound and mic on separate tracks (ScreenCaptureKit + AVAssetWriter), crash-safe, Vision One's own windows hidden
 - [x] Cursor and click log for zooms
+- [x] Record picker: Screen, Window or Area, with Mic and System sound switches ([visual](https://claude.ai/artifact/HStjcoNPxsMVh3FVaXq4Sd))
 - [ ] Camera bubble framed by your Version One ring
 - [ ] Word-timed transcript on device (WhisperKit / Parakeet)
 - [ ] Delete words to cut video
