@@ -214,12 +214,13 @@ final class TaskThreadTests: XCTestCase {
         XCTAssertEqual(TaskSummary.sorted([idle, working, waiting]).map(\.title), ["Wait", "Now", "Old"])
     }
 
-    func testApprovalChoices() {
-        XCTAssertEqual(ApprovalChoice.no.label(agent: .sharer), "No, and tell Sharer what to do differently")
-        XCTAssertEqual(ApprovalChoice.always.decision, .allowForSession)
-        XCTAssertEqual(ApprovalChoice.yes.moved(by: -1), .yes)
-        XCTAssertEqual(ApprovalChoice.yes.moved(by: 1), .always)
-        XCTAssertEqual(ApprovalChoice.no.moved(by: 1), .no)
+    func testApprovalAnswers() {
+        XCTAssertEqual(ApprovalAnswer.yes.decision, .allowOnce)
+        XCTAssertEqual(ApprovalAnswer.yesAlways.decision, .allowForSession)
+        XCTAssertEqual(ApprovalAnswer.no(feedback: " shorter ").decision, .deny)
+        XCTAssertEqual(ApprovalAnswer.no(feedback: " shorter ").feedback, "shorter")
+        XCTAssertNil(ApprovalAnswer.no(feedback: "  ").feedback)
+        XCTAssertNil(ApprovalAnswer.yes.feedback)
     }
 
     func testElapsedAndBusy() {

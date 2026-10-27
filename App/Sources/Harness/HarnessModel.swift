@@ -309,11 +309,6 @@ final class HarnessModel: ObservableObject {
 
     // MARK: Approvals, keep and undo
 
-    func answer(_ jobID: UUID, _ choice: ApprovalChoice) {
-        let board = AIServices.shared.jobs
-        Task { await board.resolveApproval(jobID: jobID, decision: choice.decision) }
-    }
-
     /// Keep makes the job's dashed proposals solid; Undo takes them out.
     /// With the take open, the cuts go through its editor first, so ⌘Z
     /// brings them back and the editor never writes stale cuts over them.
@@ -337,16 +332,19 @@ final class HarnessModel: ObservableObject {
         }
     }
 
-    /// "No, and tell Sharer what to do differently": says no, then puts
-    /// the cursor in the composer for the new ask.
-    func answer(_ jobID: UUID, _ choice: ApprovalChoice, agent: AgentKind) {
-        answer(jobID, choice)
-        guard choice == .no else { return }
-        if draft.isEmpty, agent == .clipper || agent == .sharer,
-           let command = HarnessCommand.allCases.first(where: { $0.agent == agent }) {
-            draft = command.name + " "
+    /// An answer on a task's approval card. "No" with a note sends the
+    /// note back to the same agent as a new ask; without one, the cursor
+    /// goes to the composer.
+    func answer(_ jobID: UUID, _ answer: ApprovalAnswer, agent: AgentKind) {
+        let board = AIServices.shared.jobs
+        Task { await board.resolveApproval(jobID: jobID, decision: answer.decision) }
+        guard !answer.isYes else { return }
+        if let note = answer.feedback, let take = page.take {
+            let prefix = agent == .clipper ? "/clips " : (agent == .sharer ? "/share " : "")
+            enqueueOrRun(prefix + note, on: take)
+        } else {
+            focusComposer += 1
         }
-        focusComposer += 1
     }
 
     func stop(_ jobID: UUID) {

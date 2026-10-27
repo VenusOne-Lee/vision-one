@@ -67,31 +67,45 @@ public struct TaskSummary: Equatable, Identifiable, Sendable {
     }
 }
 
-/// The three answers on an approval card, numbered so 1, 2, 3 picks one.
-public enum ApprovalChoice: Int, CaseIterable, Sendable {
-    case yes = 1, always, no
-
-    public var number: Int { rawValue }
-
-    public func label(agent: AgentKind) -> String {
-        switch self {
-        case .yes: return "Yes"
-        case .always: return "Yes, and don't ask again"
-        case .no: return "No, and tell \(agent.title) what to do differently"
-        }
-    }
-
+extension ApprovalAnswer {
+    /// What the gate does with the answer.
     public var decision: OutboundDecision {
         switch self {
         case .yes: return .allowOnce
-        case .always: return .allowForSession
+        case .yesAlways: return .allowForSession
         case .no: return .deny
         }
     }
 
-    /// ↑ and ↓ move through the choices without wrapping.
-    public func moved(by step: Int) -> ApprovalChoice {
-        ApprovalChoice(rawValue: min(3, max(1, rawValue + step)))!
+    /// The note for the agent, from "No, and tell … what to do differently".
+    public var feedback: String? {
+        guard case let .no(note) = self else { return nil }
+        let clean = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean.isEmpty ? nil : clean
+    }
+}
+
+/// The words on an agent's approval card in a task.
+public enum TaskApprovalText {
+    public static func question(agent: AgentKind, approval: AgentJob.Approval) -> String {
+        approval.isPost
+            ? PostApprovalText.question(to: approval.destination)
+            : "Send this to \(approval.providerName)?"
+    }
+
+    public static func options(agent: AgentKind, approval: AgentJob.Approval) -> [String] {
+        [approval.isPost ? "Yes, post it" : "Yes",
+         "Yes, and don't ask again",
+         "No, and tell the \(agent.title) what to do differently"]
+    }
+
+    /// "Uses your OpenAI key · 1 240 characters · about R0.40".
+    public static func detail(_ approval: AgentJob.Approval) -> String {
+        var parts = [approval.summary]
+        if !approval.isPost { parts.append("\(approval.characters) characters to \(approval.destination)") }
+        if let rand = approval.estimatedRand { parts.append(String(format: "about R%.2f", rand)) }
+        if approval.fromPlan { parts.append("covered by your plan") }
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
 

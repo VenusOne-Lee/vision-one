@@ -183,7 +183,7 @@ struct PanelContent: View {
                     SoundPanel(model: workspace.editor).padding(Theme.Space.md - 2)
                 }
             case .post:
-                SharerDraftsPanel(take: workspace.take, model: model)
+                PostPanel(take: workspace.take)
             case .captions:
                 CaptionsPanel(take: workspace.take)
             case .thumbnail:
@@ -278,44 +278,6 @@ struct FormatsPanel: View {
             ExportSheet(take: editor.take, keep: editor.edits.keptSpans.map { $0.start..<$0.end }) {
                 showExport = false
             }
-        }
-    }
-}
-
-/// The Sharer's title, chapters and posts for the take. Replaced by the
-/// share thread's PostPanel once that lands.
-struct SharerDraftsPanel: View {
-    let take: Take
-    @ObservedObject var model: HarnessModel
-    @State private var pack: SharePack?
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Space.md) {
-                if let pack {
-                    CopyRow(label: "Title", text: pack.title)
-                    if !pack.description.isEmpty { CopyRow(label: "Description", text: pack.description) }
-                    if !pack.chapters.isEmpty {
-                        CopyRow(label: "Chapters", text: pack.chapters.map { "\(Timecode.short(from: $0.start)) \($0.title)" }
-                            .joined(separator: "\n"), mono: true)
-                    }
-                    ForEach(Array(pack.posts.enumerated()), id: \.offset) { _, post in
-                        CopyRow(label: post.network, text: post.text)
-                    }
-                    Button("Write them again") { model.send("/share") }
-                        .buttonStyle(PillButtonStyle(kind: .secondary))
-                } else {
-                    Text("The Sharer writes a title, chapters and posts from what you said.")
-                        .textStyle(.body)
-                        .foregroundStyle(Theme.textMuted)
-                    Button("Write title and posts") { model.send("/share") }
-                        .buttonStyle(PillButtonStyle(kind: .primary))
-                }
-            }
-            .padding(Theme.Space.md)
-        }
-        .task(id: "\(take.name)-\(model.jobs(for: take).count)-\(model.jobs.map(\.updatedAt).max()?.timeIntervalSince1970 ?? 0)") {
-            pack = SharePack.load(for: take)
         }
     }
 }

@@ -21,9 +21,12 @@ struct ThreadCellView: View {
         case let .status(jobID, line, since):
             StatusCell(line: line, since: since) { model.stop(jobID) }
         case let .approval(jobID, agent, approval):
-            ThreadApprovalCell(agent: agent, approval: approval) { choice in
-                model.answer(jobID, choice, agent: agent)
-            }
+            ApprovalCard(agent: agent.title,
+                         question: TaskApprovalText.question(agent: agent, approval: approval),
+                         quote: approval.preview.isEmpty ? TaskApprovalText.detail(approval) : approval.preview,
+                         options: TaskApprovalText.options(agent: agent, approval: approval),
+                         feedbackOption: 2,
+                         onAnswer: { model.answer(jobID, $0, agent: agent) })
         case let .receipt(jobID, agent, text, canKeep, canUndo, undone):
             ReceiptCell(agent: agent, text: text, canKeep: canKeep, canUndo: canUndo, undone: undone,
                         keep: { model.settle(jobID, keep: true) },
@@ -168,92 +171,6 @@ struct StatusCell: View {
                 .buttonStyle(PillButtonStyle(kind: .quiet, size: .small))
         }
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// An agent asks before anything leaves the Mac: what, where, to whom,
-/// and what it costs. 1, 2, 3 or ↑ ↓ and Return pick; Esc decides later.
-struct ThreadApprovalCell: View {
-    let agent: AgentKind
-    let approval: AgentJob.Approval
-    let answer: (ApprovalChoice) -> Void
-
-    @State private var highlighted = ApprovalChoice.yes
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.sm + 2) {
-            Text(question).textStyle(.headline)
-            if !approval.preview.isEmpty {
-                Text(approval.preview)
-                    .textStyle(.monoSmall)
-                    .foregroundStyle(Theme.textMuted)
-                    .lineLimit(6)
-                    .textSelection(.enabled)
-                    .padding(Theme.Space.sm)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Theme.Radius.sm))
-            }
-            Text(detail).textStyle(.caption).foregroundStyle(Theme.textMuted)
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(ApprovalChoice.allCases, id: \.self) { choice in
-                    Button { answer(choice) } label: {
-                        HStack(spacing: Theme.Space.sm) {
-                            Text("\(choice.number).")
-                                .textStyle(.mono)
-                                .foregroundStyle(Theme.textMuted)
-                            Text(choice.label(agent: agent)).textStyle(.body)
-                            Spacer(minLength: 0)
-                            if choice == highlighted {
-                                Image(systemName: "return").font(.system(size: 10)).foregroundStyle(Theme.textFaint)
-                            }
-                        }
-                        .foregroundStyle(Theme.text)
-                        .padding(.horizontal, Theme.Space.sm)
-                        .frame(height: 28)
-                        .background(choice == highlighted ? Theme.canvas : .clear,
-                                    in: RoundedRectangle(cornerRadius: Theme.Radius.sm))
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { if $0 { highlighted = choice } }
-                }
-            }
-            Text("Esc decides later. Nothing leaves your Mac until you say yes.")
-                .textStyle(.caption)
-                .foregroundStyle(Theme.textFaint)
-        }
-        .panelStyle(padding: Theme.Space.md)
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg)
-            .strokeBorder(focused ? Theme.text : .clear, lineWidth: Theme.Stroke.focus))
-        .focusable()
-        .focusEffectDisabled()
-        .focused($focused)
-        .onKeyPress(.upArrow) { highlighted = highlighted.moved(by: -1); return .handled }
-        .onKeyPress(.downArrow) { highlighted = highlighted.moved(by: 1); return .handled }
-        .onKeyPress(.return) { answer(highlighted); return .handled }
-        .onKeyPress(characters: CharacterSet(charactersIn: "123")) { press in
-            guard let n = Int(press.characters), let choice = ApprovalChoice(rawValue: n) else { return .ignored }
-            answer(choice)
-            return .handled
-        }
-        .onAppear { focused = true }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(question)
-    }
-
-    private var question: String {
-        approval.isPost
-            ? "\(agent.title) wants to post to \(approval.destination)"
-            : "\(agent.title) wants to use \(approval.providerName)"
-    }
-
-    private var detail: String {
-        var parts = [approval.summary]
-        if !approval.isPost { parts.append("\(approval.characters) characters to \(approval.destination)") }
-        if let rand = approval.estimatedRand { parts.append(String(format: "about R%.2f", rand)) }
-        if approval.fromPlan { parts.append("covered by your plan") }
-        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
 
