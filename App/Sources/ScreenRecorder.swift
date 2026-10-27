@@ -104,7 +104,10 @@ final class ScreenRecorder: NSObject, ObservableObject {
                                         includeSystemAudio: withSystemSound, includeMicrophone: withMicrophone)
             let cursor = CursorLogger(captureFrame: target.captureFrame)
             let sink = CaptureSink(writer: writer) { [weak cursor] firstFrame in
-                Task { @MainActor in cursor?.setOrigin(firstFrame.seconds) }
+                Task { @MainActor in
+                    cursor?.setOrigin(firstFrame.seconds)
+                    CameraBubble.shared.screenStarted(at: firstFrame.seconds)
+                }
             }
 
             let stream = SCStream(filter: target.filter, configuration: config, delegate: self)
@@ -115,9 +118,13 @@ final class ScreenRecorder: NSObject, ObservableObject {
             if withMicrophone {
                 try stream.addStreamOutput(sink, type: .microphone, sampleHandlerQueue: captureQueue)
             }
+            // The camera starts first, so it's ready when the screen's
+            // first frame arrives and camera.json can line the two up.
+            let cameraNote = CameraBubble.shared.startRecording(for: take, captureFrame: target.captureFrame)
             cursor.start()
             try await stream.startCapture()
             trackNotes = await deviceTracks.start(for: take, devices: .shared)
+            if let cameraNote { trackNotes.append(cameraNote) }
 
             self.stream = stream
             self.sink = sink
@@ -176,6 +183,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
             // Keep going: whatever was written is still worth finishing.
         }
         await deviceTracks.stop()
+        await CameraBubble.shared.stopRecording()
         cursor?.stop(writingTo: take.eventsURL)
         let saved = await sink.finish()
         if saved {
@@ -205,7 +213,10 @@ final class ScreenRecorder: NSObject, ObservableObject {
     private func fail(_ error: Error) {
         if let take { cursor?.stop(writingTo: take.eventsURL) }
         if let sink { Task { _ = await sink.finish() } }
-        Task { await deviceTracks.stop() }
+        Task {
+            await deviceTracks.stop()
+            await CameraBubble.shared.stopRecording()
+        }
         reset()
         phase = .failed(message: RecorderError.describe(error))
     }

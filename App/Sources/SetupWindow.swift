@@ -14,7 +14,7 @@ struct SetupView: View {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 Text("Get set up")
                     .font(.system(size: 28, weight: .light))
-                Text("Vision One needs two things from macOS before it can record. Your recordings stay on this Mac.")
+                Text("Vision One needs two things from macOS before it can record, and Camera if you want the camera bubble. Your recordings stay on this Mac.")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
