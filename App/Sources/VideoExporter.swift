@@ -226,6 +226,9 @@ struct VideoExporter {
             audio.append(added)
             audioSources.append((track, try await track.load(.timeRange)))
         }
+        // Kept voice tools (voice.json): the cleaned voice in place of the mic.
+        let micIndex = await MicTrack.micIndex(of: sourceAudio, take: take)
+        audioSources = await VoiceComposer.sources(audioSources, take: take)
 
         // The camera, on its own track, cut the same way as the screen.
         // Clips skip it for now: their crop would cut the bubble in half.
@@ -317,6 +320,8 @@ struct VideoExporter {
         let words: [TimeSpan] = sound.isEmpty ? [] : ((try? Transcript.read(from: take.transcriptURL))?.words.map(\.span) ?? [])
         let soundTracks = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition,
                                                   offset: joinOffset)
+        // Words re-said in the user's cloned voice, with the original muted under them.
+        let voiceFixes = await VoiceComposer.addFixes(for: take, timeline: timeline, to: composition, offset: joinOffset)
 
         let videoComposition = AVMutableVideoComposition()
         videoComposition.customVideoCompositorClass = FrameCompositor.self
@@ -325,8 +330,9 @@ struct VideoExporter {
         videoComposition.instructions = instructions
 
         let audioMix = AVMutableAudioMix()
-        let recorded: [AVMutableAudioMixInputParameters] = audio.map { track in
+        let recorded: [AVMutableAudioMixInputParameters] = audio.enumerated().map { index, track in
             let parameters = AVMutableAudioMixInputParameters(track: track)
+            if index == micIndex { VoiceComposer.mute(voiceFixes.mutes, on: parameters) }
             for join in timeline.joins.map({ $0 + joinOffset }) {
                 let fade = Self.time(Self.joinFade)
                 let t = Self.time(join)
@@ -335,10 +341,10 @@ struct VideoExporter {
             }
             return parameters
         }
-        audioMix.inputParameters = recorded + soundTracks.parameters
+        audioMix.inputParameters = recorded + soundTracks.parameters + voiceFixes.parameters
 
         return try await encode(composition: composition, videoTracks: [video] + (cameraTrack.map { [$0] } ?? []),
-                                audio: audio + soundTracks.tracks,
+                                audio: audio + soundTracks.tracks + voiceFixes.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
                                 duration: duration.seconds, settings: settings, to: url, progress: progress)
     }
