@@ -449,3 +449,85 @@ final class CaptureSink: NSObject, SCStreamOutput, @unchecked Sendable {
     /// screen.mov's first frame on the host clock, or nil before one.
     var firstFrameSeconds: Double? { queue.sync { writer.firstFrameTime?.seconds } }
 }
+
+enum RecorderError: LocalizedError {
+    case noDisplay
+    case noWindowPicked
+    case windowGone
+    case areaOffScreen
+
+    static let screenAccessMessage = "Vision One needs Screen Recording access. Turn it on in System Settings → Privacy & Security → Screen & System Audio Recording, then try again."
+
+    var errorDescription: String? {
+        switch self {
+        case .noDisplay: return "No display found to record."
+        case .noWindowPicked: return "Pick a window to record in the Vision One menu."
+        case .windowGone: return "That window has closed. Pick another one in the Vision One menu."
+        case .areaOffScreen: return "That area is no longer on a screen. Choose the area again."
+        }
+    }
+
+    /// Errors say how to fix, per the design system.
+    static func describe(_ error: Error) -> String {
+        let nsError = error as NSError
+        if nsError.domain == SCStreamErrorDomain,
+           nsError.code == SCStreamError.Code.userDeclined.rawValue {
+            return screenAccessMessage
+        }
+        return error.localizedDescription
+    }
+}
+
+/// What to hand ScreenCaptureKit for a choice: the filter, the video
+/// size, and where it sits on screen for the cursor log.
+struct CaptureTarget {
+    let filter: SCContentFilter
+    /// The dragged area within the display, in Area mode.
+    let sourceRect: CGRect?
+    let width: Int
+    let height: Int
+    /// What's recorded, in Core Graphics global points.
+    let captureFrame: CGRect
+
+    static func resolve(_ choice: CaptureChoice, in content: SCShareableContent) throws -> CaptureTarget {
+        switch choice.mode {
+        case .window:
+            guard let id = choice.windowID,
+                  let window = content.windows.first(where: { $0.windowID == id }) else {
+                throw RecorderError.windowGone
+            }
+            // Follows the window even when it's covered or moved.
+            let filter = SCContentFilter(desktopIndependentWindow: window)
+            let size = CaptureRect(x: 0, y: 0, width: filter.contentRect.width, height: filter.contentRect.height)
+                .pixelSize(scale: Double(filter.pointPixelScale))
+            return CaptureTarget(filter: filter, sourceRect: nil, width: size.width, height: size.height,
+                                 captureFrame: window.frame)
+
+        case .screen, .area:
+            let wanted = choice.displayID ?? CGMainDisplayID()
+            guard let display = content.displays.first(where: { $0.displayID == wanted })
+                ?? content.displays.first(where: { $0.displayID == CGMainDisplayID() })
+                ?? content.displays.first else {
+                throw RecorderError.noDisplay
+            }
+            let ownApp = content.applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
+            let filter = SCContentFilter(display: display, excludingApplications: ownApp, exceptingWindows: [])
+            let scale = Double(filter.pointPixelScale)
+            let bounds = CaptureRect(x: 0, y: 0, width: display.frame.width, height: display.frame.height)
+
+            guard choice.mode == .area else {
+                let size = bounds.pixelSize(scale: scale)
+                return CaptureTarget(filter: filter, sourceRect: nil, width: size.width, height: size.height,
+                                     captureFrame: display.frame)
+            }
+            guard display.displayID == wanted,
+                  let area = choice.area?.clamped(to: bounds), area.isBigEnough else {
+                throw RecorderError.areaOffScreen
+            }
+            let size = area.pixelSize(scale: scale)
+            let rect = CGRect(x: area.x, y: area.y, width: area.width, height: area.height)
+            return CaptureTarget(filter: filter, sourceRect: rect, width: size.width, height: size.height,
+                                 captureFrame: rect.offsetBy(dx: display.frame.minX, dy: display.frame.minY))
+        }
+    }
+}
