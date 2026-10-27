@@ -28,7 +28,13 @@ xcodegen generate
 open VisionOne.xcodeproj
 ```
 
-Run the `VisionOne` scheme. If you build from the command line, keep the build folder outside `~/Documents` or `~/Desktop` when those sync with iCloud: Finder adds file attributes there that make code signing fail with "resource fork, Finder information, or similar detritus not allowed". The first time you record, macOS asks for Screen Recording and Microphone access. Each take is a folder in `~/Movies/Vision One`. See [docs/RECORDER.md](docs/RECORDER.md).
+**Keep access across builds.** macOS ties Screen Recording access to the app's signature, and the default ad hoc signature changes every build, so macOS would ask again each time. Sign with your own (free) Apple Development certificate instead:
+
+```sh
+cp Config/Local.xcconfig.example Config/Local.xcconfig   # then add your team ID
+```
+
+Run the `VisionOne` scheme. If you build from the command line, keep the build folder outside `~/Documents` or `~/Desktop` when those sync with iCloud: Finder adds file attributes there that make code signing fail with "resource fork, Finder information, or similar detritus not allowed". On first launch, a "Get set up" window asks for Screen Recording and Microphone access, notices when you turn them on, and restarts the app for you. Each take is a folder in `~/Movies/Vision One`. See [docs/RECORDER.md](docs/RECORDER.md).
 
 Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests without Xcode: `swift test`.
 

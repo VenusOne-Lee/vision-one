@@ -10,13 +10,14 @@ final class TakeWriter: @unchecked Sendable {
     private let writer: AVAssetWriter
     private let video: AVAssetWriterInput
     private let systemAudio: AVAssetWriterInput
-    private let mic: AVAssetWriterInput
+    /// Nil when Microphone access is off; the take then has no mic track.
+    private let mic: AVAssetWriterInput?
 
     /// Host time of the first frame. Every track and the cursor log are
     /// timed from here, so they line up in the editor.
     private(set) var firstFrameTime: CMTime?
 
-    init(url: URL, width: Int, height: Int) throws {
+    init(url: URL, width: Int, height: Int, includeMicrophone: Bool) throws {
         writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         writer.movieFragmentInterval = CMTime(seconds: 2, preferredTimescale: 600)
 
@@ -32,10 +33,15 @@ final class TakeWriter: @unchecked Sendable {
         systemAudio = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.aac(channels: 2))
         systemAudio.expectsMediaDataInRealTime = true
 
-        mic = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.aac(channels: 1))
-        mic.expectsMediaDataInRealTime = true
+        if includeMicrophone {
+            let mic = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.aac(channels: 1))
+            mic.expectsMediaDataInRealTime = true
+            self.mic = mic
+        } else {
+            mic = nil
+        }
 
-        for input in [video, systemAudio, mic] where writer.canAdd(input) {
+        for input in [video, systemAudio, mic].compactMap({ $0 }) where writer.canAdd(input) {
             writer.add(input)
         }
     }
@@ -67,7 +73,7 @@ final class TakeWriter: @unchecked Sendable {
         case .audio:
             appendAudio(buffer, to: systemAudio)
         case .microphone:
-            appendAudio(buffer, to: mic)
+            if let mic { appendAudio(buffer, to: mic) }
         @unknown default:
             break
         }
@@ -84,7 +90,7 @@ final class TakeWriter: @unchecked Sendable {
         guard writer.status == .writing else { return false }
         video.markAsFinished()
         systemAudio.markAsFinished()
-        mic.markAsFinished()
+        mic?.markAsFinished()
         await writer.finishWriting()
         return writer.status == .completed
     }

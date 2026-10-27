@@ -34,6 +34,9 @@ targets:
         NSHumanReadableCopyright: MIT licence
         NSMicrophoneUsageDescription: Vision One records your voice with your screen.
         NSCameraUsageDescription: Vision One shows your camera in a bubble on the recording.
+    configFiles:
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     entitlements:
       path: App/VisionOne.entitlements
       properties:
@@ -44,6 +47,4 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: za.co.versionone.visionone
         PRODUCT_NAME: Vision One
         ENABLE_HARDENED_RUNTIME: YES
-        CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: NO

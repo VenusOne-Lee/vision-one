@@ -29,5 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey.register {
             Task { @MainActor in await ScreenRecorder.shared.toggle() }
         }
+        // First launch, or access was turned off: show what's missing.
+        if !AccessCenter.shared.checklist.canRecord {
+            SetupWindowController.shared.show()
+        }
     }
 }
