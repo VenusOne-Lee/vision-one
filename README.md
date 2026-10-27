@@ -18,6 +18,16 @@ Made for South African builders, as the sibling of [Version One](https://version
 - [ ] Captions
 - [x] Export MP4: Original, 1080p, 720p and WhatsApp size (under 16 MB)
 
+## Install
+
+Download the DMG from the [latest release](https://github.com/VenusOne-Lee/vision-one/releases/latest), or use Homebrew:
+
+```sh
+brew install --cask venusone-lee/tap/vision-one
+```
+
+Vision One updates itself (Sparkle). Click the version next to the name in the menu to check now.
+
 ## Build it
 
 Needs macOS 15 or later on Apple Silicon and Xcode 16 or later.
@@ -46,6 +56,8 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | `Sources/VisionOneKit` | Testable logic: recording state, take folders, cursor log, timecodes, export plans |
 | `docs/RECORDER.md` | How recording works, and what a take folder holds |
 | `docs/EXPORT.md` | How export combines the tracks, and the presets |
+| `docs/RELEASING.md` | Signing, notarised DMG, Sparkle updates, Homebrew, and the one-time setup |
+| `scripts/release` | The release scripts the workflow runs |
 | `docs/DESIGN.md` | Design system: tokens, type, components, do's and don'ts |
 | `project.yml` | XcodeGen project (the `.xcodeproj` isn't committed) |
 
