@@ -1,0 +1,248 @@
+<title>Vision One Camera Bubble</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: mock Mac screens showing the bubble in each state, the Sources panel at true size, then one flow diagram. Light only, per Vision One's rules. */
+:root {
+  --paper: #FFFFFF;
+  --canvas: #F4F4F1;
+  --line: #E2E1DC;
+  --text: #121212;
+  --muted: #5C5B57;
+  --tally: #FF5A1F;
+  --ring: #1F3FBF;
+  --desk: #D9D8D2;
+  --skin: #C9B8A6;
+  --shirt: #8C7B6C;
+  --room: #EDE9E2;
+  --display: "Bricolage Grotesque", -apple-system, "Helvetica Neue", sans-serif;
+  --body: "Bricolage Grotesque", -apple-system, "Helvetica Neue", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+body {
+  background: var(--canvas); color: var(--text); font-family: var(--body); font-size: 14px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+header { display: flex; flex-direction: column; gap: 10px; max-width: 680px; }
+.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { font-family: var(--display); font-weight: 300; font-size: clamp(2rem, 5vw, 3.2rem); letter-spacing: -0.025em; line-height: 1.05; margin: 0; text-wrap: balance; }
+h1 b { font-weight: 800; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.35rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h3 { margin: 0; font-size: 14px; font-weight: 600; }
+p { margin: 0; max-width: 65ch; }
+code { font-family: var(--mono); font-size: 0.9em; }
+.lead { font-size: 16px; color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 18px; }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 22px; height: 14px; border-radius: 4px; border: 1.5px solid var(--text); background: var(--paper); }
+.sw.dash { border-style: dashed; }
+.sw.live { border-color: var(--tally); }
+
+/* Mock screens */
+.screens { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+.shot { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cap { font-size: 12px; color: var(--muted); }
+.cap b { color: var(--text); font-weight: 600; }
+.screen { position: relative; aspect-ratio: 16 / 10; max-width: 100%; border-radius: 10px; overflow: hidden; background: var(--desk); box-shadow: 0 0 0 1px rgba(18,18,18,0.12); }
+.menubar { position: absolute; inset: 0 0 auto; height: 18px; background: rgba(255,255,255,0.85); display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 9px; }
+.menubar .ring { margin-left: auto; width: 10px; height: 10px; border-radius: 50%; border: 1.5px dashed var(--text); }
+.menubar .ring.live { border: 0; background: var(--tally); }
+.win { position: absolute; background: var(--paper); border-radius: 6px; box-shadow: 0 4px 14px rgba(18,18,18,0.14); overflow: hidden; }
+.win::before { content: ""; display: block; height: 12px; background: var(--canvas); border-bottom: 1px solid var(--line); }
+.win .lines { padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+.win .lines i { display: block; height: 4px; border-radius: 2px; background: var(--line); }
+
+.bubble { position: absolute; aspect-ratio: 1; border-radius: 50%; border: 3px solid var(--ring); background: var(--room); overflow: visible; }
+.bubble .face { position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle at 50% 38%, var(--skin) 0 22%, transparent 23%), radial-gradient(ellipse at 50% 98%, var(--shirt) 0 42%, transparent 43%), var(--room); }
+.bubble .grip { position: absolute; right: 7%; bottom: 7%; width: 20%; aspect-ratio: 1; border-radius: 50%; background: var(--paper); border: 1.5px solid var(--text); transform: translate(50%, 50%); }
+.bubble .tally { position: absolute; right: 7%; top: 7%; width: 14%; aspect-ratio: 1; border-radius: 50%; background: var(--tally); border: 2px solid var(--paper); transform: translate(50%, -50%); }
+.ghost { position: absolute; aspect-ratio: 1; border-radius: 50%; border: 1.5px dashed var(--text); }
+.trail { position: absolute; height: 0; border-top: 1.5px dashed var(--text); transform-origin: left center; }
+.cursor { position: absolute; width: 10px; height: 14px; background: var(--text); clip-path: polygon(0 0, 0 100%, 30% 72%, 52% 100%, 66% 92%, 45% 66%, 85% 66%); }
+.menu { position: absolute; background: var(--paper); border-radius: 6px; box-shadow: 0 6px 18px rgba(18,18,18,0.18), 0 0 0 0.5px rgba(18,18,18,0.2); padding: 4px; font-size: 10px; display: flex; flex-direction: column; min-width: 96px; }
+.menu span { padding: 3px 8px; border-radius: 4px; }
+.menu .hl { background: #1F6FE5; color: var(--paper); }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 3px 0; }
+
+/* Panel */
+.split { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 720px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.panel { width: 100%; max-width: 300px; background: var(--paper); border-radius: 12px; box-shadow: 0 10px 30px rgba(18,18,18,0.12), 0 0 0 0.5px rgba(18,18,18,0.18); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.sec { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.sec em { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.src { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.src .ico { width: 18px; text-align: center; font-size: 12px; }
+.src .t { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.src .t b { font-weight: 500; font-size: 12.5px; }
+.src .t span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src .t span.pick { color: var(--text); }
+.src .t span.pick::after { content: " ⌄"; color: var(--muted); }
+.src.new { outline: 1.5px solid var(--text); outline-offset: 4px; border-radius: 6px; }
+.toggle { width: 26px; height: 15px; border-radius: 999px; background: var(--text); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 2px; right: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--paper); }
+.toggle.off { background: var(--line); }
+.toggle.off::after { right: auto; left: 2px; }
+.list { display: flex; flex-direction: column; gap: 12px; }
+.list div { display: flex; flex-direction: column; gap: 3px; }
+.list p { color: var(--muted); font-size: 13px; }
+
+/* Diagram */
+.diagram { overflow-x: auto; background: var(--paper); border-radius: 12px; padding: 20px; }
+.diagram svg { display: block; min-width: 860px; width: 100%; height: auto; }
+.diagram text { font-family: var(--body); fill: var(--text); font-size: 13px; }
+.diagram .small { font-size: 11px; fill: var(--muted); }
+.diagram .mono { font-family: var(--mono); font-size: 11px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.note { background: var(--paper); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.note p { font-size: 13px; color: var(--muted); }
+.proposed { border: 1.5px dashed var(--text); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.tag { align-self: flex-start; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; border: 1px dashed var(--text); border-radius: 999px; padding: 2px 10px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Vision One · Recorder · Camera bubble</span>
+    <h1>You, in your <b>ring</b>, anywhere on screen</h1>
+    <p class="lead">Switch on Camera in Sources and a round live preview floats over everything, framed in your ring colour from Brand. Drag it, resize it, and it stays where you left it. The camera records to its own file, so the editor and export decide where it ends up.</p>
+    <div class="legend">
+      <span><i class="sw"></i>Solid: built in this PR</span>
+      <span><i class="sw dash"></i>Dashed: proposed, not built yet</span>
+      <span><i class="sw live"></i>Orange: recording is live</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>On screen</h2>
+    <div class="screens">
+      <div class="shot">
+        <div class="screen" aria-label="Bubble at the bottom left, with its resize handle showing">
+          <div class="menubar">Safari<span class="ring"></span></div>
+          <div class="win" style="left:8%;top:14%;width:84%;height:76%"><div class="lines"><i style="width:40%"></i><i></i><i style="width:85%"></i><i style="width:65%"></i></div></div>
+          <div class="bubble" style="left:4%;bottom:6%;width:21%"><div class="face"></div><span class="grip"></span></div>
+          <span class="cursor" style="left:21%;top:86%"></span>
+        </div>
+        <div class="cap"><b>Ready.</b> It starts at the bottom left, medium size, mirrored like a mirror. Hover and the handle appears at the bottom right.</div>
+      </div>
+      <div class="shot">
+        <div class="screen" aria-label="Bubble dragged from the bottom left to the top right">
+          <div class="menubar">Safari<span class="ring"></span></div>
+          <div class="win" style="left:8%;top:14%;width:84%;height:76%"><div class="lines"><i style="width:40%"></i><i></i><i style="width:85%"></i><i style="width:65%"></i></div></div>
+          <div class="ghost" style="left:4%;bottom:6%;width:21%"></div>
+          <div class="trail" style="left:17%;top:72%;width:58%;transform:rotate(-38deg)"></div>
+          <div class="bubble" style="right:5%;top:12%;width:21%"><div class="face"></div></div>
+        </div>
+        <div class="cap"><b>Move.</b> Drag it anywhere, even onto another display. It stays whole and 16 points clear of the edges, the menu bar and the Dock.</div>
+      </div>
+      <div class="shot">
+        <div class="screen" aria-label="Bubble made bigger with its handle, and the right-click menu">
+          <div class="menubar">Safari<span class="ring"></span></div>
+          <div class="win" style="left:8%;top:14%;width:84%;height:76%"><div class="lines"><i style="width:40%"></i><i></i><i style="width:85%"></i><i style="width:65%"></i></div></div>
+          <div class="ghost" style="left:4%;bottom:6%;width:21%"></div>
+          <div class="bubble" style="left:4%;bottom:6%;width:31%"><div class="face"></div><span class="grip"></span></div>
+          <div class="menu" style="left:38%;top:44%"><span>Small</span><span>Medium</span><span class="hl">Large</span><hr><span>Turn camera off</span></div>
+        </div>
+        <div class="cap"><b>Resize.</b> Pull the handle, from 96 points up to half the screen. Or right-click for Small, Medium or Large.</div>
+      </div>
+      <div class="shot">
+        <div class="screen" aria-label="Recording, with the orange tally dot on the bubble">
+          <div class="menubar">Safari<span class="ring live"></span></div>
+          <div class="win" style="left:8%;top:14%;width:84%;height:76%"><div class="lines"><i style="width:40%"></i><i></i><i style="width:85%"></i><i style="width:65%"></i></div></div>
+          <div class="bubble" style="left:4%;bottom:6%;width:21%"><div class="face"></div><span class="tally"></span></div>
+        </div>
+        <div class="cap"><b>Recording.</b> A small orange dot says it's live. You can still move it; each move is saved with its time. The bubble itself isn't in the screen video.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>In the panel</h2>
+    <div class="split">
+      <div class="panel" aria-label="Sources section of the menu bar panel">
+        <div class="sec">Sources <em>MacBook Pro Microphone · Sound · Camera</em></div>
+        <div class="src"><span class="ico">🎙︎</span><div class="t"><b>Microphone</b><span class="pick">MacBook Pro Microphone</span></div><i class="toggle"></i></div>
+        <div class="src"><span class="ico">🔈︎</span><div class="t"><b>System sound</b><span>What's playing on the Mac</span></div><i class="toggle"></i></div>
+        <div class="src new"><span class="ico">◉</span><div class="t"><b>Camera</b><span class="pick">FaceTime HD Camera</span></div><i class="toggle"></i></div>
+        <div class="src"><span class="ico">▯</span><div class="t"><b>iPhone screen</b><span>Off</span></div></div>
+      </div>
+      <div class="list">
+        <div><h3>One switch</h3><p>Camera on shows the bubble and records <code>camera.mov</code>. Off hides it and turns the camera light off. It's saved between launches.</p></div>
+        <div><h3>Which camera</h3><p>Automatic follows macOS, so an iPhone on a stand (Continuity Camera) takes over by itself. Or pick one: your iPhone, its Desk View, the Mac's camera, or a webcam.</p></div>
+        <div><h3>Access</h3><p>The first time, macOS asks for Camera access. Get set up now has a Camera row, marked optional, so you can record without it.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>How it lines up</h2>
+    <div class="diagram">
+      <svg viewBox="0 0 900 290" role="img" aria-label="One camera session feeds the bubble and camera.mov; camera.json lines it up with screen.mov">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#121212"/></marker>
+        </defs>
+        <rect x="10" y="30" width="170" height="90" rx="12" fill="#F4F4F1" stroke="#121212" stroke-width="1.5"/>
+        <text x="26" y="56" font-weight="600">Camera choice</text>
+        <text x="26" y="78" class="small">Automatic or a picked camera</text>
+        <text x="26" y="96" class="small">from CaptureDevices</text>
+
+        <rect x="230" y="30" width="190" height="90" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="246" y="56" font-weight="600">One capture session</text>
+        <text x="246" y="78" class="small">720p frames, host clock</text>
+        <text x="246" y="96" class="small">camera light on only while shown</text>
+
+        <circle cx="530" cy="62" r="34" fill="#EDE9E2" stroke="#1F3FBF" stroke-width="4"/>
+        <text x="580" y="56" font-weight="600">Bubble</text>
+        <text x="580" y="76" class="small">mirrored preview, your ring</text>
+
+        <rect x="680" y="20" width="210" height="62" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="696" y="44" class="mono">camera.mov</text>
+        <text x="696" y="64" class="small">H.264, not mirrored</text>
+
+        <rect x="680" y="100" width="210" height="76" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="696" y="124" class="mono">camera.json</text>
+        <text x="696" y="144" class="small">startOffset: −0.08 s</text>
+        <text x="696" y="162" class="small">placements: where, and when</text>
+
+        <rect x="230" y="170" width="190" height="62" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="246" y="196" font-weight="600">ScreenCaptureKit</text>
+        <text x="246" y="216" class="small">first frame time, host clock</text>
+
+        <rect x="680" y="200" width="210" height="62" rx="12" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="696" y="224" class="mono">screen.mov</text>
+        <text x="696" y="244" class="small">no bubble in it</text>
+
+        <path d="M180 75 H226" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <path d="M420 62 H492" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <path d="M420 100 C560 100 600 60 676 52" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <text x="470" y="118" class="small">while recording</text>
+        <path d="M530 96 C530 130 600 138 676 138" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <text x="540" y="150" class="small">each move</text>
+        <path d="M420 201 C560 201 600 231 676 231" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+        <path d="M420 190 C540 190 600 168 676 162" stroke="#121212" stroke-width="1.5" fill="none" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+        <text x="470" y="180" class="small">start time, for the offset</text>
+        <text x="20" y="276" class="small">The camera starts a moment before the screen, so the offset is usually a little negative. Export uses it to keep your lips in sync.</text>
+      </svg>
+    </div>
+    <div class="notes">
+      <div class="note"><h3>Its own file</h3><p>Not burned into the screen video, the way Screen Studio and Tella work. So the editor can move it, hide it, or go full camera for a section.</p></div>
+      <div class="note"><h3>Places, not pixels</h3><p>Bubble spots are saved as shares of what was recorded, so they land right whether you recorded the screen, a window or an area.</p></div>
+      <div class="note"><h3>Crash safe</h3><p>camera.mov is written in 2 second pieces, like screen.mov, so a crash loses a few seconds at most.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Next</h2>
+    <div class="proposed">
+      <span class="tag">Proposed</span>
+      <p><b>Draw the bubble in exports.</b> Export reads camera.json and draws camera.mov in a ring in the same spot, following your moves, on the edited clock so cuts stay in sync.</p>
+      <p><b>Move it in the editor.</b> Drag the bubble on the preview, hide it for a section, or switch to full camera.</p>
+      <p><b>Rounded square.</b> The bubble shape from Appearance (circle or rounded square).</p>
+    </div>
+  </section>
+</div>

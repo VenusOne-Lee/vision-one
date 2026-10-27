@@ -4,18 +4,24 @@ import Foundation
 public enum AccessKind: String, CaseIterable, Sendable {
     case screen
     case microphone
+    case camera
 
     public var title: String {
         switch self {
         case .screen: return "Screen Recording"
         case .microphone: return "Microphone"
+        case .camera: return "Camera"
         }
     }
+
+    /// Only needed for the camera bubble, so setup is done without it.
+    public var isOptional: Bool { self == .camera }
 
     public var why: String {
         switch self {
         case .screen: return "To record your screen and the sound your Mac plays."
         case .microphone: return "To record your voice for the transcript."
+        case .camera: return "Optional. To show you in the camera bubble."
         }
     }
 }
@@ -46,7 +52,7 @@ public struct AccessChecklist: Equatable, Sendable {
     }
 
     public var allGranted: Bool {
-        AccessKind.allCases.allSatisfy { state(of: $0) == .granted }
+        AccessKind.allCases.filter { !$0.isOptional }.allSatisfy { state(of: $0) == .granted }
     }
 
     /// Screen Recording was turned on after launch: macOS won't hand

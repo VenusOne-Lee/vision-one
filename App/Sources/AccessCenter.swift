@@ -3,7 +3,7 @@ import AVFoundation
 import CoreGraphics
 import VisionOneKit
 
-/// Reads and requests Screen Recording and Microphone access, and keeps
+/// Reads and requests Screen Recording, Microphone and Camera access, and keeps
 /// the checklist fresh while the setup window is open so it notices the
 /// moment access is turned on in System Settings.
 @MainActor
@@ -18,14 +18,16 @@ final class AccessCenter: ObservableObject {
     private init() {
         let screen = Self.currentScreenState()
         checklist = AccessChecklist(
-            states: [.screen: screen, .microphone: Self.currentMicrophoneState()],
+            states: [.screen: screen, .microphone: Self.currentState(for: .audio),
+                     .camera: Self.currentState(for: .video)],
             screenAtLaunch: screen
         )
     }
 
     func refresh() {
         checklist.states[.screen] = Self.currentScreenState()
-        checklist.states[.microphone] = Self.currentMicrophoneState()
+        checklist.states[.microphone] = Self.currentState(for: .audio)
+        checklist.states[.camera] = Self.currentState(for: .video)
     }
 
     /// Checks once a second while the setup window is open.
@@ -57,13 +59,25 @@ final class AccessCenter: ObservableObject {
             AVCaptureDevice.requestAccess(for: .audio) { _ in
                 Task { @MainActor in AccessCenter.shared.refresh() }
             }
+        case (.camera, .notAsked):
+            AVCaptureDevice.requestAccess(for: .video) { _ in
+                Task { @MainActor in
+                    AccessCenter.shared.refresh()
+                    CaptureDevices.shared.refresh()
+                }
+            }
         case (_, .denied):
             openSettings(for: kind)
         }
     }
 
     func openSettings(for kind: AccessKind) {
-        let pane = kind == .screen ? "Privacy_ScreenCapture" : "Privacy_Microphone"
+        let pane: String
+        switch kind {
+        case .screen: pane = "Privacy_ScreenCapture"
+        case .microphone: pane = "Privacy_Microphone"
+        case .camera: pane = "Privacy_Camera"
+        }
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") {
             NSWorkspace.shared.open(url)
         }
@@ -105,8 +119,8 @@ final class AccessCenter: ObservableObject {
         return UserDefaults.standard.bool(forKey: askedScreenKey) ? .denied : .notAsked
     }
 
-    private static func currentMicrophoneState() -> AccessState {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+    private static func currentState(for media: AVMediaType) -> AccessState {
+        switch AVCaptureDevice.authorizationStatus(for: media) {
         case .authorized: return .granted
         case .notDetermined: return .notAsked
         default: return .denied

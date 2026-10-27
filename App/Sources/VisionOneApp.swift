@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Release builds check for updates once a day (Sparkle).
         Updater.shared.start()
+        CameraBubble.shared.start()
         // Finish any transcript a quit left undone.
         Task { @MainActor in Transcriber.shared.catchUp(in: ScreenRecorder.shared.library) }
         // First launch, or access was turned off: show what's missing.

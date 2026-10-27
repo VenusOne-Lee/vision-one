@@ -15,7 +15,8 @@ import Foundation
 ///       sound.json       music and sound effects over the edit
 ///       clips.json       short clips suggested or kept for social apps
 ///       thumbnails/      thumbnail.json and the saved thumbnail images
-///       camera.mov    (next) camera, drawn in the ring bubble at export
+///       camera.mov    camera from the bubble, when the camera was on
+///       camera.json   how camera.mov lines up, and where the bubble sat
 ///       phone.mov     iPhone screen + sound over USB, when one was recorded
 ///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
 public struct Take: Equatable, Sendable {
@@ -29,6 +30,8 @@ public struct Take: Equatable, Sendable {
     public var screenURL: URL { folder.appendingPathComponent("screen.mov") }
     public var eventsURL: URL { folder.appendingPathComponent("events.json") }
     public var cameraURL: URL { folder.appendingPathComponent("camera.mov") }
+    /// How camera.mov lines up with the screen, and where the bubble sat.
+    public var cameraInfoURL: URL { folder.appendingPathComponent("camera.json") }
     public var phoneURL: URL { folder.appendingPathComponent("phone.mov") }
     public var transcriptURL: URL { folder.appendingPathComponent("transcript.json") }
     /// Written by TakeWriter: the audio tracks in screen.mov, in order.

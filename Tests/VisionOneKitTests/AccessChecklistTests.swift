@@ -29,4 +29,11 @@ final class AccessChecklistTests: XCTestCase {
         XCTAssertTrue(list.canRecord)
         XCTAssertFalse(list.allGranted)
     }
+
+    func testCameraIsOptional() {
+        let list = AccessChecklist(states: [.screen: .granted, .microphone: .granted, .camera: .notAsked],
+                                   screenAtLaunch: .granted)
+        XCTAssertTrue(AccessKind.camera.isOptional)
+        XCTAssertTrue(list.allGranted)
+    }
 }
