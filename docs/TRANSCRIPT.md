@@ -48,3 +48,19 @@ Every take gets a `transcript.json` next to `screen.mov`. It is made on the Mac,
 ## Helpers
 
 `Transcript.read(from:)`, `write(to:)` (validates first), `words` (flat and ordered), `word(id:)`, `word(at:)` for highlighting during playback, `words(from:to:)`, and `gaps(minimum:)` for silences, including before the first word and after the last.
+
+## How it's made
+
+1. Recording stops and `screen.mov` is saved.
+2. `Transcriber` (in `App/Sources/Transcriber.swift`) reads the mic track as 16 kHz mono with `AVAssetReader`. Each buffer goes where its timestamp says (`SampleTimeline`), so a mic that starts late or drops out turns into silence and every word time still matches the video. A take recorded without the mic falls back to system sound.
+3. **Parakeet TDT 0.6B v2** runs through [FluidAudio](https://github.com/FluidInference/FluidAudio) (Apache 2.0) on the Neural Engine. It's English only, gives a time for every sub-word token, and does about an hour of audio in 20 to 30 seconds on an M-series Mac. The model (about 0.5 GB) downloads from Hugging Face the first time and is cached after that.
+4. `TranscriptBuilder` (in VisionOneKit) joins the tokens into words, keeps punctuation on the word before it, tidies any overlapping or out-of-order times, and splits sentences into segments.
+5. `transcript.json` is written atomically. Takes queue one at a time, and any take still missing a transcript is picked up on the next launch.
+
+The menu shows one muted line while this happens ("Getting the speech model… 43%", then "Writing the transcript…"). It's never orange, because orange only means a live recording.
+
+### Not yet
+
+- Other languages (Afrikaans and others) through WhisperKit, with a filler-keeping prompt
+- A mic loudness envelope for sharper pause edges
+- Checking how many "um"s and "uh"s Parakeet keeps on real takes
