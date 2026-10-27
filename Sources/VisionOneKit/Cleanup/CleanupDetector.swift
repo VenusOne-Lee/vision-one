@@ -243,16 +243,21 @@ public struct CleanupDetector: Sendable {
 
     // MARK: Helpers
 
-    /// Cuts words from the start of the first through the gap after the
-    /// last, keeping `margin` before the next word. The gap before stays,
-    /// so "I was, um, going" closes up to "I was, going".
+    /// Cuts words from the start of the first through a short gap after
+    /// the last, keeping `margin` before the next word. The gap before
+    /// stays, so "I was, um, going" closes up to "I was, going". A long
+    /// gap after is left to the pause pass, which shortens it instead of
+    /// removing it, so a filler cut never swallows a pause.
     private func wordCut(_ words: [TranscriptWord], _ range: ClosedRange<Int>, reason: CutProposal.Reason) -> CutProposal {
         let first = words[range.lowerBound], last = words[range.upperBound]
         let start = first.start
         var end = last.end
         if range.upperBound + 1 < words.count {
             let next = words[range.upperBound + 1].start
-            end = max(last.end, next - min(settings.margin, next - last.end))
+            let gap = next - last.end
+            if gap < settings.minPause {
+                end = max(last.end, next - min(settings.margin, gap))
+            }
         }
         return CutProposal(start: start, end: end, reason: reason, wordIDs: words[range].map(\.id))
     }

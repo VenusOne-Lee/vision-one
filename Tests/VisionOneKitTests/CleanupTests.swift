@@ -71,10 +71,16 @@ final class FillerDetectionTests: XCTestCase {
     }
 
     func testSouthAfricanFillers() {
-        let w = words([("Ja,", 0, 0.2), ("so", 0.25, 0.35), ("this", 0.4, 0.6), ("is,", 0.62, 0.8),
+        let w = words([("Eish,", 0, 0.2), ("so", 0.25, 0.35), ("this", 0.4, 0.6), ("is,", 0.62, 0.8),
                        ("yohhh,", 0.9, 1.2), ("quick.", 1.3, 1.6)])
         let cuts = detector.fillers(in: w)
         XCTAssertEqual(cuts.map(\.wordIDs), [[0], [4]])
+    }
+
+    func testYesWordsStay() {
+        let w = words([("Ja,", 0, 0.2), ("it", 0.5, 0.6), ("works.", 0.65, 1.0), ("Yeah,", 1.4, 1.6),
+                       ("cool.", 1.7, 2.0), ("Yah.", 2.4, 2.6)])
+        XCTAssertTrue(detector.fillers(in: w).isEmpty)
     }
 
     func testHeyOnlyAsATag() {
@@ -210,13 +216,41 @@ final class CleanupProposalsTests: XCTestCase {
         XCTAssertEqual(list.removedSpans, [], "proposals don't change the video until accepted")
     }
 
+    /// Lee's first real take: "Um yeah. Yeah, I'm gonna go to the next
+    /// step." with 4.5 s and 8.6 s silences. A filler cut once swallowed
+    /// both silences and the words between, proposing 26.6 s of 27.8 s.
+    func testFillerNeverSwallowsAPause() {
+        let w = words([
+            ("Um", 8.24, 8.6), ("yeah.", 9.3, 9.68), ("Yeah,", 14.16, 14.32), ("I'm", 22.96, 23.1),
+            ("gonna", 23.15, 23.4), ("go", 23.45, 23.6), ("to", 23.65, 23.75), ("the", 23.8, 23.9),
+            ("next", 23.95, 24.2), ("step.", 24.25, 25.5),
+        ])
+        let cuts = CleanupDetector().proposals(for: w, duration: 27.8)
+        XCTAssertEqual(cuts.map(\.reason), [.deadAir, .filler, .pause, .pause, .deadAir])
+        assertCut(cuts[1], 8.24, 9.25, .filler, [0])
+        assertCut(cuts[2], 9.88, 13.96, .pause)
+        assertCut(cuts[3], 14.52, 22.76, .pause)
+        // Every word but "Um" is kept.
+        for word in w.dropFirst() {
+            XCTAssertFalse(cuts.contains { $0.start < word.end && word.start < $0.end }, word.text)
+        }
+    }
+
+    func testFillerBeforeALongPauseKeepsThePause() {
+        let w = words([("Then,", 0, 0.3), ("um,", 0.5, 0.8), ("done.", 3.0, 3.4)])
+        let cuts = CleanupDetector().proposals(for: w)
+        XCTAssertEqual(cuts.map(\.reason), [.filler, .pause])
+        assertCut(cuts[0], 0.5, 0.8, .filler, [1])
+        assertCut(cuts[1], 1.0, 2.8, .pause)
+    }
+
     func testWholeTake() {
         let w = words([
-            ("Ja,", 0.8, 1.0), ("um,", 1.3, 1.6), ("so", 1.8, 1.9), ("this", 1.95, 2.1), ("is", 2.15, 2.3),
+            ("Eish,", 0.8, 1.0), ("um,", 1.3, 1.6), ("so", 1.8, 1.9), ("this", 1.95, 2.1), ("is", 2.15, 2.3),
             ("the", 2.35, 2.45), ("the", 2.5, 2.6), ("recorder.", 2.65, 3.2), ("Let's", 5.0, 5.3), ("go.", 5.35, 5.6),
         ])
         let cuts = CleanupDetector().proposals(for: w, duration: 7)
-        // Dead air at the start, "Ja," + "um," (they touch), "the",
+        // Dead air at the start, "Eish," + "um," (they touch), "the",
         // the pause after "recorder.", dead air at the end.
         XCTAssertEqual(cuts.map(\.reason), [.deadAir, .filler, .repeated, .pause, .deadAir])
         assertCut(cuts[0], 0, 0.55, .deadAir)

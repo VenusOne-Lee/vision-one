@@ -210,6 +210,7 @@ struct ErrorAlert: View {
 /// sound. Changes are saved for the next take.
 struct CapturePicker: View {
     @EnvironmentObject private var recorder: ScreenRecorder
+    @ObservedObject private var microphones = Microphones.shared
     @State private var windows: [WindowCandidate] = []
 
     var body: some View {
@@ -233,6 +234,14 @@ struct CapturePicker: View {
             .controlSize(.mini)
             .tint(Theme.text)
             .font(.system(size: 12))
+
+            if recorder.choice.includeMicrophone, let mic = microphones.resolved(for: recorder.choice) {
+                Text("Mic: \(mic.name)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
     }
 

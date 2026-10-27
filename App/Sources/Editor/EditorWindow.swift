@@ -150,6 +150,7 @@ struct EditorView: View {
                     .overlay { CaptionLayer(model: model) }
                     .background(Theme.text)
                     .onTapGesture { model.togglePlay() }
+                    .overlay { EffectsLayer(model: model, effects: model.effects) }
                     .overlay {
                         // The selected clip's window, draggable to reframe.
                         if showTranscript, sidePane == .clips, let clip = clips.selected, clip.format != .landscape {
@@ -159,6 +160,7 @@ struct EditorView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 EditorTimeline(model: model)
+                EffectsLane(model: model, effects: model.effects)
                 if showSound { SoundLane(model: model) }
                 TransportBar(model: model)
                 if showSound { SoundPanel(model: model) }

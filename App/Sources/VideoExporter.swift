@@ -21,6 +21,7 @@ struct VideoExporter {
         case plan(ExportPlanError)
         case reader(Error?)
         case writer(Error?)
+        case blurs(Error)
 
         var errorDescription: String? {
             switch self {
@@ -28,6 +29,7 @@ struct VideoExporter {
             case let .plan(error): return ExportPhase.message(for: error)
             case let .reader(error): return "Couldn't read the recording. \(error?.localizedDescription ?? "")"
             case let .writer(error): return "Couldn't write the video. \(error?.localizedDescription ?? "")"
+            case let .blurs(error): return "Couldn't read this take's blurs, so it wasn't exported. Open it in the editor to check them. \(error.localizedDescription)"
             }
         }
     }
@@ -43,6 +45,8 @@ struct VideoExporter {
     var overlays: [ExportOverlay] = []
     /// Brand intro and outro around the edited video; nil for none.
     var cards: CardMaker?
+    /// Draw the take's zooms (zooms.json) and blurs (blurs.json).
+    var appliesEffects = true
     /// Set for a short clip: renders at the clip format's size, cut out
     /// of the screen with `framing`, instead of following the preset.
     var clip: (format: ClipFormat, framing: ClipFraming)?
@@ -96,10 +100,11 @@ struct VideoExporter {
             try Task.checkCancellation()
         }
 
+        let effects = try appliesEffects ? Self.effects(for: take, timeline: timeline) : nil
         let url = outputURL ?? take.exportURL(for: preset)
         var bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
                                      sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     settings: settings, crop: crop, to: url, progress: progress)
+                                     effects: effects, settings: settings, crop: crop, to: url, progress: progress)
 
         // A single-pass encoder only roughly meets its average bitrate.
         // If a size-limited export overshoots, go again a little lower.
@@ -108,16 +113,32 @@ struct VideoExporter {
             settings.videoBitRate = Int(Double(settings.videoBitRate) * scale)
             bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
                                      sourceVideo: sourceVideo, sourceAudio: sourceAudio,
-                                     settings: settings, crop: crop, to: url, progress: progress)
+                                     effects: effects, settings: settings, crop: crop, to: url, progress: progress)
         }
         return (url, bytes)
     }
 
     // MARK: - Composition
 
+    /// Zooms and blurs for this export, or nil when the take has none.
+    static func effects(for take: Take, timeline: ExportTimeline) throws -> FrameEffects? {
+        // A blur list that can't be read stops the export rather than
+        // letting through what it was hiding.
+        let blurs: BlurList
+        do {
+            blurs = try BlurList.load(from: take.blursURL)
+        } catch {
+            throw Failure.blurs(error)
+        }
+        let zooms = (try? ZoomList.load(from: take.zoomsURL)) ?? ZoomList()
+        let cursor = (try? EventLog.read(from: take.eventsURL))?.cursorPath ?? []
+        let effects = FrameEffects.export(zooms: zooms, blurs: blurs, cursor: cursor, timeline: timeline)
+        return effects.isEmpty ? nil : effects
+    }
+
     private func render(timeline: ExportTimeline, plan: TemplatePlan, cards: BrandCardSet,
                         sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
-                        settings: ExportSettings, crop: NormalisedRect?, to url: URL,
+                        effects: FrameEffects?, settings: ExportSettings, crop: NormalisedRect?, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
@@ -173,7 +194,7 @@ struct VideoExporter {
         }
         instructions.append(FrameInstruction(timeRange: CMTimeRange(start: videoStart, end: videoEnd),
                                              trackID: video.trackID, overlays: overlays,
-                                             overlayTimeOffset: videoStart.seconds,
+                                             overlayTimeOffset: videoStart.seconds, effects: effects,
                                              crop: cropAt,
                                              // "Fit" clips sit on the canvas, ink on paper.
                                              background: crop == .full

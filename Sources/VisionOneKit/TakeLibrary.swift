@@ -8,6 +8,8 @@ import Foundation
 ///       events.json   cursor moves and clicks, timed from the first frame
 ///       transcript.json  word-timed transcript of the mic track
 ///       edits.json       cuts made in the editor; screen.mov is never changed
+///       zooms.json       zooms, proposed from clicks or added by hand
+///       blurs.json       blurs over secrets found on screen or drawn by hand
 ///       sound.json       music and sound effects over the edit
 ///       clips.json       short clips suggested or kept for social apps
 ///       thumbnails/      thumbnail.json and the saved thumbnail images

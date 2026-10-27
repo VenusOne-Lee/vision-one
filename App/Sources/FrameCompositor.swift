@@ -19,6 +19,8 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     /// Subtracted from the export time before overlays draw, so captions
     /// keep the edited video's clock after an intro.
     let overlayTimeOffset: Double
+    /// Blurs and zooms, applied to the screen frame before it's scaled.
+    let effects: FrameEffects?
     /// Set for an intro or outro; the recording isn't read then.
     let card: (any CardSource)?
     /// The part of the frame to show, normalized with origin top left, at
@@ -29,11 +31,13 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     let background: CIColor
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], overlayTimeOffset: Double = 0,
+         effects: FrameEffects? = nil,
          crop: (@Sendable (Double) -> NormalisedRect?)? = nil, background: CIColor = .black) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
         self.overlayTimeOffset = overlayTimeOffset
+        self.effects = effects
         self.crop = crop
         self.background = background
         card = nil
@@ -45,6 +49,7 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         trackID = kCMPersistentTrackID_Invalid
         overlays = []
         overlayTimeOffset = 0
+        effects = nil
         crop = nil
         background = .white
         self.card = card
@@ -52,9 +57,11 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     }
 }
 
-/// Scales each screen frame to the export size with Core Image (on the
-/// GPU), then lets overlays draw on top with Core Graphics. The camera
-/// bubble, burned-in captions and click zooms all plug in here.
+/// Per frame: secret blurs, then the zoom viewport (`FrameEffects`), then
+/// scaled to the export size with Core Image (on the GPU), then overlays
+/// drawn on top with Core Graphics (captions, the camera bubble). Blurring
+/// first means a secret can't slip out through a zoom or a clip's crop.
+/// The editor's preview plays through this compositor too.
 final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
@@ -93,6 +100,12 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         }
 
         var image = CIImage(cvPixelBuffer: source)
+        if let effects = instruction.effects, !effects.isEmpty {
+            // Effects run on the edited video's clock, like overlays.
+            image = FrameEffectRenderer.apply(effects, to: image,
+                                              atOutput: request.compositionTime.seconds - instruction.overlayTimeOffset)
+        }
+        // A clip's 9:16 or 1:1 window, inside whatever the zoom showed.
         if let rect = instruction.crop?(request.compositionTime.seconds - instruction.overlayTimeOffset) {
             image = Self.crop(image, to: rect)
         }
