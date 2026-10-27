@@ -13,3 +13,37 @@ extension TakeLibrary {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedDescending }
     }
 }
+
+extension Take {
+    /// When the take was recorded, read back from its name ("Vision One
+    /// 2026-10-27 at 10.53.12", maybe with " (2)"). Nil for a folder
+    /// named some other way.
+    public func recordedAt(timeZone: TimeZone = .current) -> Date? {
+        let prefix = "Vision One "
+        guard name.hasPrefix(prefix) else { return nil }
+        let stamp = name.dropFirst(prefix.count).prefix("yyyy-MM-dd at HH.mm.ss".count)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        return formatter.date(from: String(stamp))
+    }
+
+    /// "Today at 14:41", "Yesterday at 09:05" or "27 Oct at 14:41", for
+    /// the last take in the menu bar panel. Falls back to the folder name.
+    public func shortLabel(now: Date = Date(), calendar: Calendar = .current) -> String {
+        guard let date = recordedAt(timeZone: calendar.timeZone) else { return name }
+        let time = DateFormatter()
+        time.locale = Locale(identifier: "en_GB")
+        time.timeZone = calendar.timeZone
+        time.dateFormat = "HH:mm"
+        let clock = time.string(from: date)
+        if calendar.isDate(date, inSameDayAs: now) { return "Today at \(clock)" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "Yesterday at \(clock)"
+        }
+        time.dateFormat = "d MMM"
+        return "\(time.string(from: date)) at \(clock)"
+    }
+}

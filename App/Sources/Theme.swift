@@ -19,6 +19,12 @@ enum Theme {
         static let lg: CGFloat = 24
     }
 
+    /// The menu bar panel: wide enough that no label wraps.
+    enum Panel {
+        static let width: CGFloat = 320
+        static let inset: CGFloat = 14
+    }
+
     enum Radius {
         static let sm: CGFloat = 4
         static let md: CGFloat = 8

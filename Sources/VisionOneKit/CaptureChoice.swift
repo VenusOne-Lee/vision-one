@@ -103,6 +103,9 @@ public struct CaptureChoice: Codable, Equatable, Sendable {
     /// The dragged area on `displayID`, for Area mode.
     public var area: CaptureRect?
     public var includeMicrophone: Bool
+    /// The mic picked in the panel (AVCaptureDevice.uniqueID); nil picks
+    /// one for you (see MicrophonePicker).
+    public var microphoneID: String?
     public var includeSystemSound: Bool
 
     public init(
@@ -111,6 +114,7 @@ public struct CaptureChoice: Codable, Equatable, Sendable {
         windowID: UInt32? = nil,
         area: CaptureRect? = nil,
         includeMicrophone: Bool = true,
+        microphoneID: String? = nil,
         includeSystemSound: Bool = true
     ) {
         self.mode = mode
@@ -118,6 +122,7 @@ public struct CaptureChoice: Codable, Equatable, Sendable {
         self.windowID = windowID
         self.area = area
         self.includeMicrophone = includeMicrophone
+        self.microphoneID = microphoneID
         self.includeSystemSound = includeSystemSound
     }
 
