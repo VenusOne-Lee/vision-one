@@ -7,6 +7,7 @@ import Foundation
 ///       screen.mov    video + system sound track + mic track (fragmented)
 ///       events.json   cursor moves and clicks, timed from the first frame
 ///       camera.mov    (next) camera, drawn in the ring bubble at export
+///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
 public struct Take: Equatable, Sendable {
     public let folder: URL
 
@@ -18,6 +19,12 @@ public struct Take: Equatable, Sendable {
     public var screenURL: URL { folder.appendingPathComponent("screen.mov") }
     public var eventsURL: URL { folder.appendingPathComponent("events.json") }
     public var cameraURL: URL { folder.appendingPathComponent("camera.mov") }
+
+    /// Exports sit next to the recording, named after the take, so they
+    /// read well once dragged out of the folder.
+    public func exportURL(for preset: ExportPreset) -> URL {
+        folder.appendingPathComponent("\(name)\(preset.fileSuffix).mp4")
+    }
 }
 
 /// Decides where takes are saved and what they are called.

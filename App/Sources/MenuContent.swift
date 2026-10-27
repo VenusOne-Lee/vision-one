@@ -6,6 +6,7 @@ import VisionOneKit
 /// orange is the record dot and, while live, the button border.
 struct MenuContent: View {
     @EnvironmentObject private var recorder: ScreenRecorder
+    @ObservedObject private var exports = ExportController.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
@@ -35,6 +36,10 @@ struct MenuContent: View {
 
             if case let .failed(message) = recorder.phase {
                 ErrorAlert(message: message) { recorder.openSetup() }
+            }
+
+            if let take = recorder.lastTake, !recorder.phase.isLive {
+                ExportRow(take: take, exports: exports)
             }
 
             Divider().overlay(Theme.line)
@@ -119,5 +124,65 @@ struct ErrorAlert: View {
         .padding(Theme.Space.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.errorSoft, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
+    }
+}
+
+/// Exports the last take. The editor will call ExportController with the
+/// kept spans; until then this exports the whole take.
+struct ExportRow: View {
+    let take: Take
+    @ObservedObject var exports: ExportController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.sm) {
+            HStack {
+                Menu("Export") {
+                    ForEach(ExportPreset.allCases) { preset in
+                        Button("\(preset.title) · \(preset.detail)") {
+                            exports.export(take, preset: preset)
+                        }
+                    }
+                }
+                .menuStyle(.button)
+                .buttonStyle(PillButtonStyle(kind: .primary))
+                .fixedSize()
+                .disabled(exports.phase.isBusy)
+
+                Spacer()
+
+                switch exports.phase {
+                case .exporting:
+                    Button("Cancel") { exports.cancel() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.textMuted)
+                case .done:
+                    Button("Show") { exports.revealExport() }
+                        .buttonStyle(PillButtonStyle(kind: .secondary))
+                default:
+                    EmptyView()
+                }
+            }
+
+            if case let .exporting(_, progress) = exports.phase {
+                // Ink fills from dashed to solid; no orange, no green.
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .tint(Theme.text)
+            }
+
+            if !exports.phase.status.isEmpty {
+                Text(exports.phase.status)
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(exportFailed ? Theme.error : Theme.textMuted)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var exportFailed: Bool {
+        if case .failed = exports.phase { return true }
+        return false
     }
 }

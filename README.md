@@ -16,7 +16,7 @@ Made for South African builders, as the sibling of [Version One](https://version
 - [ ] Delete words to cut video
 - [ ] Remove fillers and long pauses
 - [ ] Captions
-- [ ] Export MP4 (and WhatsApp size, under 16 MB)
+- [x] Export MP4: Original, 1080p, 720p and WhatsApp size (under 16 MB)
 
 ## Build it
 
@@ -43,8 +43,9 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | Path | What |
 | --- | --- |
 | `App/Sources` | The Mac app: menu bar, recorder, theme |
-| `Sources/VisionOneKit` | Testable logic: recording state, take folders, cursor log, timecodes |
+| `Sources/VisionOneKit` | Testable logic: recording state, take folders, cursor log, timecodes, export plans |
 | `docs/RECORDER.md` | How recording works, and what a take folder holds |
+| `docs/EXPORT.md` | How export combines the tracks, and the presets |
 | `docs/DESIGN.md` | Design system: tokens, type, components, do's and don'ts |
 | `project.yml` | XcodeGen project (the `.xcodeproj` isn't committed) |
 
