@@ -62,6 +62,8 @@ public final class VisionOneMCP: Sendable {
             case "export_video": return try await exportVideo(args, client: client)
             case "share_video": return try await shareVideo(args, client: client)
             case "rename_take": return try renameTake(args)
+            case "list_demos": return await listDemos(args)
+            case "rerecord_demo": return try await rerecordDemo(args, client: client)
             default: return .failed("Vision One has no tool called \(name).")
             }
         } catch let failure as Failure {
@@ -717,6 +719,55 @@ public final class VisionOneMCP: Sendable {
     // MARK: Formatting
 
     /// "1:05".
+    // MARK: Autopilot demos
+
+    func listDemos(_ args: [String: JSONValue]) async -> MCPToolResult {
+        var demos = await host.demos()
+        if let search = args["search"]?.stringValue?.trimmingCharacters(in: .whitespaces), !search.isEmpty {
+            demos = demos.filter {
+                $0.demo.name.localizedCaseInsensitiveContains(search)
+                    || $0.demo.app.displayName.localizedCaseInsensitiveContains(search)
+            }
+        }
+        let list: [JSONValue] = demos.map { file in
+            var item: [String: JSONValue] = [
+                "name": .string(file.demo.name),
+                "app": .string(file.demo.app.displayName),
+                "steps": .number(Double(file.demo.steps.count)),
+                "about_seconds": .number(Self.rounded(file.demo.estimatedSeconds)),
+                "rerecords_on_release": .bool(file.demo.rerecordOnRelease),
+            ]
+            if let repo = file.demo.repo { item["repo"] = .string(repo) }
+            return .object(item)
+        }
+        let text = demos.isEmpty
+            ? "No demos yet. The user makes them in Vision One (Autopilot), or adds .visionone/demos/*.json to a linked repo."
+            : "\(demos.count) \(demos.count == 1 ? "demo" : "demos")."
+        return .done(text, ["demos": .array(list)])
+    }
+
+    func rerecordDemo(_ args: [String: JSONValue], client: MCPClient) async throws -> MCPToolResult {
+        guard let name = args["demo"]?.stringValue?.trimmingCharacters(in: .whitespaces), !name.isEmpty else {
+            throw Failure("Say which demo. list_demos shows them.")
+        }
+        let release = args["release"]?.stringValue?.trimmingCharacters(in: .whitespaces)
+        guard let id = await host.rerecordDemo(name, release: (release?.isEmpty == false) ? release : nil,
+                                               requestedBy: client.displayName) else {
+            let names = await host.demos().map(\.demo.name)
+            throw Failure("There's no demo called “\(name)”."
+                + (names.isEmpty ? "" : " Demos: " + names.joined(separator: ", ") + "."))
+        }
+        if let desk, let taskID = await deskTask(for: nil, title: "Re-record “\(name)”", client: client) {
+            await desk.attach(jobID: id, to: taskID)
+        }
+        // A run takes a minute or more; answer quickly with the id.
+        guard let job = await settle(id, within: min(patience, 5)) else {
+            return .done("Autopilot is starting “\(name)”. Call wait_for_task to follow it.",
+                         ["task_id": .string(id.uuidString), "state": "running"])
+        }
+        return describe(job)
+    }
+
     /// The same folder, even when one path goes through /var and the other /private/var.
     static func same(_ a: URL?, _ b: URL) -> Bool {
         guard let a else { return false }
