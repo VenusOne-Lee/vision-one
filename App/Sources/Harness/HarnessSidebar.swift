@@ -51,7 +51,8 @@ struct HarnessSidebar: View {
                             }
                             ForEach(tasks) { task in
                                 TaskRow(title: task.title, status: model.snapshot.status(of: task),
-                                        line: model.snapshot.statusLine(of: task),
+                                        line: model.snapshot.statusLine(of: task)
+                                            + (task.requestedBy.map { " · from \($0)" } ?? ""),
                                         isSelected: model.page.taskID == task.id)
                                     .onTapGesture { model.open(task.id) }
                                     .draggable(task.id.uuidString)
