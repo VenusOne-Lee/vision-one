@@ -277,7 +277,7 @@ final class VersionPreview: ObservableObject {
             let edits = (try? EditList.load(from: editsURL, sourceDuration: sourceDuration))
                 ?? EditList(sourceDuration: sourceDuration)
             let spans = edits.keptSpans
-            let composition = try await PreviewComposition.make(from: asset, keeping: spans)
+            let composition = try await PreviewComposition.make(from: asset, keeping: spans, take: take)
             let timeline = ExportTimeline(keep: spans.map { $0.start..<$0.end }, sourceDuration: sourceDuration, frameRate: 0)
             let words = (try? Transcript.read(from: take.transcriptURL))?.words.map(\.span) ?? []
             let sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
