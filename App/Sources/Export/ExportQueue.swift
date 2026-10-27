@@ -6,16 +6,23 @@ import VisionOneKit
 /// `ExportController` runs one export at a time, so the next preset only
 /// starts once the controller has left `.exporting`. Progress for each
 /// preset comes from the controller's phase, kept in an `ExportBatch`.
+/// There's one for the app, so closing the export sheet doesn't stop
+/// the batch, and opening it again shows where it's got to.
 @MainActor
 final class ExportQueue: ObservableObject {
+    static let shared = ExportQueue()
+
     @Published private(set) var batch: ExportBatch?
+    /// The take the batch is for.
+    private(set) var take: Take?
+    /// When the batch started, for the time-left guess.
+    private(set) var startedAt: Date?
 
     private let controller: ExportController
-    private var take: Take?
     private var keep: [Range<Double>]?
     private var watching: AnyCancellable?
 
-    init() {
+    private init() {
         let controller = ExportController.shared
         self.controller = controller
         // Phases arrive on the next turn of the main queue, after the
@@ -36,6 +43,7 @@ final class ExportQueue: ObservableObject {
         guard !isRunning, !presets.isEmpty else { return }
         self.take = take
         self.keep = keep
+        startedAt = Date()
         batch = ExportBatch(presets)
         startNext()
     }
@@ -51,6 +59,12 @@ final class ExportQueue: ObservableObject {
     func reset() {
         guard !isRunning else { return }
         batch = nil
+        startedAt = nil
+    }
+
+    /// The batch, when it's for `take`.
+    func batch(for take: Take) -> ExportBatch? {
+        self.take?.folder == take.folder ? batch : nil
     }
 
     func revealExports() {

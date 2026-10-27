@@ -46,11 +46,14 @@ struct AppCommands: Commands {
             .disabled(recorder.phase.isBusy)
             Button("Show Library") { EditorWindowController.shared.showLibrary() }
                 .keyboardShortcut(ShortcutMap.library)
+            Button("Copy a Style…") { CopyStyleWindowController.shared.show() }
         }
         CommandGroup(after: .appSettings) {
-            Button("Brand…") { BrandWindowController.shared.show() }
-            Button("AI Settings…") { AISettingsWindowController.shared.show() }
-            Button("Access…") { SetupWindowController.shared.show() }
+            Button("Settings…") { SettingsWindowController.shared.show() }
+                .keyboardShortcut(",", modifiers: .command)
+            Button("Brand…") { SettingsWindowController.shared.show(.brand) }
+            Button("AI…") { SettingsWindowController.shared.show(.ai) }
+            Button("Access…") { SettingsWindowController.shared.show(.access) }
         }
         CommandGroup(after: .toolbar) {
             Button("Bigger Text") { TextSize.step(1) }

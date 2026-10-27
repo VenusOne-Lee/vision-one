@@ -339,29 +339,12 @@ private struct CardPreview: NSViewRepresentable {
     }
 }
 
-/// Owns the Brand window, made on demand like the setup window.
+/// Brand lives in the Settings window; this keeps the old entry point.
 @MainActor
 final class BrandWindowController: NSObject {
     static let shared = BrandWindowController()
-    private var window: NSWindow?
 
     func show() {
-        if window == nil {
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 880, height: 560),
-                styleMask: [.titled, .closable, .resizable, .miniaturizable],
-                backing: .buffered,
-                defer: false
-            )
-            window.title = "Brand"
-            window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: BrandSettingsView(store: BrandStore.shared))
-            window.appearance = NSAppearance(named: .aqua)
-            window.setFrameAutosaveName("VisionOneBrandWindow")
-            window.center()
-            self.window = window
-        }
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
+        SettingsWindowController.shared.show(.brand)
     }
 }
