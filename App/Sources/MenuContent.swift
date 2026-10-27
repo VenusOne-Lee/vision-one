@@ -7,6 +7,7 @@ import VisionOneKit
 struct MenuContent: View {
     @EnvironmentObject private var recorder: ScreenRecorder
     @ObservedObject private var exports = ExportController.shared
+    @ObservedObject private var transcriber = Transcriber.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
@@ -36,6 +37,10 @@ struct MenuContent: View {
 
             if case let .failed(message) = recorder.phase {
                 ErrorAlert(message: message) { recorder.openSetup() }
+            }
+
+            if let text = transcriber.phase.statusText {
+                TranscriptStatus(text: text, phase: transcriber.phase) { transcriber.retry() }
             }
 
             if let take = recorder.lastTake, !recorder.phase.isLive {
@@ -105,6 +110,38 @@ struct RecordButton: View {
         .buttonStyle(.plain)
         .disabled(phase.isBusy)
         .accessibilityLabel(phase.isLive ? "Stop recording" : "Start recording")
+    }
+}
+
+/// One muted line while the transcript is being written. Never orange:
+/// only a live recording is orange.
+struct TranscriptStatus: View {
+    let text: String
+    let phase: TranscriptionPhase
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Space.sm) {
+            if phase.isWorking {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(Theme.text)
+            }
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundStyle(isFailed ? Theme.error : Theme.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            if isFailed {
+                Spacer(minLength: 0)
+                Button("Try again", action: retry)
+                    .buttonStyle(PillButtonStyle(kind: .secondary))
+            }
+        }
+    }
+
+    private var isFailed: Bool {
+        if case .failed = phase { return true }
+        return false
     }
 }
 
