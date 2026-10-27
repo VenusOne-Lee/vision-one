@@ -47,7 +47,7 @@ struct SetupView: View {
         .fixedSize(horizontal: false, vertical: true)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light) // light only, always
+        .themed()
         .onAppear { index = flow.advanced(from: index, checklist: access.checklist) }
         .onChange(of: access.checklist) { _, checklist in
             autoAdvance(checklist)
@@ -284,7 +284,6 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
             )
             window.title = "Vision One"
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             window.delegate = self
             self.window = window
             window.contentViewController = makeContent()

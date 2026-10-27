@@ -42,7 +42,7 @@ struct ProjectSettingsSheet: View {
         })
         .frame(width: 520, height: 620)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 
     // MARK: Fields

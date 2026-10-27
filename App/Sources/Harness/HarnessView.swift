@@ -33,7 +33,7 @@ struct HarnessView: View {
         .frame(minWidth: 760, minHeight: 520)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light) // light only, always
+        .themed()
         .background(shortcuts)
         .onReceive(recorder.$lastTake) { _ in model.refreshTakes() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in

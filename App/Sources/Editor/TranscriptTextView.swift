@@ -132,6 +132,14 @@ struct TranscriptTextView: NSViewRepresentable {
             model.decide(id, accept: accept)
         }
 
+        /// Opens the Redo card for the sentence holding the word at `index`.
+        func redoSentence(atCharacter index: Int) {
+            guard let word = word(atCharacter: index), word < model.wordSpans.count else { return }
+            let span = model.wordSpans[word]
+            let sentences = model.transcript?.sentences(keeping: model.edits) ?? []
+            model.redoTarget = SpokenEdit.sentence(at: (span.start + span.end) / 2, in: sentences, lookBack: 0)
+        }
+
         func clicked(character index: Int) {
             guard let word = word(atCharacter: index), word < model.wordSpans.count else { return }
             model.seek(toSource: model.wordSpans[word].start)
@@ -302,9 +310,20 @@ final class TranscriptNSTextView: NSTextView {
         let item = NSMenuItem(title: "Cut from Video / Restore", action: #selector(cutFromMenu), keyEquivalent: "")
         item.target = self
         menu.addItem(item)
+        if let index = characterIndex(at: event) {
+            let redo = NSMenuItem(title: "Redo This Sentence…", action: #selector(redoFromMenu(_:)), keyEquivalent: "")
+            redo.representedObject = index
+            redo.target = self
+            menu.addItem(redo)
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Copy", action: #selector(copy(_:)), keyEquivalent: "")
         return menu
+    }
+
+    @objc private func redoFromMenu(_ sender: NSMenuItem) {
+        guard let index = sender.representedObject as? Int else { return }
+        coordinator?.redoSentence(atCharacter: index)
     }
 
     @objc private func cutFromMenu() {

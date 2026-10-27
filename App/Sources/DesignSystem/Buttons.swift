@@ -46,7 +46,7 @@ private struct PillButton: View {
 
     private var foreground: Color {
         switch kind {
-        case .primary: Theme.paper
+        case .primary: Theme.onButton
         case .secondary: Theme.text
         case .quiet: hovering ? Theme.text : Theme.textMuted
         case .destructive: Theme.error
@@ -55,7 +55,8 @@ private struct PillButton: View {
 
     private var fill: Color {
         switch kind {
-        case .primary: Theme.text
+        // Ink, or the ring colour with Bold buttons.
+        case .primary: Theme.button
         case .secondary, .destructive: hovering ? Theme.canvas : Theme.paper
         case .quiet: hovering ? Theme.canvas : .clear
         }
