@@ -98,6 +98,12 @@ struct NewTaskView: View {
     @ObservedObject var model: HarnessModel
     @ObservedObject private var recorder = ScreenRecorder.shared
     @ObservedObject private var hotKey = GlobalHotKey.shared
+    @ObservedObject private var ai = AIServices.shared
+    /// "Clips from my last video" was picked with nothing recorded yet.
+    @State private var clipsNeededTake = false
+    /// nil until the ladder has been checked.
+    @State private var anyRungReady: Bool?
+    @AppStorage("harness.aiNoticeDismissed") private var aiNoticeDismissed = false
 
     var body: some View {
         VStack(spacing: Theme.Space.lg) {
@@ -114,13 +120,27 @@ struct NewTaskView: View {
                               "Write this week's update"]) { chip in
                 start(chip)
             }
-            Composer(model: model, placeholder: "Describe a video, or press record")
-                .frame(maxWidth: 640)
+            if model.takes.isEmpty, clipsNeededTake {
+                FirstTakeHint(neededTake: true)
+            }
+            VStack(spacing: Theme.Space.sm) {
+                if AISetupNotice.isShown(anyRungReady: anyRungReady, dismissed: aiNoticeDismissed) {
+                    AISetupNoticeRow { aiNoticeDismissed = true }
+                }
+                Composer(model: model, placeholder: "Describe a video, or press record")
+                    .frame(maxWidth: 640)
+            }
             Spacer(minLength: Theme.Space.xl)
         }
         .padding(.horizontal, Theme.Space.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.canvas)
+        .onChange(of: model.takes.isEmpty) { _, empty in if !empty { clipsNeededTake = false } }
+        .task(id: AIReadinessKey(ai)) {
+            // Not checked again once closed: the notice never comes back.
+            guard !aiNoticeDismissed else { return }
+            anyRungReady = await ai.ladder().provider(for: .custom) != nil
+        }
     }
 
     /// Nothing recorded yet (the first run lands here): one clear way in.
@@ -148,7 +168,10 @@ struct NewTaskView: View {
     private func start(_ chip: String) {
         switch chip {
         case "Clips from my last video":
-            guard let newest = model.takes.first else { return }
+            guard let newest = model.takes.first else {
+                clipsNeededTake = true
+                return
+            }
             model.open(newest)
             model.send("/clips 3")
         case "Write this week's update":

@@ -15,6 +15,8 @@ struct HarnessView: View {
     @AppStorage("harness.sidebarWidth") private var sidebarWidth = 248.0
     /// A component filling the window (⤢), with the task rail beside it.
     @State private var fullPanel: PanelKind?
+    /// Editor or Sound picked with no takes yet: their empty state shows.
+    @State private var noTakesMode: HarnessMode?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +41,11 @@ struct HarnessView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             model.refreshTakes()
         }
-        .onChange(of: model.page) { _, _ in fullPanel = nil }
+        .onChange(of: model.page) { _, _ in
+            fullPanel = nil
+            noTakesMode = nil
+        }
+        .onChange(of: model.takes.isEmpty) { _, empty in if !empty { noTakesMode = nil } }
         .alert("Something went wrong", isPresented: Binding(get: { model.problem != nil },
                                                            set: { if !$0 { model.problem = nil } })) {
             Button("OK") { model.problem = nil }
@@ -107,10 +113,15 @@ struct HarnessView: View {
     }
 
     /// Editor and Sound need a take: with none open, they open the newest.
+    /// With no takes at all, they say so and offer to record one.
     private var modeBinding: Binding<HarnessMode> {
-        Binding(get: { model.mode }, set: { next in
+        Binding(get: { noTakesMode ?? model.mode }, set: { next in
+            noTakesMode = nil
             if next != .tasks, model.workspace == nil {
-                guard let newest = model.takes.first else { return }
+                guard let newest = model.takes.first else {
+                    noTakesMode = next
+                    return
+                }
                 model.open(newest)
             }
             fullPanel = nil
@@ -122,6 +133,15 @@ struct HarnessView: View {
 
     @ViewBuilder
     private var content: some View {
+        if let noTakesMode {
+            NoTakesYetView(mode: noTakesMode)
+        } else {
+            modeContent
+        }
+    }
+
+    @ViewBuilder
+    private var modeContent: some View {
         switch model.mode {
         case .tasks:
             if let fullPanel, let workspace = model.workspace {
@@ -199,7 +219,9 @@ struct HarnessView: View {
     }
 
     private func escape() {
-        if model.mode != .tasks {
+        if noTakesMode != nil {
+            noTakesMode = nil
+        } else if model.mode != .tasks {
             model.mode = .tasks
         } else if fullPanel != nil {
             fullPanel = nil
