@@ -32,6 +32,10 @@ final class AskModel: ObservableObject {
         let presetName = UserDefaults.standard.string(forKey: "ai.preset") ?? ""
         let preset = PresetLibrary.standard.all().first { $0.name == presetName }
         let brief = plan.purpose.brief(preset: preset)
+        if SilenceCut.isSilenceAsk(ask) {
+            cutSilence(on: editor)
+            return
+        }
         let goal = EditorAgent.Goal.parse(ask)
         run = .running(goal.targetSeconds.map { "Cutting to about \(Timecode.short(from: $0))…" } ?? "Reading every sentence…")
         let agent = EditorAgent(ladder: AIServices.shared.ladder())
@@ -40,11 +44,34 @@ final class AskModel: ObservableObject {
                 let added = try await agent.run(on: take, brief: brief, goal: goal, energy: plan.energy)
                 editor?.pickUpOutsideCuts()
                 self?.run = .done(added.isEmpty
-                    ? "Nothing more to cut."
+                    ? "Every sentence earns its place, so there's nothing new to cut. To take out quiet parts, ask “cut the silence”."
                     : "\(added.count) suggested \(added.count == 1 ? "cut" : "cuts"), dashed in Changes until you accept.")
                 if !added.isEmpty { self?.text = "" }
             } catch {
                 self?.run = .failed(AgentsModel.message(for: error))
+            }
+        }
+    }
+}
+
+extension AskModel {
+    /// "Cut where nobody's talking": done on the spot from the mic, as
+    /// one undo step, rather than asking the Editor agent, which only
+    /// weighs whole sentences.
+    fileprivate func cutSilence(on editor: EditorModel) {
+        run = .running("Listening for the quiet parts…")
+        Task { [weak self, weak editor] in
+            guard let editor else { return }
+            let before = editor.edits.outputDuration
+            let result = await editor.cutSilence()
+            guard let self else { return }
+            if result.stretches == 0 {
+                self.run = .done("No quiet stretches over a second left to cut.")
+            } else {
+                let after = editor.edits.outputDuration
+                let what = result.stretches == 1 ? "1 quiet stretch" : "\(result.stretches) quiet stretches"
+                self.run = .done("Cut \(what): \(Timecode.short(from: before)) → \(Timecode.short(from: after)). ⌘Z brings them back.")
+                self.text = ""
             }
         }
     }
@@ -108,40 +135,5 @@ struct AskBar: View {
                 .lineLimit(2)
                 .help(message)
         }
-    }
-}
-
-/// Under the timeline: "3:12 → 2:41" and what changed to get there.
-struct EditSummaryLine: View {
-    @ObservedObject var model: EditorModel
-    @ObservedObject var effects: EffectsModel
-
-    var body: some View {
-        let source = model.edits.sourceDuration
-        let kept = model.edits.outputDuration
-        HStack(spacing: 10) {
-            HStack(spacing: 0) {
-                Text("\(Timecode.short(from: source)) → ")
-                Text(Timecode.short(from: kept)).fontWeight(.semibold)
-            }
-            .font(.system(size: 12, design: .monospaced).monospacedDigit())
-            .help("Length of the take → length after your cuts")
-            Text(changes(removed: max(0, source - kept)))
-                .font(.system(size: 12).monospacedDigit())
-                .foregroundStyle(Theme.textMuted)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 0)
-        }
-    }
-
-    private func changes(removed: Double) -> String {
-        var parts: [String] = []
-        if removed >= 0.5 { parts.append("\(Int(removed.rounded())) s removed") }
-        let zooms = effects.zooms.zooms.filter { $0.state != .rejected }.count
-        if zooms > 0 { parts.append("\(zooms) \(zooms == 1 ? "zoom" : "zooms")") }
-        let blurs = effects.blurs.blurs.filter { $0.hides }.count
-        if blurs > 0 { parts.append("\(blurs) \(blurs == 1 ? "blur" : "blurs")") }
-        return parts.isEmpty ? "No changes yet" : parts.joined(separator: " · ")
     }
 }

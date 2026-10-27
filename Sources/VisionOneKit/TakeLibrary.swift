@@ -40,6 +40,8 @@ public struct Take: Equatable, Sendable {
     /// Written when a take can never be transcribed, so launches skip it.
     public var transcriptFailedURL: URL { folder.appendingPathComponent("transcript-failed.json") }
     public var editsURL: URL { folder.appendingPathComponent("edits.json") }
+    /// The mic's loudness every 10 ms, for the waveform and silence.
+    public var levelsURL: URL { folder.appendingPathComponent("levels.json") }
     public var clipsURL: URL { folder.appendingPathComponent("clips.json") }
     public var thumbnailsFolder: URL { folder.appendingPathComponent("thumbnails", isDirectory: true) }
     public var thumbnailDesignURL: URL { thumbnailsFolder.appendingPathComponent("thumbnail.json") }

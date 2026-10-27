@@ -145,7 +145,7 @@ public enum ChangeSummary {
             let first = live.min { $0.start < $1.start }.map { cutWords([$0], words: words) } ?? []
             detail = first.isEmpty ? "" : "“\(first.prefix(3).joined(separator: " "))…” said again"
         case .deadAir:
-            title = "Trimmed silence at the start and end"
+            title = "Silence at the start and end"
             detail = ""
         default:
             title = "\(shown) suggested \(shown == 1 ? "cut" : "cuts")"
