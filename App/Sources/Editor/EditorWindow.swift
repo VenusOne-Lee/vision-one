@@ -3,8 +3,9 @@ import SwiftUI
 import VisionOneKit
 
 /// The editor: takes sidebar, stage (video, timeline, transport) and the
-/// transcript. Every divider drags, the sidebar and transcript fold away,
-/// "Focus video" hides both, and the transcript can sit on either side.
+/// transcript. Every divider drags, the sidebar, transcript and sound
+/// panel fold away, "Focus video" hides them all, and the transcript can
+/// sit on either side.
 /// Narrow windows drop the sidebar; very narrow ones stack the panes.
 struct EditorView: View {
     @ObservedObject var model: EditorModel
@@ -15,6 +16,7 @@ struct EditorView: View {
     @AppStorage("editor.showTakes") private var showTakes = true
     @AppStorage("editor.showTranscript") private var showTranscript = true
     @AppStorage("editor.transcriptOnLeft") private var transcriptOnLeft = false
+    @AppStorage("editor.showSound") private var showSound = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -87,6 +89,7 @@ struct EditorView: View {
                 let show = focusVideo
                 showTakes = show
                 showTranscript = show
+                showSound = show
             }
             .buttonStyle(PillButtonStyle(kind: .secondary))
             .keyboardShortcut("0", modifiers: .command)
@@ -98,6 +101,8 @@ struct EditorView: View {
             }
             .buttonStyle(.plain)
             .help("Move the transcript to the other side of the video")
+            PanelToggle(systemImage: "music.note", label: "Sound", isOn: $showSound)
+                .keyboardShortcut("3", modifiers: .command)
             PanelToggle(systemImage: "sidebar.right", label: "Transcript", isOn: $showTranscript)
                 .keyboardShortcut("2", modifiers: .command)
         }
@@ -106,7 +111,7 @@ struct EditorView: View {
         .background(Theme.paper)
     }
 
-    private var focusVideo: Bool { !showTakes && !showTranscript }
+    private var focusVideo: Bool { !showTakes && !showTranscript && !showSound }
 
     // MARK: Stage
 
@@ -129,7 +134,9 @@ struct EditorView: View {
                     .overlay { EffectsLayer(model: model, effects: model.effects) }
                 EditorTimeline(model: model)
                 EffectsLane(model: model, effects: model.effects)
+                if showSound { SoundLane(model: model) }
                 TransportBar(model: model)
+                if showSound { SoundPanel(model: model) }
             }
             if let saveError = model.saveError {
                 EditorNotice(title: "Edits not saved", message: saveError, isError: true)

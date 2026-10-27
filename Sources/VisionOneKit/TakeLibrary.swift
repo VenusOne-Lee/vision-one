@@ -10,6 +10,7 @@ import Foundation
 ///       edits.json       cuts made in the editor; screen.mov is never changed
 ///       zooms.json       zooms, proposed from clicks or added by hand
 ///       blurs.json       blurs over secrets found on screen or drawn by hand
+///       sound.json       music and sound effects over the edit
 ///       camera.mov    (next) camera, drawn in the ring bubble at export
 ///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
 public struct Take: Equatable, Sendable {

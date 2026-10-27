@@ -32,6 +32,10 @@ final class EditorModel: ObservableObject {
     @Published private(set) var transcriptState: TranscriptState = .loading
     @Published private(set) var transcript: Transcript?
     @Published private(set) var edits = EditList(sourceDuration: 0)
+    /// Music and sound effects, saved to sound.json.
+    @Published private(set) var sound = SoundPlan()
+    /// Why some of the sound isn't playing, such as a moved music file.
+    @Published private(set) var soundProblem: String?
     /// Playhead, in seconds of the original take.
     @Published private(set) var sourceTime: Double = 0
     @Published private(set) var isPlaying = false
@@ -73,6 +77,8 @@ final class EditorModel: ObservableObject {
             self.asset = asset
             edits = try EditList.load(from: take.editsURL, sourceDuration: duration)
             knownCutIDs = Set(edits.cuts.map(\.id))
+            // A damaged sound.json shouldn't stop the take opening.
+            sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
         } catch {
             phase = .failed("Couldn't open this take: \(error.localizedDescription)")
             return
@@ -123,6 +129,8 @@ final class EditorModel: ObservableObject {
             words = transcript.words
             wordSpans = words.map(\.span)
             transcriptState = .ready
+            // Ducking follows the words, so the preview needs them.
+            if !sound.isEmpty { scheduleRebuild() }
         } catch {
             transcriptState = .failed("The transcript couldn't be read: \(error.localizedDescription)")
         }
@@ -186,6 +194,36 @@ final class EditorModel: ObservableObject {
         } catch {
             saveError = "Couldn't save your edits: \(error.localizedDescription)"
         }
+    }
+
+    /// Every sound change goes through here, like cuts through `apply`,
+    /// so it can be undone. Pass `commit: false` while a slider or a
+    /// drag is moving: the preview follows but nothing is saved or put
+    /// on the undo stack until the gesture ends.
+    func applySound(_ next: SoundPlan, actionName: String, commit: Bool = true, from start: SoundPlan? = nil) {
+        guard commit else {
+            sound = next
+            scheduleRebuild()
+            return
+        }
+        let previous = start ?? sound
+        guard previous != next else {
+            sound = next
+            scheduleRebuild()
+            return
+        }
+        undoManager.registerUndo(withTarget: self) { model in
+            MainActor.assumeIsolated { model.applySound(previous, actionName: actionName) }
+        }
+        undoManager.setActionName(actionName)
+        sound = next
+        do {
+            try sound.write(to: take.soundURL)
+            saveError = nil
+        } catch {
+            saveError = "Couldn't save the music and sound effects: \(error.localizedDescription)"
+        }
+        scheduleRebuild()
     }
 
     // MARK: Playback
@@ -258,6 +296,9 @@ final class EditorModel: ObservableObject {
         let keep = sourceTime
         do {
             let composition = try await PreviewComposition.make(from: asset, keeping: edits.keptSpans)
+            let timeline = ExportTimeline(keep: edits.keptSpans.map { $0.start..<$0.end },
+                                          sourceDuration: edits.sourceDuration, frameRate: 0)
+            let added = await SoundComposer.add(sound, timeline: timeline, words: wordSpans, to: composition)
             guard !Task.isCancelled else { return }
             if let track = composition.tracks(withMediaType: .video).first {
                 let natural = try await track.load(.naturalSize)
@@ -272,6 +313,12 @@ final class EditorModel: ObservableObject {
             }
             let item = AVPlayerItem(asset: composition)
             item.videoComposition = previewVideoComposition()
+            if !added.parameters.isEmpty {
+                let mix = AVMutableAudioMix()
+                mix.inputParameters = added.parameters
+                item.audioMix = mix
+            }
+            soundProblem = added.problem
             player.replaceCurrentItem(with: item)
             seek(toSource: keep)
             if wasPlaying { player.play() }
@@ -308,7 +355,7 @@ extension EditorModel {
 /// same spans export renders, so what you hear is what you get. It only
 /// points at screen.mov, so rebuilding it after an edit is quick.
 enum PreviewComposition {
-    static func make(from asset: AVAsset, keeping spans: [TimeSpan]) async throws -> AVComposition {
+    static func make(from asset: AVAsset, keeping spans: [TimeSpan]) async throws -> AVMutableComposition {
         let composition = AVMutableComposition()
         let scale: CMTimeScale = 60_000
         for track in try await asset.load(.tracks) {

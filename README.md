@@ -4,13 +4,14 @@ A free, open source Mac screen recorder that edits itself. Record, pick what it'
 
 Made for South African builders, as the sibling of [Version One](https://versionone.co.za).
 
-> **Status: v0.1 in progress.** Right now Vision One records your whole screen from the menu bar. Screen, system sound and mic each go on their own track, and your cursor and clicks are logged for later zooms. The transcript editor comes next.
+> **Status: v0.1 in progress.** Right now Vision One records your whole screen, one window or an area you drag, from the menu bar. Screen, system sound and mic each go on their own track, and your cursor and clicks are logged for later zooms. The transcript editor comes next.
 
 ## v0.1 plan
 
 - [x] Menu bar recorder, ⌘⇧R from anywhere
 - [x] Screen, system sound and mic on separate tracks (ScreenCaptureKit + AVAssetWriter), crash-safe, Vision One's own windows hidden
 - [x] Cursor and click log for zooms
+- [x] Record picker: Screen, Window or Area, with Mic and System sound switches ([visual](https://claude.ai/artifact/HStjcoNPxsMVh3FVaXq4Sd))
 - [ ] Camera bubble framed by your Version One ring
 - [ ] Word-timed transcript on device (WhisperKit / Parakeet)
 - [ ] Delete words to cut video
@@ -56,6 +57,7 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | `Sources/VisionOneKit` | Testable logic: recording state, take folders, cursor log, timecodes, export plans |
 | `docs/RECORDER.md` | How recording works, and what a take folder holds |
 | `docs/EXPORT.md` | How export combines the tracks, and the presets |
+| `docs/SOUND.md` | Music that ducks under your voice, and sound effects |
 | `docs/RELEASING.md` | Signing, notarised DMG, Sparkle updates, Homebrew, and the one-time setup |
 | `scripts/release` | The release scripts the workflow runs |
 | `docs/DESIGN.md` | Design system: tokens, type, components, do's and don'ts |
