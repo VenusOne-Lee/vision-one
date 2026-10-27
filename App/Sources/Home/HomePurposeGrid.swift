@@ -1,14 +1,17 @@
 import SwiftUI
 import VisionOneKit
 
-/// "What are you making?": one card per `Purpose`, then "Just record".
-/// The chosen card gets an ink border. An empty id means just record.
+/// "What are you making?": one card per `Purpose`, then "Just record",
+/// then the templates the person copied from videos they like, and a
+/// dashed card to copy another. The chosen card gets an ink border. An
+/// empty id means just record; a saved template's id is its folder name.
 /// The Energy dial sits under the cards, starting at the purpose's own
 /// and carried to the next take with it (`TakePlan.next`).
 struct HomePurposeGrid: View {
     @Binding var selectedID: String
     /// Two columns on a narrow pane, three otherwise (design v2).
     let columns: Int
+    @State private var templates: [TemplateLook] = UserTemplates.loadAll().map { $0.look }
     /// Empty means the purpose's own Energy.
     @AppStorage(TakePlan.nextEnergyKey) private var energyID = ""
 
@@ -54,7 +57,50 @@ struct HomePurposeGrid: View {
                             isSelected: selectedID.isEmpty) {
                 selectedID = ""
             }
+            ForEach(templates) { look in
+                HomePurposeCard(title: look.title, blurb: look.summary,
+                                formats: look.pickedFormats.map(\.rawValue),
+                                isSelected: selectedID == look.id) {
+                    selectedID = look.id
+                }
+            }
+            HomeCopyStyleCard()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .userTemplatesChanged)) { _ in
+            templates = UserTemplates.loadAll().map { $0.look }
+        }
+    }
+}
+
+/// Dashed, because it proposes something new: copy the style of a video
+/// you like into a template.
+private struct HomeCopyStyleCard: View {
+    var body: some View {
+        Button { CopyStyleWindowController.shared.show() } label: {
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(height: 26, alignment: .bottomLeading)
+                Text("Copy a style…")
+                    .font(.system(size: 14, weight: .bold))
+                    .lineLimit(1)
+                Text("Drop a video you like and make a template from it")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+            .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.lg)
+                    .strokeBorder(Theme.text, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.lg))
+        }
+        .buttonStyle(.plain)
+        .help("Copy how a video is made, not what's in it")
     }
 }
 

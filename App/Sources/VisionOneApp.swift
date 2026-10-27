@@ -37,6 +37,7 @@ struct AppCommands: Commands {
             .disabled(recorder.phase.isBusy)
             Button("Show Library") { EditorWindowController.shared.showLibrary() }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
+            Button("Copy a Style…") { CopyStyleWindowController.shared.show() }
         }
         CommandGroup(after: .appSettings) {
             Button("Settings…") { SettingsWindowController.shared.show() }
