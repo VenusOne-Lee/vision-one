@@ -131,8 +131,8 @@ public struct CaptionBuilder: Sendable {
     }
 
     /// Picks the best place to break two lines: both must fit; then
-    /// prefer a break after punctuation, before a conjunction, never after
-    /// an article or preposition, lines of similar length, and a bottom
+    /// prefer a break after punctuation, before a conjunction (not after
+    /// one), never after an article or preposition, lines of similar length, and a bottom
     /// line that is the longer one (a pyramid reads easier).
     private func splitInTwo(_ words: [CaptionWord], limit: Int) -> [[CaptionWord]]? {
         var best: (score: Double, index: Int)?
@@ -149,6 +149,8 @@ public struct CaptionBuilder: Sendable {
             let after = CaptionKeywords.normalised(bottom[0].text)
             if Self.endsClause(before) || Self.endsSentence(before) { score -= 12 }
             if Self.breakBefore.contains(after) { score -= 6 }
+            // A line that ends on "and" or "so" leaves the thought hanging.
+            if Self.breakBefore.contains(CaptionKeywords.normalised(before)) { score += 6 }
             if Self.neverBreakAfter.contains(CaptionKeywords.normalised(before)) { score += 20 }
             if best == nil || score < best!.score { best = (score, i) }
         }
