@@ -2,16 +2,17 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
-/// One Settings window for Brand, AI and Access, instead of a window
+/// One Settings window for Appearance, Brand, AI and Access, instead of a window
 /// each. Ink pills along the top pick the pane; the window remembers its
 /// size and the last pane.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case brand, ai, agents, access
+    case appearance, brand, ai, agents, access
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .appearance: return "Appearance"
         case .brand: return "Brand"
         case .ai: return "AI"
         case .agents: return "Agents"
@@ -52,6 +53,8 @@ struct SettingsView: View {
             Rectangle().fill(Theme.line).frame(height: 1)
             Group {
                 switch model.pane {
+                case .appearance:
+                    AppearanceSettingsView(store: ThemeStore.shared)
                 case .brand:
                     BrandSettingsView(store: BrandStore.shared)
                 case .ai:
@@ -70,7 +73,7 @@ struct SettingsView: View {
         .frame(minWidth: 720, minHeight: 600)
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 }
 
@@ -90,7 +93,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                                   backing: .buffered, defer: false)
             window.title = "Settings"
             window.isReleasedWhenClosed = false
-            window.appearance = NSAppearance(named: .aqua)
             // AI keys are typed here; keep them out of recordings.
             window.sharingType = .none
             window.delegate = self

@@ -72,7 +72,7 @@ struct AISettingsView: View {
         .frame(minWidth: 520, idealWidth: 560, minHeight: 600)
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
         .task { await ai.refresh() }
         .sheet(item: $editingKey) { id in keySheet(id) }
     }
@@ -185,7 +185,7 @@ struct AISettingsView: View {
         .padding(Theme.Space.lg)
         .frame(width: 420)
         .background(Theme.paper)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 }
 

@@ -56,7 +56,7 @@ struct LibraryView: View {
         .frame(minWidth: 480, minHeight: 420)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light) // light only, always
+        .themed()
         .background(HomeWindowSubtitle(text: weekLine))
         .background {
             // ⌘F jumps to search from anywhere on Home.

@@ -31,7 +31,7 @@ struct BrandSettingsView: View {
         }
         .frame(minWidth: 720, minHeight: 480)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light) // light only, always
+        .themed()
     }
 
     // MARK: - Form

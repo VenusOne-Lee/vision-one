@@ -71,7 +71,6 @@ final class AgentAskCenter: ObservableObject {
             panel.isFloatingPanel = true
             panel.level = .floating
             panel.isReleasedWhenClosed = false
-            panel.appearance = NSAppearance(named: .aqua)
             panel.sharingType = .none
             panel.contentViewController = NSHostingController(rootView: AgentAskView(center: self))
             panel.standardWindowButton(.closeButton)?.isHidden = true
@@ -96,7 +95,7 @@ struct AgentAskView: View {
         }
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
-        .environment(\.colorScheme, .light)
+        .themed()
     }
 
     private func content(_ q: MCPQuestion) -> some View {

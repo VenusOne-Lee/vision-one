@@ -32,6 +32,7 @@ struct EditorFullMode<Rail: View>: View {
     @StateObject private var talk = TalkController()
     /// Space is down; a hold past `holdToTalk` starts listening.
     @State private var spaceDown = false
+    @State private var comparing = false
 
     static var holdToTalk: Duration { .milliseconds(350) }
 
@@ -124,12 +125,19 @@ struct EditorFullMode<Rail: View>: View {
                 video
                     .padding([.horizontal, .top], 12)
                 TransportBar(model: model, zoom: $zoom) {
-                    Text("Hold Space to talk · D to draw")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textMuted)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .help("Hold Space while it plays and say what you want, like “cut this bit” or “zoom in here”. With the pen (D), circle to zoom and scribble to blur.")
+                    VersionMenu(model: model.versions) { comparing = true }
+                        .sheet(isPresented: $comparing) {
+                            CompareView(versions: model.versions, take: model.take) { comparing = false }
+                        }
+                    ViewThatFits(in: .horizontal) {
+                        Text("Hold Space to talk · D to draw")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.textMuted)
+                            .lineLimit(1)
+                            .fixedSize()
+                        Color.clear.frame(width: 0)
+                    }
+                    .help("Hold Space while it plays and say what you want, like “cut this bit” or “zoom in here”. With the pen (D), circle to zoom and scribble to blur.")
                     Button("Show tracks") { showTracks.toggle() }
                         .buttonStyle(TabPillStyle(isOn: showTracks))
                         .accessibilityAddTraits(showTracks ? .isSelected : [])
@@ -222,6 +230,9 @@ struct EditorFullMode<Rail: View>: View {
             .padding(.vertical, 8)
             Divider().overlay(Theme.line)
             if !model.steerLog.isEmpty { SteerLogStrip(model: model) }
+            if let target = model.redoTarget {
+                RedoCard(model: model, sentence: target).id(target.start)
+            }
             switch aside {
             case .transcript: TranscriptPane(model: model)
             case .changes: ChangesPanel(model: model, effects: model.effects)

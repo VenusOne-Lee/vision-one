@@ -152,7 +152,7 @@ public struct AgentRunner: Sendable {
             case .sharer:
                 done.append(await share(take, brief: brief,
                                         launch: plan.purposeID == "launch" || plan.purposeID == "update"))
-            case .producer:
+            case .producer, .autopilot:
                 break
             }
             // A "no" on one job stops the rest: the user said not now.

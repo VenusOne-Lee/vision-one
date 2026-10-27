@@ -160,7 +160,7 @@ public actor Desk {
             case .editor: return AskRouter.edit(nil)
             case .clipper: return AskRouter.clips(3)
             case .sharer: return AskRouter.share(launch: plan.purposeID == "launch" || plan.purposeID == "update")
-            case .producer: return nil
+            case .producer, .autopilot: return nil
             }
         }
         start(DeskPlan(steps: steps), in: task.id)

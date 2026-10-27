@@ -3,6 +3,8 @@ import Foundation
 /// Which agent runs a job.
 public enum AgentKind: String, Codable, CaseIterable, Sendable {
     case producer, editor, clipper, sharer
+    /// Clicks through an app while Vision One records (Autopilot).
+    case autopilot
 
     public var title: String {
         switch self {
@@ -10,6 +12,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable {
         case .editor: return "Editor"
         case .clipper: return "Clipper"
         case .sharer: return "Sharer"
+        case .autopilot: return "Autopilot"
         }
     }
 }

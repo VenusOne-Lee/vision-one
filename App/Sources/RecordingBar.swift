@@ -66,7 +66,7 @@ final class RecordingBarController {
         } onSize: { [weak self] size in
             self?.fit(size)
         }
-        panel.contentView = FirstClickHostingView(rootView: bar)
+        panel.contentView = FirstClickHostingView(rootView: bar.themed())
         self.panel = panel
     }
 

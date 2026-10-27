@@ -1,18 +1,25 @@
 import AppKit
 import SwiftUI
+import VisionOneKit
 
 /// Editor tokens from docs/DESIGN.md, beside the shared ones in Theme.
 extension Theme {
-    static let selection = Color(hex: 0x1F3FBF)
-    static let selectionSoft = Color(hex: 0xE4E8FA)
-    static let cutText = Color(hex: 0xA9A8A3)
-    static let fillerBackground = Color(hex: 0xFBEFD3)
-    static let fillerText = Color(hex: 0x7A4E05)
-    static let ringGold = Color(hex: 0xE0A21B)
+    static var selection: Color { Color(hex: palette.selection) }
+    static var selectionSoft: Color { Color(hex: palette.selectionSoft) }
+    static var cutText: Color { Color(hex: palette.cutText) }
+    static var fillerBackground: Color { Color(hex: palette.fillerBackground) }
+    static var fillerText: Color { Color(hex: palette.fillerText) }
+    static let ringGold = Color(hex: DesignTokens.ringGold)
 
     /// Source Serif 4 (bundled, see FontRegistry); the system serif (New
     /// York) if it failed to load, so the transcript still reads like writing.
+    /// Follows Settings → Appearance → Transcript font.
     static func transcriptFont(size: CGFloat) -> NSFont {
+        switch appearance.transcriptFont {
+        case .serif: break
+        case .sans: if let font = NSFont(name: BundledFont.sansRegular, size: size) { return font }
+        case .easyRead: return NSFont.systemFont(ofSize: size + 1)
+        }
         if let font = NSFont(name: BundledFont.serifRegular, size: size) { return font }
         let system = NSFont.systemFont(ofSize: size)
         if let serif = system.fontDescriptor.withDesign(.serif) {
