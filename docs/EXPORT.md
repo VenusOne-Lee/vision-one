@@ -21,14 +21,21 @@ We don't use `AVAssetExportSession`: it can't set a bitrate, so it can't promise
 | 720p | short edge 720 | up to 30 | same rule |
 | WhatsApp | 720p, stepping down to 540p, 480p, 360p | 30, then 24 | whatever fits 90% of 16 MB |
 
-WhatsApp works out the bitrate from the edited length. It uses the largest size that still gets enough bits per pixel to keep text readable, and short videos don't use the whole budget. If the encoder overshoots, it exports once more at a lower bitrate. Past about 7 minutes (depends on screen shape) it says how many parts to send instead.
+WhatsApp works out the bitrate from the edited length. It uses the largest size that still gets enough bits per pixel to keep text readable, and short videos don't use the whole budget. The hardware encoder only roughly meets its average bitrate, so if the file comes out over 16 MB it exports again at a lower bitrate worked out from what it actually wrote (`ExportPlanner.retryVideoBitRate`: only the video's share shrinks, aiming at 85% of the limit, then 80%). That's up to 3 tries in all; the progress ring gives the first try 70% and the retries share the rest, so it never runs backwards. If the third try is still too big, the file is deleted and export says "Still over 16 MB. Cut it shorter or pick 720p." Past about 7 minutes (depends on screen shape) it says how many parts to send instead.
 
 ## Files
 
 Exports sit in the take folder, named after the take: `Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4`.
 
+The recording's own length always sets where the video ends. `edits.json` can store a slightly shorter length (auto clean saves the mic's), and export keeps the tail past it rather than trimming the end.
+
+### Captions
+
+Burned-in captions are built inside `VideoExporter` from the same frame-snapped `ExportTimeline` it renders, so words stay on the frames where they're said however many cuts there are. They run on the edited video's clock; the compositor takes the brand intro off.
+
+With **Also save .srt and .vtt** on in the caption controls, subtitle files go next to the video with the same name (`… (WhatsApp).srt` and `.vtt`, the VTT with word timings). They're written only after the video has finished, from the timeline the export used, and moved later by the brand intro's length so they line up with the file. A cancelled or failed export writes none, and one that leaves no video behind also removes subtitle files an earlier export left under that name.
+
 ## Not yet
 
 - Camera bubble overlay (needs `camera.mov`)
 - Vertical and square exports: `VideoFormat` and `ReframePlanner` are in (see [BRAND.md](BRAND.md)); the compositor crop comes with clips
-- Captions file next to the video (captions thread)

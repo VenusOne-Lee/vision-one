@@ -42,4 +42,9 @@ public enum ExportPhase: Equatable, Sendable {
             return "Nothing to export. Every part of this take is cut."
         }
     }
+
+    /// When a size-limited export is still too big after every retry.
+    public static func stillTooBig(limitBytes: Int64) -> String {
+        "Still over \(limitBytes / 1_000_000) MB. Cut it shorter or pick 720p."
+    }
 }
