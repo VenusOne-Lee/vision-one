@@ -12,6 +12,7 @@ protocol ExportOverlay: Sendable {
 /// system sound, mic) are spliced into one AVMutableComposition, frames
 /// go through `FrameCompositor` to be scaled and overlaid, and
 /// AVAssetWriter encodes H.264 + AAC at the bitrate `ExportPlanner` chose.
+/// Music and sound effects from sound.json are mixed in by `SoundComposer`.
 /// AVAssetExportSession can't set a bitrate, so it can't promise the
 /// WhatsApp size; this pipeline can.
 struct VideoExporter {
@@ -164,6 +165,13 @@ struct VideoExporter {
         // Joins move along with the intro.
         let joinOffset = videoStart.seconds
 
+        // Music and sound effects from sound.json go on their own tracks,
+        // after the intro so they start with the video.
+        let sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
+        let words: [TimeSpan] = sound.isEmpty ? [] : ((try? Transcript.read(from: take.transcriptURL))?.words.map(\.span) ?? [])
+        let soundTracks = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition,
+                                                  offset: joinOffset)
+
         let videoComposition = AVMutableVideoComposition()
         videoComposition.customVideoCompositorClass = FrameCompositor.self
         videoComposition.renderSize = CGSize(width: settings.width, height: settings.height)
@@ -171,7 +179,7 @@ struct VideoExporter {
         videoComposition.instructions = instructions
 
         let audioMix = AVMutableAudioMix()
-        audioMix.inputParameters = audio.map { track in
+        let recorded: [AVMutableAudioMixInputParameters] = audio.map { track in
             let parameters = AVMutableAudioMixInputParameters(track: track)
             for join in timeline.joins.map({ $0 + joinOffset }) {
                 let fade = Self.time(Self.joinFade)
@@ -181,8 +189,9 @@ struct VideoExporter {
             }
             return parameters
         }
+        audioMix.inputParameters = recorded + soundTracks.parameters
 
-        return try await encode(composition: composition, video: video, audio: audio,
+        return try await encode(composition: composition, video: video, audio: audio + soundTracks.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
                                 duration: duration.seconds, settings: settings, to: url, progress: progress)
     }

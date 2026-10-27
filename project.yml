@@ -10,6 +10,9 @@ packages:
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio
     exactVersion: 0.17.7
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.6.4
 settings:
   base:
     SWIFT_VERSION: "5.10"
@@ -26,6 +29,7 @@ targets:
     dependencies:
       - package: VisionOneKit
       - package: FluidAudio
+      - package: Sparkle
     info:
       path: App/Info.plist
       properties:
@@ -38,6 +42,12 @@ targets:
         NSHumanReadableCopyright: MIT licence
         NSMicrophoneUsageDescription: Vision One records your voice with your screen.
         NSCameraUsageDescription: Vision One shows your camera in a bubble on the recording.
+        # Sparkle updates. Releases put appcast.xml on the latest GitHub
+        # release; the public key comes from the release workflow
+        # (docs/RELEASING.md). Builds without a key never check.
+        SUFeedURL: https://github.com/VenusOne-Lee/vision-one/releases/latest/download/appcast.xml
+        SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
+        SUEnableAutomaticChecks: true
     configFiles:
       Debug: Config/Signing.xcconfig
       Release: Config/Signing.xcconfig
@@ -52,3 +62,4 @@ targets:
         PRODUCT_NAME: Vision One
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
+        SPARKLE_PUBLIC_KEY: ""
