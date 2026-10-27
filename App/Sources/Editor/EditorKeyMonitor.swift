@@ -17,28 +17,35 @@ final class EditorKeyMonitor {
                onSpace: @escaping @MainActor (SpaceEvent) -> Void) {
         stop()
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
-            MainActor.assumeIsolated {
-                guard let self else { return event }
-                if event.keyCode == 49 { // Space
-                    if event.type == .keyDown {
-                        if event.isARepeat { return self.spaceIsOurs ? nil : event }
-                        guard Self.isFree(event) else { return event }
-                        self.spaceIsOurs = true
-                        onSpace(.down)
-                        return nil
-                    }
-                    guard self.spaceIsOurs else { return event }
-                    self.spaceIsOurs = false
-                    onSpace(.up)
-                    return nil
-                }
-                guard event.type == .keyDown, !event.isARepeat, Self.isFree(event),
-                      let characters = event.charactersIgnoringModifiers, characters.count == 1,
-                      let key = characters.first
-                else { return event }
-                return onKey(key) ? nil : event
-            }
+            // NSEvent isn't Sendable; local monitors run on the main
+            // thread, so only a yes or no crosses back.
+            nonisolated(unsafe) let event = event
+            let swallow = MainActor.assumeIsolated { self?.handle(event, onKey: onKey, onSpace: onSpace) ?? false }
+            return swallow ? nil : event
         }
+    }
+
+    @MainActor
+    private func handle(_ event: NSEvent, onKey: @MainActor (Character) -> Bool,
+                        onSpace: @MainActor (SpaceEvent) -> Void) -> Bool {
+        if event.keyCode == 49 { // Space
+            if event.type == .keyDown {
+                if event.isARepeat { return spaceIsOurs }
+                guard Self.isFree(event) else { return false }
+                spaceIsOurs = true
+                onSpace(.down)
+                return true
+            }
+            guard spaceIsOurs else { return false }
+            spaceIsOurs = false
+            onSpace(.up)
+            return true
+        }
+        guard event.type == .keyDown, !event.isARepeat, Self.isFree(event),
+              let characters = event.charactersIgnoringModifiers, characters.count == 1,
+              let key = characters.first
+        else { return false }
+        return onKey(key)
     }
 
     func stop() {
