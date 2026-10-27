@@ -18,6 +18,8 @@ import Foundation
 ///       camera.mov    camera from the bubble, when the camera was on
 ///       camera.json   how camera.mov lines up, and where the bubble sat
 ///       phone.mov     iPhone screen + sound over USB, when one was recorded
+///       plan.json     what it's for (Home's pick, saved when recording stops)
+///       title.txt     the builder's own name for the take, when renamed
 ///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
 public struct Take: Equatable, Sendable {
     public let folder: URL
