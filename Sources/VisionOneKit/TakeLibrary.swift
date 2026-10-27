@@ -18,6 +18,7 @@ import Foundation
 ///       camera.mov    camera from the bubble, when the camera was on
 ///       camera.json   how camera.mov lines up, and where the bubble sat
 ///       phone.mov     iPhone screen + sound over USB, when one was recorded
+///       plan.json     what it's for (Home's pick, saved when recording stops)
 ///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
 public struct Take: Equatable, Sendable {
     public let folder: URL
@@ -39,6 +40,8 @@ public struct Take: Equatable, Sendable {
     /// Written when a take can never be transcribed, so launches skip it.
     public var transcriptFailedURL: URL { folder.appendingPathComponent("transcript-failed.json") }
     public var editsURL: URL { folder.appendingPathComponent("edits.json") }
+    /// The mic's loudness every 10 ms, for the waveform and silence.
+    public var levelsURL: URL { folder.appendingPathComponent("levels.json") }
     public var clipsURL: URL { folder.appendingPathComponent("clips.json") }
     public var thumbnailsFolder: URL { folder.appendingPathComponent("thumbnails", isDirectory: true) }
     public var thumbnailDesignURL: URL { thumbnailsFolder.appendingPathComponent("thumbnail.json") }

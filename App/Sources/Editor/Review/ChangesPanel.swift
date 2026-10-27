@@ -2,8 +2,8 @@ import SwiftUI
 import VisionOneKit
 
 /// The "Changes" tab: one row per group of AI suggestions, each with a
-/// switch. Dashed while proposed, solid ink once accepted, a muted line
-/// when switched off. "Accept all" turns every dashed row solid.
+/// switch. Dashed with the switch off while proposed, solid ink with the
+/// switch on once accepted, a muted line when turned off. "Accept all" turns every dashed row solid.
 struct ChangesPanel: View {
     @ObservedObject var model: EditorModel
     /// Observed too, so zoom and blur rows follow their own changes.
@@ -70,7 +70,8 @@ private struct ChangeRow: View {
                 }
             }
             Spacer(minLength: 0)
-            Toggle(group.title, isOn: Binding(get: { group.state != .off }, set: set))
+            // On only once accepted, so a dashed row never looks applied.
+            Toggle(group.title, isOn: Binding(get: { group.state == .accepted }, set: set))
                 .toggleStyle(InkSwitchStyle(label: "Keep: \(group.title)"))
         }
         .foregroundStyle(group.state == .off ? Theme.textMuted : Theme.text)
@@ -93,7 +94,7 @@ private struct ChangeRow: View {
 
     private var help: String {
         switch group.state {
-        case .proposed: return "Suggested. Right-click to accept just this row, or switch it off."
+        case .proposed: return "Suggested, not applied yet. Switch it on to accept, or right-click to turn it off."
         case .accepted: return "Accepted. Switch it off to bring these back."
         case .off: return "Off. Switch it on to accept these."
         }

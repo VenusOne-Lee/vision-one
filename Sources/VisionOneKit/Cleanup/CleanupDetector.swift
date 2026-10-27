@@ -210,13 +210,21 @@ public struct CleanupDetector: Sendable {
         let silent = loudness?.silentSpans(minDuration: settings.minPause)
         var cuts: [CutProposal] = []
 
-        // Dead air before the first word and after the last.
-        let leadEnd = first.start - settings.keptEdge
+        // Dead air before the first word and after the last. With the mic
+        // levels, only the quiet run touching each edge counts, so talking
+        // the transcript missed is never called silence.
+        var leadEnd = first.start - settings.keptEdge
+        var tailStart = last.end + settings.keptEdge
+        if let loudness, !loudness.levels.isEmpty {
+            let edges = loudness.edgeSilence(minDuration: settings.minCut)
+            leadEnd = min(leadEnd, (edges.lead?.end ?? 0) - settings.keptEdge)
+            tailStart = max(tailStart, (edges.tail?.start ?? loudness.duration) + settings.keptEdge)
+        }
         if leadEnd >= settings.minCut {
             cuts.append(CutProposal(start: 0, end: leadEnd, reason: .deadAir))
         }
-        if let duration, duration - (last.end + settings.keptEdge) >= settings.minCut {
-            cuts.append(CutProposal(start: last.end + settings.keptEdge, end: duration, reason: .deadAir))
+        if let duration, duration - tailStart >= settings.minCut {
+            cuts.append(CutProposal(start: tailStart, end: duration, reason: .deadAir))
         }
 
         for (a, b) in zip(words, words.dropFirst()) {
