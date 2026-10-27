@@ -70,6 +70,9 @@ public struct ShortcutSpec: Sendable, Hashable, Identifiable {
 public enum ShortcutMap {
     public static let record = ShortcutSpec("record", "Start or stop recording", menu: "Recording",
                                             key: .character("r"), modifiers: [.command, .shift], isGlobal: true)
+    /// Loom's pause keys; ⇧⌘P is too many apps' command palette.
+    public static let pauseRecording = ShortcutSpec("pauseRecording", "Pause or resume recording", menu: "Recording",
+                                                    key: .character("p"), modifiers: [.option, .shift], isGlobal: true)
     public static let library = ShortcutSpec("library", "Show Library", menu: "File",
                                              key: .character("l"), modifiers: [.command, .shift])
     public static let export = ShortcutSpec("export", "Export", menu: "File",
@@ -105,7 +108,7 @@ public enum ShortcutMap {
                                                key: .character("/"), modifiers: [.command])
 
     public static let all: [ShortcutSpec] = [
-        record, library, export, undo, redo, find, cutWords,
+        record, pauseRecording, library, export, undo, redo, find, cutWords,
         showTakes, showTranscript, showSound, focusVideo, textBigger, textSmaller,
         playPause, back, pause, forward, stepBack, stepForward, acceptAll, shortcuts,
     ]

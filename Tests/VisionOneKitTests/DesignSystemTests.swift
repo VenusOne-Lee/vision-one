@@ -54,6 +54,7 @@ final class ShortcutMapTests: XCTestCase {
         XCTAssertEqual(ShortcutMap.record.display, "⇧⌘R")
         XCTAssertEqual(ShortcutMap.acceptAll.display, "⌘⏎")
         XCTAssertEqual(ShortcutMap.playPause.display, "Space")
+        XCTAssertEqual(ShortcutMap.pauseRecording.display, "⌥⇧P")
     }
 
     func testEveryEntryHasAKnownMenuAndUniqueID() {
