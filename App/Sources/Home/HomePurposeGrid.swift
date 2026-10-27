@@ -3,12 +3,45 @@ import VisionOneKit
 
 /// "What are you making?": one card per `Purpose`, then "Just record".
 /// The chosen card gets an ink border. An empty id means just record.
+/// The Energy dial sits under the cards, starting at the purpose's own
+/// and carried to the next take with it (`TakePlan.next`).
 struct HomePurposeGrid: View {
     @Binding var selectedID: String
     /// Two columns on a narrow pane, three otherwise (design v2).
     let columns: Int
+    /// Empty means the purpose's own Energy.
+    @AppStorage(TakePlan.nextEnergyKey) private var energyID = ""
 
     var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.md) {
+            grid
+            if let purpose = Purpose.named(selectedID) {
+                energyRow(purpose)
+            }
+        }
+        .onChange(of: selectedID) { _, _ in
+            // A new pick starts at its own Energy.
+            energyID = ""
+        }
+    }
+
+    private func energyRow(_ purpose: Purpose) -> some View {
+        let energy = Energy(rawValue: energyID) ?? purpose.energy
+        return HStack(alignment: .center, spacing: Theme.Space.md) {
+            Text("Energy")
+                .font(.system(size: 13, weight: .semibold))
+            EnergyDial(energy: energy) { picked in
+                energyID = picked == purpose.energy ? "" : picked.rawValue
+            }
+            Text(energy.blurb)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textMuted)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var grid: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: columns),
                   alignment: .leading, spacing: 12) {
             ForEach(Purpose.all) { purpose in

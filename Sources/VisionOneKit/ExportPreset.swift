@@ -2,8 +2,8 @@ import Foundation
 
 /// The places a video can be exported for. Every preset writes an H.264
 /// MP4 with AAC sound, because that plays everywhere: WhatsApp, browsers,
-/// phones, Slack, GitHub. Vertical and square formats come with reframing
-/// in v0.2.
+/// phones, Slack, GitHub. Vertical and square export the whole edited
+/// video in that shape, the frame following the cursor.
 public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable {
     /// Full recorded size, up to 4K (H.264's practical limit).
     case original
@@ -11,8 +11,38 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
     case hd720
     /// Under 16 MB so it sends in a WhatsApp chat on mobile data.
     case whatsapp
+    /// 9:16 at 1080×1920, the whole video, following the cursor.
+    case vertical
+    /// 1:1 at 1080×1080, the whole video, following the cursor.
+    case square
 
     public var id: String { rawValue }
+
+    /// The shape it reframes to, or nil to keep the recording's shape.
+    public var format: VideoFormat? {
+        switch self {
+        case .vertical: return .vertical
+        case .square: return .square
+        default: return nil
+        }
+    }
+
+    /// What to pick first for a take made for `purpose`: its formats in
+    /// order, landscape as 1080p.
+    public static func suggested(for purpose: Purpose) -> [ExportPreset] {
+        var presets: [ExportPreset] = []
+        for id in purpose.formats {
+            let preset: ExportPreset?
+            switch id {
+            case VideoFormat.landscape.rawValue: preset = .hd1080
+            case VideoFormat.vertical.rawValue: preset = .vertical
+            case VideoFormat.square.rawValue: preset = .square
+            default: preset = nil
+            }
+            if let preset, !presets.contains(preset) { presets.append(preset) }
+        }
+        return presets.isEmpty ? [.hd1080] : presets
+    }
 
     public var title: String {
         switch self {
@@ -20,6 +50,8 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
         case .hd1080: return "1080p"
         case .hd720: return "720p"
         case .whatsapp: return "WhatsApp"
+        case .vertical: return "Vertical"
+        case .square: return "Square"
         }
     }
 
@@ -29,6 +61,8 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
         case .hd1080: return "YouTube, LinkedIn, X"
         case .hd720: return "Smaller file, still sharp"
         case .whatsapp: return "Under 16 MB"
+        case .vertical: return "TikTok, Reels, Shorts, Status"
+        case .square: return "X, Instagram grid"
         }
     }
 
@@ -39,6 +73,8 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
         case .hd1080: return " (1080p)"
         case .hd720: return " (720p)"
         case .whatsapp: return " (WhatsApp)"
+        case .vertical: return " (Vertical)"
+        case .square: return " (Square)"
         }
     }
 
@@ -136,6 +172,15 @@ public enum ExportPlanner {
         case .whatsapp:
             return try sizeLimited(source: source, duration: duration,
                                    limit: preset.sizeLimitBytes ?? 16_000_000)
+        case .vertical, .square:
+            // Social apps re-encode at their own sizes, so like clips these
+            // render at the format's full size and at most 30 fps.
+            let format = preset.format ?? .landscape
+            let size = format.outputSize(shortEdge: 1080)
+            let rate = min(30, max(1, Int(sourceRate.rounded())))
+            let bitRate = min(maxVideoBitRate, Int(Double(size.width * size.height * rate) * bitsPerPixel))
+            return ExportSettings(width: size.width, height: size.height, frameRate: rate,
+                                  videoBitRate: bitRate, audioBitRate: 160_000, audioChannels: 2)
         }
     }
 

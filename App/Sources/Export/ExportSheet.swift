@@ -17,7 +17,9 @@ struct ExportSheet: View {
     @StateObject private var queue = ExportQueue()
     @ObservedObject private var brand = BrandStore.shared
 
-    @State private var picked: Set<ExportPreset> = [.hd1080]
+    @State private var picked: Set<ExportPreset>
+    /// The take's purpose (plan.json), which picks the first formats.
+    private let purpose: Purpose?
     @State private var source: ExportSource?
     @State private var duration: Double?
     @State private var loadProblem: String?
@@ -28,6 +30,9 @@ struct ExportSheet: View {
         self.take = take
         self.keep = keep
         self.close = close
+        let purpose = TakePlan.load(for: take)?.purpose
+        self.purpose = purpose
+        _picked = State(initialValue: Set(purpose.map { ExportPreset.suggested(for: $0) } ?? [.hd1080]))
     }
 
     /// The order the design shows caption styles in.
@@ -80,6 +85,12 @@ struct ExportSheet: View {
                 .foregroundStyle(Theme.textMuted)
                 .lineLimit(1)
             Spacer(minLength: 0)
+            if let purpose {
+                Text("Picked for \(purpose.title)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
+                    .help("Formats a \(purpose.title.lowercased()) usually needs. Tap any shape to change.")
+            }
         }
         .padding(.horizontal, Theme.Space.lg)
         .padding(.vertical, 14)
@@ -98,7 +109,7 @@ struct ExportSheet: View {
                         title: preset.title,
                         detail: detail(for: preset),
                         detailIsError: isFailed(preset),
-                        aspect: sourceAspect,
+                        aspect: preset.format?.aspect ?? sourceAspect,
                         isPicked: picked.contains(preset),
                         ring: ringColor,
                         progress: queue.batch?.status(of: preset)?.progress,
@@ -107,18 +118,6 @@ struct ExportSheet: View {
                     )
                     .disabled(queue.isRunning)
                 }
-                FormatTile(
-                    title: "Short",
-                    detail: "9:16 · via Clips",
-                    detailIsError: false,
-                    aspect: 9.0 / 16.0,
-                    isPicked: false,
-                    ring: ringColor,
-                    progress: nil,
-                    help: "Vertical exports of the whole video aren't in yet. Make a 9:16 short in the editor's Clips tab.",
-                    action: {}
-                )
-                .disabled(true)
             }
             if let loadProblem {
                 Text(loadProblem)
@@ -251,7 +250,7 @@ struct ExportSheet: View {
                     .keyboardShortcut(.defaultAction)
             } else {
                 Button("Export \(picked.count)") {
-                    queue.export(take, presets: Array(picked), keep: keep)
+                    queue.export(take, presets: ExportPreset.allCases.filter(picked.contains), keep: keep)
                 }
                 .buttonStyle(PillButtonStyle(kind: .primary))
                 .keyboardShortcut(.defaultAction)

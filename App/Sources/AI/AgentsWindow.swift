@@ -31,8 +31,7 @@ final class AgentsModel: ObservableObject {
 
     init(take: Take) {
         self.take = take
-        let next = UserDefaults.standard.string(forKey: "ai.nextPurpose").flatMap(Purpose.named) ?? .demo
-        plan = TakePlan.load(for: take) ?? TakePlan(purpose: next)
+        plan = TakePlan.load(for: take) ?? TakePlan.next() ?? TakePlan(purpose: .demo)
         share = SharePack.load(for: take)
         presetName = UserDefaults.standard.string(forKey: "ai.preset") ?? ""
     }
