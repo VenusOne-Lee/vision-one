@@ -4,11 +4,11 @@ A free, open source Mac screen recorder that edits itself. Record, pick what it'
 
 Made for South African builders, as the sibling of [Version One](https://versionone.co.za).
 
-> **Status: v0.1 nearly done.** Vision One records your screen, a window or an area from the menu bar, transcribes the take on your Mac, and opens it in a transcript editor: delete words to cut the video, review the suggested filler and pause cuts, then export with captions. The camera bubble is the last v0.1 piece. Some v0.2 pieces are already in: music and sound effects, a brand kit with intro and outro cards, auto zoom and secret blur, and the AI ladder library.
+> **Status: v0.1 is built and in testing on a real Mac.** Vision One records your screen, a window or an area (with your camera in a bubble) from the menu bar or its main window, transcribes the take on your Mac, and opens it in the editor: delete words to cut the video, review the suggested filler and pause cuts, ask for changes in plain words, then export with captions. Several v0.2 pieces are already in: music and sound effects, a brand kit with intro and outro cards, auto zoom and secret blur, clips and thumbnails, and the AI agents.
 
 ## How it works
 
-Record → stop → the editor opens on the take → the transcript and suggested cuts appear → review → Export.
+Pick what you're making → record → stop → the editor opens on the take → the transcript and suggested cuts appear → review → Export. What you picked is saved with the take (plan.json), so the agents and export know what it's for.
 
 Vision One has a main window (the Library of takes, and the editor) with a Dock icon, plus the menu bar panel for quick recording.
 
@@ -18,7 +18,7 @@ Vision One has a main window (the Library of takes, and the editor) with a Dock 
 - [x] Screen, system sound and mic on separate tracks (ScreenCaptureKit + AVAssetWriter), crash-safe, Vision One's own windows hidden
 - [x] Cursor and click log for zooms
 - [x] Record picker: Screen, Window or Area, with Mic and System sound switches ([visual](https://claude.ai/artifact/HStjcoNPxsMVh3FVaXq4Sd))
-- [ ] Camera bubble framed by your Version One ring
+- [x] Camera bubble framed by your Version One ring
 - [x] Word-timed transcript on device (Parakeet via FluidAudio)
 - [x] Delete words in the transcript to cut the video
 - [x] Fillers, stutters and long pauses proposed as cuts (dashed until you accept them)
@@ -30,7 +30,8 @@ Vision One has a main window (the Library of takes, and the editor) with a Dock 
 - Music that ducks under your voice, and sound effects with an Energy dial ([docs/SOUND.md](docs/SOUND.md))
 - Brand kit with intro and outro cards and a corner logo ([docs/BRAND.md](docs/BRAND.md))
 - Auto zoom on clicks and blur for secrets on screen ([docs/EFFECTS.md](docs/EFFECTS.md))
-- The AI ladder library: on device first, then your ChatGPT plan or your own key ([docs/AI.md](docs/AI.md)); not in the app's screens yet
+- The AI ladder: on device first, then your ChatGPT plan or your own key ([docs/AI.md](docs/AI.md)), used by the editor's Ask bar and the Agents window
+- Clips and thumbnails for social apps ([docs/CLIPS.md](docs/CLIPS.md))
 
 ## Install
 
