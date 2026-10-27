@@ -9,6 +9,8 @@ enum SoundComposer {
     struct Added {
         var tracks: [AVMutableCompositionTrack] = []
         var parameters: [AVMutableAudioMixInputParameters] = []
+        /// The music's track among `tracks`; the rest are effects.
+        var musicTrackID: CMPersistentTrackID?
         /// Something that couldn't be added, such as a moved music file.
         /// The rest still plays.
         var problem: String?
@@ -55,6 +57,7 @@ enum SoundComposer {
                 }
                 added.tracks.append(track)
                 added.parameters.append(parameters)
+                added.musicTrackID = track.trackID
             } catch {
                 composition.removeTrack(track)
                 added.problem = "Couldn't place the music: \(error.localizedDescription)"
