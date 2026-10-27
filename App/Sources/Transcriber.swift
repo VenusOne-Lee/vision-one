@@ -95,6 +95,10 @@ final class Transcriber: ObservableObject {
             let loudness = LoudnessEnvelope.measure(samples: audio.samples, sampleRate: TakeAudio.sampleRate)
             // The editor draws the waveform and finds silence from these.
             try? loudness.write(to: take.levelsURL)
+            // Recorded from a script: keep the best attempt at each line
+            // first, so auto-clean's own retake guesses don't overlap.
+            try? ScriptRetakes.run(on: take, transcript: transcript,
+                                    sourceDuration: audio.videoDuration ?? transcript.duration)
             try? AutoClean.run(on: take, transcript: transcript, sourceDuration: audio.videoDuration,
                                loudness: loudness)
             activity = .idle

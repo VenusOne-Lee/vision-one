@@ -44,6 +44,11 @@ struct AppCommands: Commands {
                 Task { await recorder.toggle() }
             }
             .disabled(recorder.phase.isBusy)
+            Button(recorder.isPaused ? "Resume Recording  \(ShortcutMap.pauseRecording.display)"
+                                     : "Pause Recording  \(ShortcutMap.pauseRecording.display)") {
+                recorder.togglePause()
+            }
+            .disabled(!recorder.phase.isLive)
             Button("Show Library") { EditorWindowController.shared.showLibrary() }
                 .keyboardShortcut(ShortcutMap.library)
             Button("Copy a Style…") { CopyStyleWindowController.shared.show() }
@@ -83,6 +88,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey.register {
             Task { @MainActor in await ScreenRecorder.shared.toggle() }
         }
+        // ⌥⇧P pauses and resumes while live.
+        hotKey.registerPause {
+            Task { @MainActor in ScreenRecorder.shared.togglePause() }
+        }
+        FrontmostApp.shared.start()
         // Release builds check for updates once a day (Sparkle).
         Updater.shared.start()
         CameraBubble.shared.start()

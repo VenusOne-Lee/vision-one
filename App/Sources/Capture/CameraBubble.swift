@@ -80,6 +80,14 @@ final class CameraBubble {
         return nil
     }
 
+    /// While paused no camera frames are written. camera.json's offset and
+    /// placements keep the host clock, and the paused cuts in edits.json
+    /// cover the same stretch, so export lines up without changes here.
+    func setPaused(_ paused: Bool) {
+        guard recording != nil else { return }
+        feed.setPaused(paused)
+    }
+
     /// screen.mov's first frame, on the host clock, so camera.json can
     /// line the two files up.
     func screenStarted(at seconds: Double) {
@@ -418,6 +426,7 @@ private final class CameraFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDe
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
     private var firstFrame: Double?
+    private var paused = false
 
     override init() {
         previewLayer = AVCaptureVideoPreviewLayer(session: session)
@@ -464,7 +473,14 @@ private final class CameraFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDe
             writer = nil
             input = nil
             firstFrame = nil
+            paused = false
         }
+    }
+
+    /// Drops frames while paused. The writer and its first frame stay as
+    /// they are, so camera.json's start offset is still right.
+    func setPaused(_ paused: Bool) {
+        frameQueue.async { [self] in self.paused = paused }
     }
 
     /// Finishes camera.mov. `firstFrame` is its first frame on the host
@@ -488,7 +504,7 @@ private final class CameraFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDe
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let url = pendingURL else { return }
+        guard let url = pendingURL, !paused else { return }
         let time = sampleBuffer.presentationTimeStamp
         if writer == nil {
             guard let format = sampleBuffer.formatDescription else { return }

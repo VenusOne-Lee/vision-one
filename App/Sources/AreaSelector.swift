@@ -3,9 +3,10 @@ import SwiftUI
 import VisionOneKit
 
 /// Full-screen overlay for choosing the area to record. Draw it, then
-/// move it or resize it from any of its eight handles. It's dashed while
-/// you're still choosing, the app's mark for "proposed". Return accepts,
-/// Esc cancels. Vision One's own windows are never
+/// move it or resize it from any of its eight handles, or pick a shape
+/// (16:9, 9:16, 1:1) and it keeps that shape. It's dashed while you're
+/// still choosing, the app's mark for "proposed". Return accepts, Esc
+/// cancels, arrow keys nudge (Shift for ten points). Vision One's own windows are never
 /// recorded, so the overlay stays out of the take.
 @MainActor
 final class AreaSelector {
@@ -51,6 +52,12 @@ final class AreaSelector {
                     if let rect = model.rect, model.isBigEnough { view.accept(rect) }
                 }
                 return nil
+            case 123, 124, 125, 126: // Left, Right, Down, Up
+                let step: Double = event.modifierFlags.contains(.shift) ? 10 : 1
+                let dx: Double = event.keyCode == 123 ? -step : event.keyCode == 124 ? step : 0
+                let dy: Double = event.keyCode == 126 ? -step : event.keyCode == 125 ? step : 0
+                MainActor.assumeIsolated { model.nudge(dx: dx, dy: dy) }
+                return nil
             default:
                 return event
             }
@@ -77,6 +84,9 @@ private final class OverlayPanel: NSPanel {
 @MainActor
 private final class AreaSelection: ObservableObject {
     @Published var rect: CGRect?
+    /// Free, or a shape the area keeps while you draw and resize it.
+    @Published private(set) var shape: AreaShape
+    private static let shapeKey = "areaShape"
     /// The screen in points, so the area can't leave it.
     var bounds = CaptureRect(x: 0, y: 0, width: 0, height: 0)
     private var drag: Drag?
@@ -92,6 +102,23 @@ private final class AreaSelection: ObservableObject {
 
     init(rect: CGRect?) {
         self.rect = rect
+        shape = UserDefaults.standard.string(forKey: Self.shapeKey).flatMap(AreaShape.init(rawValue:)) ?? .free
+        if let ratio = shape.ratio, let rect { self.rect = CaptureRect(rect).fitted(ratio: ratio).cgRect }
+    }
+
+    /// Picking a shape snaps the area to the biggest box of that shape
+    /// inside it. Remembered for next time.
+    func setShape(_ shape: AreaShape) {
+        self.shape = shape
+        UserDefaults.standard.set(shape.rawValue, forKey: Self.shapeKey)
+        if let ratio = shape.ratio, let rect {
+            self.rect = CaptureRect(rect).fitted(ratio: ratio).cgRect
+        }
+    }
+
+    func nudge(dx: Double, dy: Double) {
+        guard let rect else { return }
+        self.rect = CaptureRect(rect).moved(dx: dx, dy: dy, within: bounds).cgRect
     }
 
     var isBigEnough: Bool {
@@ -105,12 +132,23 @@ private final class AreaSelection: ObservableObject {
         let dy = location.y - start.y
         switch drag {
         case .draw:
-            let drawn = CaptureRect.between(start.x, start.y, location.x, location.y)
+            var drawn = CaptureRect.between(start.x, start.y, location.x, location.y)
+            if let ratio = shape.ratio {
+                // Grow from the start point in the drag's direction.
+                let width = max(abs(dx), abs(dy) * ratio)
+                let height = width / ratio
+                drawn = CaptureRect(x: dx < 0 ? start.x - width : start.x, y: dy < 0 ? start.y - height : start.y,
+                                    width: width, height: height)
+            }
             rect = (drawn.clamped(to: bounds) ?? drawn).cgRect
         case let .move(from):
             rect = from.moved(dx: dx, dy: dy, within: bounds).cgRect
         case let .resize(edges, from):
-            rect = from.resized(edges, dx: dx, dy: dy, within: bounds).cgRect
+            if let ratio = shape.ratio {
+                rect = from.resized(edges, dx: dx, dy: dy, within: bounds, keeping: ratio).cgRect
+            } else {
+                rect = from.resized(edges, dx: dx, dy: dy, within: bounds).cgRect
+            }
         case nil:
             break
         }
@@ -214,9 +252,22 @@ private struct AreaSelectView: View {
         }
     }
 
+    private var shapePicker: some View {
+        Picker("Shape", selection: Binding(get: { model.shape }, set: { model.setShape($0) })) {
+            ForEach(AreaShape.allCases, id: \.self) { shape in
+                Text(shape.title).tag(shape)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .help("Keep the area to a shape: 16:9 for YouTube, 9:16 for Reels and Status, 1:1 for posts")
+    }
+
     private var hint: some View {
         HStack(spacing: Theme.Space.sm) {
             Text("Drag to choose the area to record. Move or resize it after.")
+            shapePicker
             Button("Cancel", action: cancel)
                 .buttonStyle(PillButtonStyle(kind: .secondary))
         }
@@ -237,6 +288,7 @@ private struct AreaSelectView: View {
             Text("\(Int(rect.width)) × \(Int(rect.height))")
                 .font(.system(size: 12, design: .monospaced).monospacedDigit())
                 .foregroundStyle(Theme.textMuted)
+            shapePicker
             Button("Cancel", action: cancel)
                 .buttonStyle(PillButtonStyle(kind: .secondary))
             Button(acceptTitle) { accept(rect) }
@@ -247,7 +299,7 @@ private struct AreaSelectView: View {
         .frame(height: height)
         .background(Theme.paper, in: Capsule())
         .fixedSize()
-        .offset(x: max(Theme.Space.sm, min(rect.minX, size.width - 360)), y: y)
+        .offset(x: max(Theme.Space.sm, min(rect.minX, size.width - 560)), y: y)
     }
 }
 
