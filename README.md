@@ -4,12 +4,13 @@ A free, open source Mac screen recorder that edits itself. Record, pick what it'
 
 Made for South African builders, as the sibling of [Version One](https://versionone.co.za).
 
-> **Status: v0.1 in progress.** Right now Vision One records your whole screen, system sound and mic to an MP4 from the menu bar. The transcript editor comes next.
+> **Status: v0.1 in progress.** Right now Vision One records your whole screen from the menu bar. Screen, system sound and mic each go on their own track, and your cursor and clicks are logged for later zooms. The transcript editor comes next.
 
 ## v0.1 plan
 
 - [x] Menu bar recorder, ⌘⇧R from anywhere
-- [x] Screen + system sound + mic to MP4 (ScreenCaptureKit), Vision One's own windows hidden
+- [x] Screen, system sound and mic on separate tracks (ScreenCaptureKit + AVAssetWriter), crash-safe, Vision One's own windows hidden
+- [x] Cursor and click log for zooms
 - [ ] Camera bubble framed by your Version One ring
 - [ ] Word-timed transcript on device (WhisperKit / Parakeet)
 - [ ] Delete words to cut video
@@ -27,7 +28,7 @@ xcodegen generate
 open VisionOne.xcodeproj
 ```
 
-Run the `VisionOne` scheme. The first time you record, macOS asks for Screen Recording and Microphone access. Recordings go to `~/Movies/Vision One`.
+Run the `VisionOne` scheme. The first time you record, macOS asks for Screen Recording and Microphone access. Each take is a folder in `~/Movies/Vision One`. See [docs/RECORDER.md](docs/RECORDER.md).
 
 Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests without Xcode: `swift test`.
 
@@ -36,7 +37,8 @@ Plain logic lives in the `VisionOneKit` Swift package, so you can run its tests 
 | Path | What |
 | --- | --- |
 | `App/Sources` | The Mac app: menu bar, recorder, theme |
-| `Sources/VisionOneKit` | Testable logic: recording state, file names, timecodes |
+| `Sources/VisionOneKit` | Testable logic: recording state, take folders, cursor log, timecodes |
+| `docs/RECORDER.md` | How recording works, and what a take folder holds |
 | `docs/DESIGN.md` | Design system: tokens, type, components, do's and don'ts |
 | `project.yml` | XcodeGen project (the `.xcodeproj` isn't committed) |
 
