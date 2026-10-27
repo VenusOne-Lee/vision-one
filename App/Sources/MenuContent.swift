@@ -8,12 +8,14 @@ struct MenuContent: View {
     @EnvironmentObject private var recorder: ScreenRecorder
     @ObservedObject private var exports = ExportController.shared
     @ObservedObject private var transcriber = Transcriber.shared
+    @ObservedObject private var updater = Updater.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
             HStack {
                 Text("vision one")
                     .font(.system(size: 13, weight: .semibold))
+                UpdateBadge(updater: updater)
                 Spacer()
                 Text("⌘⇧R")
                     .font(.system(size: 11, design: .monospaced))
@@ -80,6 +82,26 @@ struct MenuContent: View {
         case .recording: return "Recording"
         case .finishing: return "Saving…"
         case .failed: return "Couldn't record"
+        }
+    }
+}
+
+/// The version next to the name. Click it to check for updates; when a
+/// daily check finds one, it becomes an ink pill: "Update to 0.2.0".
+struct UpdateBadge: View {
+    @ObservedObject var updater: Updater
+
+    var body: some View {
+        if let version = updater.waitingVersion {
+            Button("Update to \(version)") { updater.checkForUpdates() }
+                .buttonStyle(PillButtonStyle(kind: .primary))
+        } else {
+            Button("v\(updater.currentVersion)") { updater.checkForUpdates() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Theme.textMuted)
+                .disabled(!updater.isEnabled)
+                .help(updater.isEnabled ? "Check for updates" : "Dev builds don't update")
         }
     }
 }
