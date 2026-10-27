@@ -30,5 +30,5 @@ Exports sit in the take folder, named after the take: `Vision One 2026-10-27 at 
 ## Not yet
 
 - Camera bubble overlay (needs `camera.mov`)
-- Vertical and square exports: `VideoFormat` and `ReframePlanner` are in (see [BRAND.md](BRAND.md)); the compositor crop comes with clips
+- Vertical and square clips: see [CLIPS.md](CLIPS.md). `VideoFormat` and `ReframePlanner` are in (see [BRAND.md](BRAND.md)); full-length vertical exports and a window that moves with the cursor come next
 - Captions file next to the video (captions thread)
