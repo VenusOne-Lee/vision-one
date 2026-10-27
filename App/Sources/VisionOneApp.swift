@@ -3,9 +3,10 @@ import SwiftUI
 import VisionOneKit
 
 /// Vision One is a regular Mac app with a Dock icon and one main window
-/// (the Library, and the editor once a take is open), plus a menu bar
-/// panel for quick recording, like Loom. The menu bar icon is the
-/// builder's ring: dashed when idle, filled while live.
+/// (the harness: New task, tasks, the Library and the editor), plus a
+/// menu bar panel for quick recording, like Loom. The menu bar icon is
+/// the builder's ring: dashed when idle, filled while live, with an ink
+/// mark when a task needs you or an agent is working.
 /// Started from main.swift, which runs the MCP bridge instead when the
 /// app is launched as `Vision One --mcp`.
 struct VisionOneApp: App {
@@ -23,11 +24,25 @@ struct VisionOneApp: App {
             MenuContent()
                 .environmentObject(recorder)
         } label: {
-            Image(systemName: recorder.phase.isLive ? "record.circle.fill" : "circle.dashed")
-                .accessibilityLabel(recorder.phase.isLive ? "Vision One, recording" : "Vision One")
+            MenuBarLabel(recorder: recorder)
         }
         .menuBarExtraStyle(.window)
         .commands { AppCommands(recorder: recorder) }
+    }
+}
+
+/// The menu bar icon: the filled record ring while live, as before;
+/// otherwise a mark when a task needs you or an agent is working, and
+/// the dashed ring when all is quiet (MenuBarMark). Template SF Symbols,
+/// so ink only.
+struct MenuBarLabel: View {
+    @ObservedObject var recorder: ScreenRecorder
+    @ObservedObject private var desk = DeskFeed.shared
+
+    var body: some View {
+        let mark = MenuBarMark.current(isLive: recorder.phase.isLive, statuses: desk.snapshot.openStatuses)
+        Image(systemName: mark.systemImage)
+            .accessibilityLabel(mark.accessibilityLabel)
     }
 }
 
