@@ -21,14 +21,18 @@ struct EditorView: View {
     @AppStorage("editor.showTranscript") private var showTranscript = true
     @AppStorage("editor.transcriptOnLeft") private var transcriptOnLeft = false
     @AppStorage("editor.showSound") private var showSound = true
-    @AppStorage("editor.sidePane") private var sidePaneRaw = SidePane.transcript.rawValue
+    /// A new key, so everyone starts on Changes once.
+    @AppStorage("editor.sideTab") private var sidePaneRaw = SidePane.changes.rawValue
+    /// An export of this take exists: the ring before its name goes solid.
+    @State private var isExported = false
 
     /// What the pane beside the video shows.
     enum SidePane: String, CaseIterable, Identifiable {
-        case transcript, clips, thumbnail
+        case changes, transcript, clips, thumbnail
         var id: String { rawValue }
         var title: String {
             switch self {
+            case .changes: return "Changes"
             case .transcript: return "Transcript"
             case .clips: return "Clips"
             case .thumbnail: return "Thumbnail"
@@ -36,7 +40,7 @@ struct EditorView: View {
         }
     }
 
-    private var sidePane: SidePane { SidePane(rawValue: sidePaneRaw) ?? .transcript }
+    private var sidePane: SidePane { SidePane(rawValue: sidePaneRaw) ?? .changes }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -80,6 +84,15 @@ struct EditorView: View {
             refreshTakes()
         }
         .onReceive(ScreenRecorder.shared.$lastTake) { _ in refreshTakes() }
+        .onReceive(exports.$phase) { _ in refreshExported() }
+    }
+
+    private func refreshExported() {
+        let take = model.take
+        let exported = ExportPreset.allCases.contains {
+            FileManager.default.fileExists(atPath: take.exportURL(for: $0).path)
+        }
+        if exported != isExported { isExported = exported }
     }
 
     private func refreshTakes() {
@@ -103,18 +116,27 @@ struct EditorView: View {
             .help("Back to all your recordings (⇧⌘L)")
             PanelToggle(systemImage: "sidebar.left", label: "Takes", isOn: $showTakes)
                 .keyboardShortcut("1", modifiers: .command)
-            Text(model.take.name)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
-                .truncationMode(.middle)
+            HStack(spacing: 6) {
+                // Dashed until this take has been exported, then solid.
+                Circle()
+                    .strokeBorder(Theme.text, style: StrokeStyle(lineWidth: 1.5, dash: isExported ? [] : [3, 2]))
+                    .frame(width: 14, height: 14)
+                    .accessibilityLabel(isExported ? "Exported" : "Not exported yet")
+                Text(model.take.name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
             Spacer(minLength: Theme.Space.sm)
             if model.phase == .ready {
-                Text("\(Timecode.string(from: model.edits.sourceDuration)) → \(Timecode.string(from: model.edits.outputDuration))")
-                    .font(.system(size: 12, design: .monospaced).monospacedDigit())
-                    .foregroundStyle(Theme.textMuted)
-                    .help("Length of the take → length after your cuts")
-                if model.proposedCount > 0 { suggestions }
+                // The Changes tab covers this; keep it in reach when the
+                // side pane is hidden (Focus video).
+                if !showTranscript && model.proposedChangeCount > 0 { suggestions }
                 EditorExportStatus(exports: exports)
+                Button("Undo all") { model.undoAll() }
+                    .buttonStyle(PillButtonStyle(kind: .secondary))
+                    .disabled(!model.canUndoAll)
+                    .help("Back to the take as you recorded it: your cuts go and every suggestion is turned off. Blurs stay. ⌘Z brings it all back.")
                 Button("Agents") { AgentsWindowController.shared.show(for: model.take) }
                     .buttonStyle(PillButtonStyle(kind: .secondary))
                     .help("Pick what it's for, ask for a length, find clips, and write a title and posts")
@@ -159,27 +181,22 @@ struct EditorView: View {
 
     private var focusVideo: Bool { !showTakes && !showTranscript && !showSound }
 
-    /// Auto-clean's suggestions, in the toolbar so they stay in reach
-    /// with the transcript hidden. Dashed, like the cuts themselves,
-    /// until you decide.
+    /// The suggestions, compact, in the toolbar while the side pane is
+    /// hidden. Dashed, like the suggestions themselves, until you decide.
     private var suggestions: some View {
         HStack(spacing: 6) {
-            Text("\(model.proposedCount) suggested \(model.proposedCount == 1 ? "cut" : "cuts")")
+            Text("\(model.proposedChangeCount) suggested")
                 .font(.system(size: 12).monospacedDigit())
                 .foregroundStyle(Theme.textMuted)
                 .lineLimit(1)
-            Button("Accept all") { model.acceptAllProposed() }
+            Button("Accept all") { model.acceptAllChanges() }
                 .buttonStyle(PillButtonStyle(kind: .secondary))
-            Button("Reject all") { model.rejectAllProposed() }
-                .buttonStyle(.plain)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.textMuted)
         }
         .padding(.leading, 10)
         .padding(.trailing, 4)
         .padding(.vertical, 3)
         .overlay(Capsule().strokeBorder(Theme.textMuted, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
-        .help("Dashed until you decide. Right-click a dashed word or part of the timeline to cut or keep just that one.")
+        .help("Dashed until you decide. Show the panels (⌘0) to switch each kind on or off in Changes.")
     }
 
     // MARK: Stage
@@ -212,6 +229,8 @@ struct EditorView: View {
                 if showSound { SoundLane(model: model) }
                 TransportBar(model: model)
                 if showSound { SoundPanel(model: model) }
+                EditSummaryLine(model: model, effects: model.effects)
+                AskBar(model: model)
             }
             if let saveError = model.saveError {
                 EditorNotice(title: "Edits not saved", message: saveError, isError: true)
@@ -223,7 +242,7 @@ struct EditorView: View {
 
     // MARK: Side pane
 
-    /// Transcript, Clips and Thumbnail share the pane beside the video.
+    /// Changes, Transcript, Clips and Thumbnail share the pane beside the video.
     private var sidePanel: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
@@ -238,6 +257,7 @@ struct EditorView: View {
             .padding(.vertical, 8)
             Divider().overlay(Theme.line)
             switch sidePane {
+            case .changes: ChangesPanel(model: model, effects: model.effects)
             case .transcript: transcriptPane
             case .clips: ClipsPane(model: clips)
             case .thumbnail:
@@ -278,17 +298,17 @@ struct EditorView: View {
     }
 }
 
-/// A tab in the side pane: ink outline when selected, muted text when not.
+/// A tab in the side pane: a black pill when selected, muted text when not.
 private struct TabPillStyle: ButtonStyle {
     let isOn: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12, weight: isOn ? .medium : .regular))
-            .padding(.horizontal, 12)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .foregroundStyle(isOn ? Theme.text : Theme.textMuted)
-            .overlay(Capsule().strokeBorder(isOn ? Theme.text : .clear, lineWidth: 1))
+            .foregroundStyle(isOn ? Theme.paper : Theme.textMuted)
+            .background(Capsule().fill(isOn ? Theme.text : .clear))
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
