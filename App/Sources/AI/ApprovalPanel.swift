@@ -86,7 +86,9 @@ struct ApprovalView: View {
                     .font(.system(size: 13, weight: .medium))
                 Text(r.kind == .post
                      ? "This publishes the text below. You can't unsend it."
-                     : "This sends the words of this take, not the video or audio.")
+                     : r.kind == .audio
+                     ? "This sends your voice, as described below. Never your screen."
+                     : "This sends the words below, not the video or audio.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textMuted)
             }
@@ -101,8 +103,10 @@ struct ApprovalView: View {
             .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                 GridRow { label("To"); Text(r.destination).font(.system(size: 12, design: .monospaced)) }
-                GridRow { label("Size"); Text("\(r.characters.formatted()) characters").font(.system(size: 12, design: .monospaced)) }
-                if r.kind == .aiRequest {
+                if r.kind != .audio {
+                    GridRow { label("Size"); Text("\(r.characters.formatted()) characters").font(.system(size: 12, design: .monospaced)) }
+                }
+                if r.kind != .post {
                     GridRow { label("Cost"); Text(cost(r)).font(.system(size: 12, design: .monospaced)) }
                 }
             }
@@ -113,7 +117,7 @@ struct ApprovalView: View {
                     .foregroundStyle(Theme.textMuted)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                if r.kind == .aiRequest {
+                if r.kind != .post {
                     Button("Allow for this session") { center.answer(.allowForSession) }
                         .buttonStyle(PillButtonStyle(kind: .secondary))
                         .help("Don't ask again for this job and provider until Vision One quits")
@@ -133,6 +137,7 @@ struct ApprovalView: View {
 
     private func cost(_ r: OutboundRequest) -> String {
         if r.fromPlan { return "R0 · from your ChatGPT plan" }
+        if r.provider == .elevenLabs { return "From your ElevenLabs credits" }
         guard let rand = r.estimatedRand else { return "Unknown · your key's price" }
         return rand < 0.01 ? "under R0.01" : String(format: "about R%.2f", rand)
     }

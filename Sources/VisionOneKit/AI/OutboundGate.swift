@@ -8,6 +8,9 @@ public struct OutboundRequest: Identifiable, Sendable {
         case aiRequest
         /// A post or launch the user is publishing.
         case post
+        /// The user's voice: a mic track sent to a cloud tool, or the mic
+        /// streamed live to a voice coach. Never the screen.
+        case audio
     }
 
     public let id: UUID
@@ -84,7 +87,7 @@ public actor OutboundGate {
     /// Throws `AIError.notApproved` when the user says no.
     public func check(_ request: OutboundRequest) async throws {
         let key = "\(request.provider.rawValue)|\(request.task.rawValue)"
-        if request.kind == .aiRequest, allowed.contains(key) {
+        if request.kind != .post, allowed.contains(key) {
             history.append(Record(request: request, decision: .allowForSession, at: Date()))
             return
         }
@@ -93,7 +96,7 @@ public actor OutboundGate {
         switch decision {
         case .allowOnce: return
         case .allowForSession:
-            if request.kind == .aiRequest { allowed.insert(key) }
+            if request.kind != .post { allowed.insert(key) }
         case .deny: throw AIError.notApproved
         }
     }
