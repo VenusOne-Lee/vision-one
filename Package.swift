@@ -1,4 +1,4 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.0
 import PackageDescription
 
 // VisionOneKit holds the app's plain logic (recording state, file names,
@@ -14,5 +14,6 @@ let package = Package(
     targets: [
         .target(name: "VisionOneKit"),
         .testTarget(name: "VisionOneKitTests", dependencies: ["VisionOneKit"]),
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )
