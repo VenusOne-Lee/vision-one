@@ -11,7 +11,9 @@ public struct InputEvent: Codable, Equatable, Sendable {
     public let kind: Kind
     /// Seconds from the take's first video frame.
     public let t: Double
-    /// Position in display points, origin top left.
+    /// Position in points from the top left of what was recorded (the
+    /// display, the window or the area). Can fall outside it when the
+    /// cursor leaves.
     public let x: Double
     public let y: Double
 
@@ -25,8 +27,10 @@ public struct InputEvent: Codable, Equatable, Sendable {
 
 /// The events.json file in a take folder.
 public struct EventLog: Codable, Equatable, Sendable {
-    public var version = 1
-    /// Display size in points, so positions can be mapped onto the video.
+    /// 2: positions are relative to what was recorded, not the display.
+    public var version = 2
+    /// Size in points of what was recorded, so positions can be mapped
+    /// onto the video.
     public var displayWidth: Double
     public var displayHeight: Double
     public var events: [InputEvent]
