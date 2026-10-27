@@ -8,12 +8,15 @@ struct MenuContent: View {
     @EnvironmentObject private var recorder: ScreenRecorder
     @ObservedObject private var exports = ExportController.shared
     @ObservedObject private var transcriber = Transcriber.shared
+    @ObservedObject private var updater = Updater.shared
+    @ObservedObject private var devices = CaptureDevices.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
             HStack {
                 Text("vision one")
                     .font(.system(size: 13, weight: .semibold))
+                UpdateBadge(updater: updater)
                 Spacer()
                 Text("⌘⇧R")
                     .font(.system(size: 11, design: .monospaced))
@@ -33,6 +36,18 @@ struct MenuContent: View {
                             .foregroundStyle(Theme.textMuted)
                     }
                 }
+            }
+
+            CapturePicker()
+                .disabled(recorder.phase.isLive || recorder.phase.isBusy)
+            SourcesRow(devices: devices)
+                .disabled(recorder.phase.isLive || recorder.phase.isBusy)
+
+            ForEach(recorder.trackNotes, id: \.self) { note in
+                Text(note)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if case let .failed(message) = recorder.phase {
@@ -56,6 +71,10 @@ struct MenuContent: View {
                 Button("Show recordings") { recorder.revealRecordings() }
                     .buttonStyle(PillButtonStyle(kind: .secondary))
                 Spacer()
+                Button("Brand") { BrandWindowController.shared.show() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textMuted)
                 Button("Access") { recorder.openSetup() }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
@@ -75,11 +94,31 @@ struct MenuContent: View {
 
     private var statusTitle: String {
         switch recorder.phase {
-        case .idle: return "Record whole screen"
+        case .idle: return "Record \(recorder.choice.mode.title.lowercased())"
         case .preparing: return "Getting ready…"
         case .recording: return "Recording"
         case .finishing: return "Saving…"
         case .failed: return "Couldn't record"
+        }
+    }
+}
+
+/// The version next to the name. Click it to check for updates; when a
+/// daily check finds one, it becomes an ink pill: "Update to 0.2.0".
+struct UpdateBadge: View {
+    @ObservedObject var updater: Updater
+
+    var body: some View {
+        if let version = updater.waitingVersion {
+            Button("Update to \(version)") { updater.checkForUpdates() }
+                .buttonStyle(PillButtonStyle(kind: .primary))
+        } else {
+            Button("v\(updater.currentVersion)") { updater.checkForUpdates() }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Theme.textMuted)
+                .disabled(!updater.isEnabled)
+                .help(updater.isEnabled ? "Check for updates" : "Dev builds don't update")
         }
     }
 }
@@ -167,6 +206,110 @@ struct ErrorAlert: View {
     }
 }
 
+/// Screen, Window or Area, then what to record within it, and which
+/// sound. Changes are saved for the next take.
+struct CapturePicker: View {
+    @EnvironmentObject private var recorder: ScreenRecorder
+    @State private var windows: [WindowCandidate] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.sm) {
+            ModeSwitch(selection: $recorder.choice.mode)
+
+            switch recorder.choice.mode {
+            case .screen:
+                if NSScreen.screens.count > 1 { displayPicker }
+            case .window:
+                windowPicker
+            case .area:
+                areaRow
+            }
+
+            HStack(spacing: Theme.Space.md) {
+                Toggle("Mic", isOn: $recorder.choice.includeMicrophone)
+                Toggle("System sound", isOn: $recorder.choice.includeSystemSound)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .tint(Theme.text)
+            .font(.system(size: 12))
+        }
+    }
+
+    private var displayPicker: some View {
+        Picker("Screen", selection: Binding(
+            get: { recorder.choice.displayID ?? CGMainDisplayID() },
+            set: { recorder.choice.displayID = $0 }
+        )) {
+            ForEach(NSScreen.screens, id: \.self) { screen in
+                if let id = screen.displayID {
+                    Text(screen.localizedName).tag(id)
+                }
+            }
+        }
+        .pickerStyle(.menu)
+        .font(.system(size: 12))
+    }
+
+    private var windowPicker: some View {
+        Picker("Window", selection: $recorder.choice.windowID) {
+            Text("Choose a window").tag(UInt32?.none)
+            ForEach(windows) { window in
+                Text(window.label).tag(UInt32?.some(window.id))
+            }
+        }
+        .pickerStyle(.menu)
+        .font(.system(size: 12))
+        .task { windows = await recorder.pickableWindows() }
+    }
+
+    private var areaRow: some View {
+        HStack {
+            if let area = recorder.choice.area {
+                Text("\(Int(area.width)) × \(Int(area.height))")
+                    .font(.system(size: 12, design: .monospaced).monospacedDigit())
+            } else {
+                Text("No area yet")
+                    .font(.system(size: 12))
+            }
+            Spacer()
+            Button(recorder.choice.area == nil ? "Choose area" : "Change area") {
+                recorder.chooseArea()
+            }
+            .buttonStyle(PillButtonStyle(kind: .secondary))
+        }
+        .foregroundStyle(Theme.textMuted)
+    }
+}
+
+/// Three ink segments. The chosen one is a black pill, like a primary
+/// button; the others are plain text.
+private struct ModeSwitch: View {
+    @Binding var selection: CaptureMode
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(CaptureMode.allCases, id: \.self) { mode in
+                Button {
+                    selection = mode
+                } label: {
+                    Text(mode.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 5)
+                        .foregroundStyle(selection == mode ? Theme.paper : Theme.text)
+                        .background(Capsule().fill(selection == mode ? Theme.text : Color.clear))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == mode ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .overlay(Capsule().strokeBorder(Theme.line, lineWidth: 1))
+    }
+}
+
 /// Exports the last take, with the cuts saved in its edits.json.
 struct ExportRow: View {
     let take: Take
@@ -234,7 +377,11 @@ struct ExportMenu: View {
         Menu("Export") {
             ForEach(ExportPreset.allCases) { preset in
                 Button("\(preset.title) · \(preset.detail)") {
-                    exports.export(take, preset: preset, keep: keep)
+                    let brand = BrandStore.shared
+                    CaptionExport.writeFiles(for: take, preset: preset)
+                    exports.export(take, preset: preset, keep: keep,
+                                   overlays: CaptionExport.overlays(for: take, ringHex: brand.kit.ring.hex) + brand.overlays(),
+                                   cards: brand.cardMaker())
                 }
             }
         }

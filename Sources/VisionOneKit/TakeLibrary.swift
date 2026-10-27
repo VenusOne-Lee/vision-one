@@ -8,9 +8,11 @@ import Foundation
 ///       events.json   cursor moves and clicks, timed from the first frame
 ///       transcript.json  word-timed transcript of the mic track
 ///       edits.json       cuts made in the editor; screen.mov is never changed
+///       sound.json       music and sound effects over the edit
 ///       clips.json       short clips suggested or kept for social apps
 ///       thumbnails/      thumbnail.json and the saved thumbnail images
 ///       camera.mov    (next) camera, drawn in the ring bubble at export
+///       phone.mov     iPhone screen + sound over USB, when one was recorded
 ///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
 public struct Take: Equatable, Sendable {
     public let folder: URL
@@ -23,6 +25,7 @@ public struct Take: Equatable, Sendable {
     public var screenURL: URL { folder.appendingPathComponent("screen.mov") }
     public var eventsURL: URL { folder.appendingPathComponent("events.json") }
     public var cameraURL: URL { folder.appendingPathComponent("camera.mov") }
+    public var phoneURL: URL { folder.appendingPathComponent("phone.mov") }
     public var transcriptURL: URL { folder.appendingPathComponent("transcript.json") }
     public var editsURL: URL { folder.appendingPathComponent("edits.json") }
     public var clipsURL: URL { folder.appendingPathComponent("clips.json") }

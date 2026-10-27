@@ -82,27 +82,6 @@ public struct ClipFraming: Codable, Hashable, Sendable {
     public static let follow = ClipFraming(mode: .follow)
 }
 
-/// A rectangle in normalized frame space: 0...1, origin top left. The
-/// same space the zoom and reframe code use.
-public struct NormalizedRect: Codable, Hashable, Sendable {
-    public var x: Double
-    public var y: Double
-    public var width: Double
-    public var height: Double
-
-    public init(x: Double, y: Double, width: Double, height: Double) {
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-    }
-
-    public static let full = NormalizedRect(x: 0, y: 0, width: 1, height: 1)
-
-    public var centerX: Double { x + width / 2 }
-    public var centerY: Double { y + height / 2 }
-}
-
 /// One short clip cut from a take. Its span is in seconds of the take
 /// (the same clock as edits.json), so cuts made in the editor also leave
 /// the clip, and the clip survives later edits.

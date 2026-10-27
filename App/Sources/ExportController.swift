@@ -11,11 +11,13 @@ final class ExportController: ObservableObject {
 
     /// Exports `take`. `keep` overrides the kept spans in source seconds;
     /// nil exports what the editor kept in edits.json. `overlays` draw on every frame
-    /// (burned-in captions, later the camera bubble).
-    func export(_ take: Take, preset: ExportPreset, keep: [Range<Double>]? = nil, overlays: [ExportOverlay] = []) {
+    /// (burned-in captions, later the camera bubble). `cards` adds the
+    /// brand intro and outro.
+    func export(_ take: Take, preset: ExportPreset, keep: [Range<Double>]? = nil, overlays: [ExportOverlay] = [],
+                cards: CardMaker? = nil) {
         guard !phase.isBusy else { return }
         phase = .exporting(preset: preset, progress: 0)
-        let exporter = VideoExporter(take: take, keep: keep, preset: preset, overlays: overlays)
+        let exporter = VideoExporter(take: take, keep: keep, preset: preset, overlays: overlays, cards: cards)
 
         task = Task {
             do {

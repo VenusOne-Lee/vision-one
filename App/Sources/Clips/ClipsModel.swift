@@ -165,7 +165,7 @@ final class ClipsModel: ObservableObject {
     }
 
     /// The window export will cut out of the screen for `clip`.
-    func window(for clip: Clip) -> NormalizedRect {
+    func window(for clip: Clip) -> NormalisedRect {
         ClipFrame.rect(format: clip.format, sourceAspect: sourceAspect,
                        framing: ClipFrame.resolved(clip, events: events))
     }

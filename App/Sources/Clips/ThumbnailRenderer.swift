@@ -17,8 +17,8 @@ struct ThumbnailRenderer: Sendable {
     /// Where the title and the face ended up, normalized over the image
     /// (origin top left), so the editor can put drag handles on them.
     struct Layout: Equatable, Sendable {
-        var title: NormalizedRect
-        var face: NormalizedRect?
+        var title: NormalisedRect
+        var face: NormalisedRect?
     }
 
     enum Failure: LocalizedError {
@@ -149,7 +149,7 @@ struct ThumbnailRenderer: Sendable {
         }
 
         // Camera bubble in the builder's ring.
-        var faceRect: NormalizedRect?
+        var faceRect: NormalisedRect?
         if design.showFace, let camera {
             let d = CGFloat(design.faceSize) * min(w, h)
             let center = CGPoint(x: CGFloat(design.faceX) * w, y: h - CGFloat(design.faceY) * h)
@@ -163,7 +163,7 @@ struct ThumbnailRenderer: Sendable {
             ctx.setStrokeColor(color(design.style.ringHex, alpha: 1))
             ctx.setLineWidth(ring)
             ctx.strokeEllipse(in: circle.insetBy(dx: ring / 2, dy: ring / 2))
-            faceRect = NormalizedRect(x: Double(circle.minX / w), y: Double((h - circle.maxY) / h),
+            faceRect = NormalisedRect(x: Double(circle.minX / w), y: Double((h - circle.maxY) / h),
                                       width: Double(d / w), height: Double(d / h))
         }
 
@@ -189,7 +189,7 @@ struct ThumbnailRenderer: Sendable {
             CTFrameDraw(ctFrame, ctx)
         }
         let layout = Layout(
-            title: NormalizedRect(x: Double(titleRect.minX / w), y: Double((h - titleRect.maxY) / h),
+            title: NormalisedRect(x: Double(titleRect.minX / w), y: Double((h - titleRect.maxY) / h),
                                   width: Double(titleRect.width / w), height: Double(max(titleRect.height, h * 0.08) / h)),
             face: faceRect)
         guard let image = ctx.makeImage() else { return nil }

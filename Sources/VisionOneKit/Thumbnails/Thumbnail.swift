@@ -37,10 +37,10 @@ public enum ThumbnailSize: String, Codable, CaseIterable, Sendable, Identifiable
     /// Part of the frame social apps never crop or cover, as a
     /// normalized rect. Reels shows a 4:5 middle in the grid, so the
     /// cover keeps its title inside that.
-    public var safeArea: NormalizedRect {
+    public var safeArea: NormalisedRect {
         switch self {
-        case .cover: return NormalizedRect(x: 0.06, y: 0.15, width: 0.88, height: 0.7)
-        default: return NormalizedRect(x: 0.05, y: 0.06, width: 0.9, height: 0.88)
+        case .cover: return NormalisedRect(x: 0.06, y: 0.15, width: 0.88, height: 0.7)
+        default: return NormalisedRect(x: 0.05, y: 0.06, width: 0.9, height: 0.88)
         }
     }
 

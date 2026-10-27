@@ -1,0 +1,57 @@
+<!doctype html>
+<!--
+  Vision One brand outro: logo in the ring, name, call to action and the
+  site on a ring-coloured rule. Same format as brand-intro.html.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --ring: #1F3FBF; --paper: #FFFFFF; --ink: #121212;
+    --display-font: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+    --body-font: "Source Serif 4", ui-serif, Georgia, serif;
+  }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--paper); }
+  #card {
+    position: absolute; inset: 0; box-sizing: border-box; padding: 0 8vw;
+    display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 3.2vmin;
+    color: var(--ink); -webkit-font-smoothing: antialiased;
+  }
+  .ring {
+    width: 18vmin; height: 18vmin; box-sizing: border-box; border-radius: 50%;
+    border: 2.2vmin solid var(--ring); display: grid; place-items: center; overflow: hidden;
+    font: 800 7.5vmin/1 var(--display-font);
+    animation: ring-in 0.6s cubic-bezier(.2, .8, .2, 1) both;
+  }
+  .ring img { width: 66%; height: 66%; object-fit: contain; }
+  h1 {
+    margin: 0; max-width: 84vw; font: 800 9.5vmin/1 var(--display-font); letter-spacing: -0.03em;
+    animation: rise 0.6s 0.2s cubic-bezier(.2, .8, .2, 1) both;
+  }
+  .cta {
+    margin: 0; max-width: 70vw; font: 400 4.2vmin/1.3 var(--body-font); opacity: 0.72;
+    animation: rise-soft 0.6s 0.35s cubic-bezier(.2, .8, .2, 1) both;
+  }
+  .site {
+    font: 600 3.2vmin/1 ui-monospace, Menlo, monospace; padding-top: 2vmin; margin-top: 1vmin;
+    border-top: 0.7vmin solid var(--ring); min-width: 20vmin;
+    animation: rise 0.6s 0.5s cubic-bezier(.2, .8, .2, 1) both;
+  }
+  @keyframes ring-in { from { transform: scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes rise { from { transform: translateY(3vmin); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes rise-soft { from { transform: translateY(3vmin); opacity: 0; } to { transform: none; opacity: 0.72; } }
+</style>
+</head>
+<body>
+  <div id="card" data-composition-id="brand-outro" data-start="0" data-duration="4" data-width="1920" data-height="1080">
+    <div class="ring clip" data-start="0" data-track-index="1">
+      <img data-var="logo" data-if="logo" alt="">
+      <span data-var="initial" data-unless="logo">V</span>
+    </div>
+    <h1 class="clip" data-start="0" data-track-index="2" data-var="name">Vision One</h1>
+    <p class="cta clip" data-start="0" data-track-index="3" data-var="cta" data-if="cta"></p>
+    <div class="site clip" data-start="0" data-track-index="4" data-var="site" data-if="site"></div>
+  </div>
+</body>
+</html>

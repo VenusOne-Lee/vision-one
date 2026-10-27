@@ -9,7 +9,7 @@ public enum ClipFrame {
     /// `sourceAspect` (width over height), centred on `centerX`/`centerY`
     /// and slid back inside the frame where it would spill over. `fit`
     /// framing and same-shape formats get the whole frame.
-    public static func rect(format: ClipFormat, sourceAspect: Double, framing: ClipFraming) -> NormalizedRect {
+    public static func rect(format: ClipFormat, sourceAspect: Double, framing: ClipFraming) -> NormalisedRect {
         guard framing.mode != .fit, sourceAspect > 0 else { return .full }
         let target = format.aspect
         var width = 1.0
@@ -22,7 +22,7 @@ public enum ClipFrame {
         guard width < 0.999 || height < 0.999 else { return .full }
         let x = min(max(framing.centerX - width / 2, 0), 1 - width)
         let y = min(max(framing.centerY - height / 2, 0), 1 - height)
-        return NormalizedRect(x: x, y: y, width: width, height: height)
+        return NormalisedRect(x: x, y: y, width: width, height: height)
     }
 
     /// Where the window starts for `follow` framing: centred on where the

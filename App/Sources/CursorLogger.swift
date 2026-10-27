@@ -7,17 +7,16 @@ import VisionOneKit
 final class CursorLogger {
     private var log: EventLog
     private var monitor: Any?
-    /// The recorded display in global coordinates. For the main display
-    /// AppKit's and Core Graphics' frames share the origin, so a plain
-    /// flip of y maps AppKit points onto the video.
-    private let displayFrame: CGRect
+    /// What's being recorded (display, window or area) in Core Graphics
+    /// global points: origin top left of the main display, y down.
+    private let captureFrame: CGRect
     /// Host time of the first video frame, in seconds. NSEvent timestamps
     /// use the same clock (seconds since boot).
     private var origin: TimeInterval?
 
-    init(displayFrame: CGRect) {
-        self.displayFrame = displayFrame
-        log = EventLog(displayWidth: displayFrame.width, displayHeight: displayFrame.height)
+    init(captureFrame: CGRect) {
+        self.captureFrame = captureFrame
+        log = EventLog(displayWidth: captureFrame.width, displayHeight: captureFrame.height)
     }
 
     func start() {
@@ -45,10 +44,12 @@ final class CursorLogger {
     }
 
     private func record(_ kind: InputEvent.Kind?, at timestamp: TimeInterval, location: CGPoint) {
-        guard let kind, let origin, displayFrame.contains(location) else { return }
-        // AppKit's origin is bottom left; the video's is top left.
-        let x = location.x - displayFrame.minX
-        let y = displayFrame.maxY - location.y
+        guard let kind, let origin else { return }
+        // AppKit's global origin is the bottom left of the main display;
+        // Core Graphics' is its top left.
+        let mainHeight = CGDisplayBounds(CGMainDisplayID()).height
+        let x = location.x - captureFrame.minX
+        let y = (mainHeight - location.y) - captureFrame.minY
         log.append(InputEvent(kind: kind, t: timestamp - origin, x: x, y: y))
     }
 

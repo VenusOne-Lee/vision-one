@@ -100,7 +100,7 @@ struct ThumbnailPane: View {
     }
 
     /// A dashed outline over something draggable, shown on hover.
-    private func handle(_ rect: NormalizedRect, in size: CGSize, label: String, circle: Bool = false) -> some View {
+    private func handle(_ rect: NormalisedRect, in size: CGSize, label: String, circle: Bool = false) -> some View {
         HoverOutline(circle: circle)
             .frame(width: CGFloat(rect.width) * size.width, height: CGFloat(rect.height) * size.height)
             .offset(x: CGFloat(rect.x) * size.width, y: CGFloat(rect.y) * size.height)
