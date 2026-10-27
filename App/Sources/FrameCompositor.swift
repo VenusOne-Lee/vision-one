@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import VisionOneKit
 
 /// One stretch of the export: either the recording (which track is the
 /// screen and what to draw on top) or a brand card drawn full frame.
@@ -18,14 +19,18 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     /// Subtracted from the export time before overlays draw, so captions
     /// keep the edited video's clock after an intro.
     let overlayTimeOffset: Double
+    /// Blurs and zooms, applied to the screen frame before it's scaled.
+    let effects: FrameEffects?
     /// Set for an intro or outro; the recording isn't read then.
     let card: (any CardSource)?
 
-    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], overlayTimeOffset: Double = 0) {
+    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], overlayTimeOffset: Double = 0,
+         effects: FrameEffects? = nil) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
         self.overlayTimeOffset = overlayTimeOffset
+        self.effects = effects
         card = nil
         requiredSourceTrackIDs = [NSNumber(value: trackID)]
     }
@@ -35,14 +40,17 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         trackID = kCMPersistentTrackID_Invalid
         overlays = []
         overlayTimeOffset = 0
+        effects = nil
         self.card = card
         requiredSourceTrackIDs = []
     }
 }
 
-/// Scales each screen frame to the export size with Core Image (on the
-/// GPU), then lets overlays draw on top with Core Graphics. The camera
-/// bubble, burned-in captions and click zooms all plug in here.
+/// Per frame: secret blurs, then the zoom viewport (`FrameEffects`), then
+/// scaled to the export size with Core Image (on the GPU), then overlays
+/// drawn on top with Core Graphics (captions, the camera bubble). Blurring
+/// first means a secret can't slip out through a zoom or a clip's crop.
+/// The editor's preview plays through this compositor too.
 final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
@@ -80,7 +88,12 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
             return
         }
 
-        let image = CIImage(cvPixelBuffer: source)
+        var image = CIImage(cvPixelBuffer: source)
+        if let effects = instruction.effects, !effects.isEmpty {
+            // Effects run on the edited video's clock, like overlays.
+            image = FrameEffectRenderer.apply(effects, to: image,
+                                              atOutput: request.compositionTime.seconds - instruction.overlayTimeOffset)
+        }
         let scale = min(size.width / image.extent.width, size.height / image.extent.height)
         let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         // Centre it; the shape matches in v0.1, so this only matters once

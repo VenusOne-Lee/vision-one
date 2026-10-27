@@ -131,7 +131,9 @@ struct EditorView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onTapGesture { model.togglePlay() }
+                    .overlay { EffectsLayer(model: model, effects: model.effects) }
                 EditorTimeline(model: model)
+                EffectsLane(model: model, effects: model.effects)
                 if showSound { SoundLane(model: model) }
                 TransportBar(model: model)
                 if showSound { SoundPanel(model: model) }
