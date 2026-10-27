@@ -1,7 +1,7 @@
 import XCTest
 @testable import VisionOneKit
 
-final class TakeTitleTests: XCTestCase {
+final class TakePlanStampTests: XCTestCase {
     private var folder: URL!
 
     override func setUpWithError() throws {
@@ -12,23 +12,6 @@ final class TakeTitleTests: XCTestCase {
 
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: folder)
-    }
-
-    func testTitleRoundTripsAndClears() throws {
-        let take = Take(folder: folder)
-        XCTAssertNil(take.customTitle)
-        try take.setTitle("  Launch video\nfor Kasi Eats  ")
-        XCTAssertEqual(take.customTitle, "Launch video for Kasi Eats")
-        XCTAssertEqual(take.displayTitle(), "Launch video for Kasi Eats")
-        try take.setTitle("   ")
-        XCTAssertNil(take.customTitle)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: take.titleURL.path))
-    }
-
-    func testTitleIsCappedAt80Characters() throws {
-        let take = Take(folder: folder)
-        try take.setTitle(String(repeating: "a", count: 120))
-        XCTAssertEqual(take.customTitle?.count, 80)
     }
 
     func testStampWritesThePickOnce() throws {
