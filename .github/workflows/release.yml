@@ -31,7 +31,7 @@ concurrency:
 jobs:
   release:
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 180 # Apple can take 45+ minutes per notarisation
     env:
       DRY_RUN: ${{ github.event_name != 'workflow_dispatch' }}
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
