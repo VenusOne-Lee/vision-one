@@ -29,7 +29,7 @@ concurrency:
 jobs:
   rehearse:
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 180 # Apple can take 45+ minutes per notarisation
     env:
       TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       OUT: build/rehearsal

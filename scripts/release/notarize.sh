@@ -31,7 +31,17 @@ if [[ "$status" != "Accepted" ]]; then
   exit 1
 fi
 
-xcrun stapler staple "$TARGET"
+# Apple's ticket can take a few minutes to reach its servers after
+# "Accepted", and the lookup sometimes drops the connection, so retry.
+for attempt in 1 2 3 4 5 6; do
+  if xcrun stapler staple "$TARGET"; then break; fi
+  if (( attempt == 6 )); then
+    echo "Couldn't staple the ticket after $attempt tries." >&2
+    exit 1
+  fi
+  echo "Stapling failed (try $attempt), trying again in $((attempt * 20))s." >&2
+  sleep $((attempt * 20))
+done
 if [[ "$upload" != "$TARGET" ]]; then rm -f "$upload"; fi
 if [[ "$TARGET" == *.app ]]; then
   spctl --assess --type execute --verbose=2 "$TARGET"
