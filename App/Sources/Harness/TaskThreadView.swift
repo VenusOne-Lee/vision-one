@@ -99,7 +99,7 @@ struct NewTaskView: View {
     @ObservedObject private var recorder = ScreenRecorder.shared
     @ObservedObject private var hotKey = GlobalHotKey.shared
     @ObservedObject private var ai = AIServices.shared
-    /// "Clips from my last video" was picked with nothing recorded yet.
+    /// "Clips from" or "Cut my last video" was picked with nothing recorded yet.
     @State private var clipsNeededTake = false
     /// nil until the ladder has been checked.
     @State private var anyRungReady: Bool?
@@ -116,8 +116,8 @@ struct NewTaskView: View {
             if model.takes.isEmpty, !recorder.phase.isLive {
                 firstRecording
             }
-            FlowChips(chips: ["/record", "Clips from my last video", "/style",
-                              "Write this week's update"]) { chip in
+            FlowChips(chips: ["/record", "Clips from my last video", "Cut my last video to 60 seconds",
+                              "/style", "Write this week's update"]) { chip in
                 start(chip)
             }
             if model.takes.isEmpty, clipsNeededTake {
@@ -174,6 +174,13 @@ struct NewTaskView: View {
             }
             model.open(newest)
             model.send("/clips 3")
+        case "Cut my last video to 60 seconds":
+            guard let newest = model.takes.first else {
+                clipsNeededTake = true
+                return
+            }
+            model.open(newest)
+            model.send("Cut it to 60 seconds")
         case "Write this week's update":
             model.send("/script what's new this week")
         default:

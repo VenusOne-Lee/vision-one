@@ -43,7 +43,8 @@ final class CaptionBuilderTests: XCTestCase {
         XCTAssertEqual(retimed[0].end, 0.5, accuracy: 0.0001)
         XCTAssertEqual(retimed[1].start, 0.5, accuracy: 0.0001)
         XCTAssertEqual(retimed[1].end, 1.0, accuracy: 0.0001)
-        XCTAssertEqual(cues[0].end, 1.0, accuracy: 0.0001)
+        // Two words are held 0.5 s + 2 × 0.3 s to be read.
+        XCTAssertEqual(cues[0].end, 1.1, accuracy: 0.0001)
     }
 
     func testSplitsTwoLinesBeforeAConjunction() {
@@ -82,6 +83,22 @@ final class CaptionBuilderTests: XCTestCase {
     func testShortCuesStayUpLongEnoughToRead() {
         let cues = CaptionBuilder(layout: .subtitle).cues(for: [CaptionWord(text: "Hi", start: 0, end: 0.2)])
         XCTAssertEqual(cues[0].end, 5.0 / 6.0, accuracy: 0.0001)
+    }
+
+    func testCuesAreHeldHalfASecondPlusAWordRate() {
+        // Four quick words, then a long pause: held 0.5 + 4 × 0.3 = 1.7 s.
+        let cues = CaptionBuilder(layout: .subtitle).cues(for: words("Export takes two clicks.", step: 0.15))
+        XCTAssertEqual(cues.count, 1)
+        XCTAssertEqual(cues[0].end, 1.7, accuracy: 0.0001)
+        XCTAssertEqual(CaptionLayout.subtitle.readingTime(words: 0), 0)
+    }
+
+    func testReadingTimeNeverRunsIntoTheNextCue() {
+        let a = words("Export takes two clicks.", step: 0.15)
+        let b = words("Then share it.", start: 1.0, step: 0.2)
+        let cues = CaptionBuilder(layout: .subtitle).cues(for: a + b)
+        XCTAssertEqual(cues.count, 2)
+        XCTAssertLessThanOrEqual(cues[0].end, cues[1].start)
     }
 
     func testCuesNeverOverlap() {
