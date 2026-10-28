@@ -9,7 +9,8 @@ import Foundation
 /// 2. Words are grouped into cues, breaking at sentence ends, at pauses,
 ///    and when the lines are full.
 /// 3. Each cue is split into balanced lines and stretched to a readable
-///    minimum without running into the next cue.
+///    minimum (reading speed, and 0.5 s plus 0.3 s a word) without
+///    running into the next cue.
 public struct CaptionBuilder: Sendable {
     public var layout: CaptionLayout
     /// Product and brand names to mark as keywords, besides numbers.
@@ -165,7 +166,8 @@ public struct CaptionBuilder: Sendable {
         for i in cues.indices {
             let cue = cues[i]
             let characters = Double(cue.text.count)
-            let wanted = min(layout.maxDuration, max(layout.minDuration, characters / layout.maxCharactersPerSecond))
+            let reading = max(characters / layout.maxCharactersPerSecond, layout.readingTime(words: cue.words.count))
+            let wanted = min(layout.maxDuration, max(layout.minDuration, reading))
             var end = max(cue.end, cue.start + wanted)
             if i + 1 < cues.count {
                 let limit = cues[i + 1].start - layout.gap

@@ -16,6 +16,8 @@ public final class VisionOneMCP: Sendable {
     /// How long a tool waits before handing back a task_id to wait on.
     /// Codex gives a tool 60 seconds.
     public let patience: Double
+    /// What each agent last saw of each take, for what_changed.
+    public let timelines = TimelineMemory()
 
     public init(library: TakeLibrary, board: AgentJobBoard, desk: Desk? = nil, host: any VisionOneMCPHost,
                 permissions: MCPPermissions = MCPPermissions(), version: String = "0.1", patience: Double = 40) {
@@ -41,11 +43,27 @@ public final class VisionOneMCP: Sendable {
     // MARK: Calling
 
     public func call(_ name: String, arguments args: [String: JSONValue], client: MCPClient) async -> MCPToolResult {
+        let result = await route(name, arguments: args, client: client)
+        if !result.isError, Self.looksAtTimeline.contains(name) {
+            await rememberTimeline(args, client: client)
+        }
+        return result
+    }
+
+    /// Tools after which the agent has seen the take's timeline, so
+    /// what_changed starts counting from there.
+    static let looksAtTimeline: Set<String> = [
+        "get_take", "read_transcript", "get_timeline", "what_changed", "clean_up", "cut_part",
+    ]
+
+    func route(_ name: String, arguments args: [String: JSONValue], client: MCPClient) async -> MCPToolResult {
         do {
             switch name {
             case "list_takes": return listTakes(args)
             case "get_take": return try await getTake(args)
             case "read_transcript": return try await readTranscript(args)
+            case "get_timeline": return try getTimeline(args)
+            case "what_changed": return try await whatChanged(args, client: client)
             case "list_tasks": return try await listTasks(args)
             case "wait_for_task": return try await waitForTask(args)
             case "recording_status": return await recordingStatus()
@@ -123,6 +141,55 @@ public final class VisionOneMCP: Sendable {
         }
         let body = lines.isEmpty ? "Nothing was said in this take." : lines.joined(separator: "\n")
         return .done(head + "\n\n" + body)
+    }
+
+    func getTimeline(_ args: [String: JSONValue]) throws -> MCPToolResult {
+        let take = try resolveTake(args)
+        let duration = Self.sourceDuration(of: take)
+        let timeline = try TakeTimeline.load(take, sourceDuration: duration)
+        let edits = try EditList.load(from: take.editsURL, sourceDuration: duration)
+        func count(_ kind: TakeTimeline.Kind, _ one: String, _ many: String) -> String {
+            let n = timeline.rows.filter { $0.kind == kind }.count
+            return "\(n) \(n == 1 ? one : many)"
+        }
+        var head = "“\(take.displayTitle())”: \(count(.cut, "cut", "cuts")), \(count(.zoom, "zoom", "zooms")), \(count(.blur, "blur", "blurs"))."
+        if edits.sourceDuration > 0 {
+            head += " \(AgentReceipt.duration(edits.sourceDuration)) recorded, \(AgentReceipt.duration(edits.outputDuration)) after kept cuts."
+        }
+        let body = timeline.rows.isEmpty
+            ? "Nothing is cut, zoomed or blurred yet."
+            : "Times are seconds of the original recording. Names like c3 can change after an edit.\n\n"
+                + timeline.lines.joined(separator: "\n")
+        return .done(head + "\n\n" + body, ["rows": timeline.json])
+    }
+
+    func whatChanged(_ args: [String: JSONValue], client: MCPClient) async throws -> MCPToolResult {
+        let take = try resolveTake(args)
+        let now = try TakeTimeline.load(take, sourceDuration: Self.sourceDuration(of: take))
+        let title = take.displayTitle()
+        guard let before = await timelines.last(client: client, take: take) else {
+            return .done("This is your first look at “\(title)” since Vision One opened, so there's nothing to compare yet. "
+                         + "From now on, what_changed lists what moved since you last looked.",
+                         ["first_look": true, "changes": .array([])])
+        }
+        let lines = now.changes(since: before)
+        let text = lines.isEmpty
+            ? "Nothing changed in “\(title)” since you last looked."
+            : "Since you last looked at “\(title)”:\n" + lines.map { "- " + $0 }.joined(separator: "\n")
+                + "\n\nChanges you didn't make came from the user or Vision One's own agents. Don't undo them unless you're asked to."
+        return .done(text, ["first_look": false, "changes": .array(lines.map { .string($0) })])
+    }
+
+    /// The take's length: from edits.json, else the transcript.
+    static func sourceDuration(of take: Take) -> Double {
+        if let edits = try? EditList.read(from: take.editsURL), edits.sourceDuration > 0 { return edits.sourceDuration }
+        return (try? Transcript.read(from: take.transcriptURL))?.duration ?? 0
+    }
+
+    func rememberTimeline(_ args: [String: JSONValue], client: MCPClient) async {
+        guard let take = try? resolveTake(args),
+              let timeline = try? TakeTimeline.load(take, sourceDuration: Self.sourceDuration(of: take)) else { return }
+        await timelines.remember(timeline, client: client, take: take)
     }
 
     /// One line per segment: "0:12  So here's the signup page".
@@ -402,9 +469,23 @@ public final class VisionOneMCP: Sendable {
             throw Failure("Give a quote, or a start and end in seconds.")
         }
         var list = try EditList.load(from: take.editsURL, sourceDuration: transcript.duration)
+        let lengthBefore = list.outputDuration
         let added = list.propose([Cut(span: span, reason: Cut.Reason.word, state: .proposed)])
         guard !added.isEmpty else {
             throw Failure("That part is already cut, proposed, or was turned down before.")
+        }
+        if args["plan"]?.boolValue == true {
+            // A dry run, like HyperFrames' --plan: show before and after, write nothing.
+            var kept = list
+            for cut in added { kept.setState(.accepted, for: cut.id) }
+            let cut = added[0]
+            let text = "Dry run, nothing changed. This would propose cutting "
+                + "\(TakeTimeline.clock(cut.start))–\(TakeTimeline.clock(cut.end)) (\(AgentReceipt.duration(cut.end - cut.start))). "
+                + "Once kept, the video goes from \(AgentReceipt.duration(lengthBefore)) to \(AgentReceipt.duration(kept.outputDuration)). "
+                + "Call cut_part again without plan to propose it."
+            return .done(text, ["start": .number(Self.rounded(cut.start)), "end": .number(Self.rounded(cut.end)),
+                                "length_before": .number(Self.rounded(lengthBefore)),
+                                "length_after": .number(Self.rounded(kept.outputDuration)), "written": false])
         }
         try list.write(to: take.editsURL)
         let job = await addJob(AgentJob(agent: .editor, title: "Cut a part of “\(take.displayTitle())”", take: take,

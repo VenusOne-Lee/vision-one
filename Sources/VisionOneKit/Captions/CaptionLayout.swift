@@ -20,6 +20,11 @@ public struct CaptionLayout: Equatable, Sendable {
     public var pauseBreak: Double
     /// Space kept between one cue's end and the next one's start.
     public var gap: Double
+    /// Time to read a cue: this much, plus `readingTimePerWord` for each
+    /// word (0.5 s + 0.3 s a word, HyperFrames' rule for text on screen).
+    /// Cues are held that long when there's room before the next one.
+    public var readingTimeBase: Double
+    public var readingTimePerWord: Double
 
     public init(
         maxCharactersPerLine: Int,
@@ -29,7 +34,9 @@ public struct CaptionLayout: Equatable, Sendable {
         maxDuration: Double = 7,
         maxCharactersPerSecond: Double = 20,
         pauseBreak: Double = 0.6,
-        gap: Double = 2.0 / 30.0
+        gap: Double = 2.0 / 30.0,
+        readingTimeBase: Double = 0.5,
+        readingTimePerWord: Double = 0.3
     ) {
         self.maxCharactersPerLine = maxCharactersPerLine
         self.maxLines = max(1, maxLines)
@@ -39,6 +46,14 @@ public struct CaptionLayout: Equatable, Sendable {
         self.maxCharactersPerSecond = maxCharactersPerSecond
         self.pauseBreak = pauseBreak
         self.gap = gap
+        self.readingTimeBase = readingTimeBase
+        self.readingTimePerWord = readingTimePerWord
+    }
+
+    /// How long a cue of `words` words needs to be read.
+    public func readingTime(words: Int) -> Double {
+        guard words > 0 else { return 0 }
+        return readingTimeBase + readingTimePerWord * Double(words)
     }
 
     /// Two lines of up to 42 characters: YouTube, tutorials, SRT files.

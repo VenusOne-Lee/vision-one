@@ -7,6 +7,9 @@ extension VisionOneMCP {
     Name a take by its title, its folder name, or "latest". \
     Edits are proposals until kept: they show dashed in Vision One, and keep_changes asks the user before they count. \
     Exports only include kept cuts. \
+    get_timeline lists every cut, zoom and blur with a short name (c3, z1). \
+    Before editing a take again, call what_changed: it lists what the user or Vision One changed since you last looked, so you don't undo it. \
+    cut_part with plan: true is a dry run that shows the length before and after without changing anything. \
     start_recording, keep_changes and share_video wait for the user to say yes in Vision One; if they say no, the reply says why. \
     Jobs that take longer than about 40 seconds return a task_id: call wait_for_task with it. \
     To record yourself using this Mac (computer use, a browser agent), call start_agent_recording before you start, \
@@ -65,6 +68,12 @@ extension VisionOneMCP {
                     "kept_only": flag("Only the words that stay in the video."),
                 ],
                 readOnly: true, idempotent: true),
+        MCPTool("get_timeline", title: "Get the timeline",
+                description: "Every cut, zoom and blur in a take, in time order, each with a short name (c3, z1, b2), its times in seconds of the original recording, and whether it's proposed, kept or turned down.",
+                input: ["take": takeArg], readOnly: true, idempotent: true),
+        MCPTool("what_changed", title: "What changed",
+                description: "What changed in a take's cuts, zooms and blurs since you last looked at it (get_take, read_transcript, get_timeline or an edit): added, kept, turned down, moved or removed, by the user or Vision One's agents. Call it before editing again so you don't undo the user's changes.",
+                input: ["take": takeArg], readOnly: true),
         MCPTool("list_tasks", title: "List tasks",
                 description: "What Vision One's agents are doing or did: Editor, Clipper, Sharer, recordings and exports.",
                 input: [
@@ -128,6 +137,7 @@ extension VisionOneMCP {
                     "quote": text("Words said in the take, as read_transcript shows them."),
                     "start": number("Start, in seconds of the original recording."),
                     "end": number("End, in seconds of the original recording."),
+                    "plan": flag("A dry run: say what would be cut and the length before and after, and change nothing."),
                 ]),
         MCPTool("make_clips", title: "Make clips",
                 description: "The Clipper agent finds moments that stand alone, as proposed clips.",

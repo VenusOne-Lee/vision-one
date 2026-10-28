@@ -62,6 +62,8 @@ Name a take by its title, its folder name, or `latest` (the default).
 | `list_takes` | Search takes by words said, title or what they're for | No |
 | `get_take` | Length, purpose, transcript status, cuts, clips, exports, tasks | No |
 | `read_transcript` | Words with times; `~~cut~~`, `[proposed]` | No |
+| `get_timeline` | Every cut, zoom and blur with a short name (`c3`, `z1`, `b2`), times and state | No |
+| `what_changed` | What changed in a take since this agent last looked, so it doesn't undo your edits | No |
 | `list_tasks`, `wait_for_task` | What agents are doing; wait up to 45 s for one | No |
 | `recording_status` | Recording or not, and which take | No |
 | `start_recording` | Records with your last screen and sound choices | **Yes** |
@@ -70,7 +72,7 @@ Name a take by its title, its folder name, or `latest` (the default).
 | `log_step` | During an agent recording: a short note that becomes a chapter | No |
 | `clean_up` | Proposes cuts for ums, repeats, long pauses (on this Mac) | No, proposals |
 | `cut_to_length` | The Editor agent proposes cuts to a length or an ask | No, proposals (AI settings may ask before words leave the Mac) |
-| `cut_part` | Proposes cutting a quote or a time span | No, proposals |
+| `cut_part` | Proposes cutting a quote or a time span; `plan: true` is a dry run showing the length before and after | No, proposals |
 | `make_clips` | The Clipper agent proposes clips | No, proposals |
 | `draft_posts` | The Sharer agent drafts title, chapters, posts | No, drafts |
 | `keep_changes` | Makes a task's proposals count | **Yes** |

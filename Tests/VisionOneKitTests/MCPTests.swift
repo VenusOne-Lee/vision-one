@@ -307,6 +307,53 @@ final class MCPTests: XCTestCase {
         XCTAssertTrue(missing.isError)
     }
 
+    func testCutPartDryRunChangesNothing() async throws {
+        let take = try makeTake()
+        let (mcp, _) = server()
+        let result = await call(mcp, "cut_part", ["quote": "sorry my cat", "plan": true])
+        XCTAssertFalse(result.isError, result.text)
+        XCTAssertTrue(result.text.contains("Dry run"), result.text)
+        XCTAssertEqual(result.data?["length_before"]?.doubleValue, 15)
+        XCTAssertEqual(try XCTUnwrap(result.data?["length_after"]?.doubleValue), 12.1, accuracy: 0.001)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: take.editsURL.path))
+        let jobs = await mcp.board.jobs
+        XCTAssertTrue(jobs.isEmpty)
+    }
+
+    func testTimelineNamesRowsAndWhatChangedSeesTheUsersEdits() async throws {
+        let take = try makeTake()
+        let (mcp, _) = server()
+        let first = await call(mcp, "what_changed")
+        XCTAssertFalse(first.isError, first.text)
+        XCTAssertEqual(first.data?["first_look"]?.boolValue, true)
+
+        _ = await call(mcp, "cut_part", ["quote": "sorry my cat"])
+        let timeline = await call(mcp, "get_timeline")
+        XCTAssertFalse(timeline.isError, timeline.text)
+        XCTAssertTrue(timeline.text.contains("c1"), timeline.text)
+        XCTAssertEqual(timeline.data?["rows"]?.arrayValue?.first?["state"]?.stringValue, "proposed")
+
+        let quiet = await call(mcp, "what_changed")
+        XCTAssertEqual(quiet.data?["changes"]?.arrayValue?.count, 0, quiet.text)
+
+        // The user keeps the cut and adds a zoom in the editor.
+        var list = try EditList.read(from: take.editsURL)
+        list.acceptAllProposed()
+        try list.write(to: take.editsURL)
+        try ZoomList(zooms: [Zoom(span: TimeSpan(start: 10, end: 12), scale: 2, centerX: 0.5, centerY: 0.5)])
+            .write(to: take.zoomsURL)
+
+        let changed = await call(mcp, "what_changed")
+        let lines = try XCTUnwrap(changed.data?["changes"]?.arrayValue).compactMap(\.stringValue)
+        XCTAssertEqual(lines.count, 2, changed.text)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("Kept cut c1") }, "\(lines)")
+        XCTAssertTrue(lines.contains { $0.hasPrefix("Added zoom z1") }, "\(lines)")
+
+        // Seen now, so the next look is quiet again.
+        let after = await call(mcp, "what_changed")
+        XCTAssertEqual(after.data?["changes"]?.arrayValue?.count, 0, after.text)
+    }
+
     func testKeepAsksAndAllowUntilQuitStopsAsking() async throws {
         let take = try makeTake()
         let (mcp, host) = server(answer: MCPAnswer(.allowForSession))

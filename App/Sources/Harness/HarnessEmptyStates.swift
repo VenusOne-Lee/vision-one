@@ -45,7 +45,7 @@ struct FirstTakeHint: View {
         if !recorder.phase.isLive {
             HStack(spacing: Theme.Space.sm) {
                 Text(neededTake
-                     ? "Clips need a take to cut from. Record your first one above, then ask again."
+                     ? "That needs a take to work on. Record your first one above, then ask again."
                      : "No takes yet. Press record below, or ⇧⌘R from anywhere, to make your first.")
                     .textStyle(.body)
                     .foregroundStyle(Theme.textMuted)
