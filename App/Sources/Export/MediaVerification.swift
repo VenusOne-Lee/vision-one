@@ -42,7 +42,7 @@ enum MediaVerification {
                         placements: [.init(t: 0, x: 0.75, y: 0.1, size: 0.2)]).write(to: take.cameraInfoURL)
         try Transcript(language: "en", engine: "fixture", duration: 3,
                        segments: [.init(words: [
-                        .init(id: 0, text: "Producer", start: 0.2, end: 0.8),
+                        .init(id: 0, text: "Producer.", start: 0.2, end: 0.8),
                         .init(id: 1, text: "Workspace", start: 1.6, end: 2.2)
                        ])]).write(to: take.transcriptURL)
         try take.saveCaptionSettings(CaptionSettings(style: .subtitle))
@@ -82,6 +82,11 @@ enum MediaVerification {
         generator.requestedTimeToleranceAfter = .zero
         let image = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
         let pixels = try analyse(image)
+        let laterImage = try await generator.image(at: CMTime(seconds: 1.8, preferredTimescale: 600)).image
+        let laterPixels = try analyse(laterImage)
+        try require(pixels.red > pixels.blue && laterPixels.blue > laterPixels.red,
+                    "Follow framing did not move from the red to blue source region")
+        try save(laterImage, to: root.appendingPathComponent("portrait-later-frame.png"))
         try require(pixels.green > 1000, "Separate camera track missing from the rendered clip")
         try require(pixels.yellow > 500, "Brand-overlay hook missing from the rendered clip")
         try require(pixels.white > 100, "Caption glyphs missing from the rendered clip")
@@ -104,7 +109,7 @@ enum MediaVerification {
         let report: [String: Any] = [
             "dimensions": [Int(size.width), Int(size.height)], "duration": length,
             "cameraGreenPixels": pixels.green, "brandYellowPixels": pixels.yellow,
-            "captionWhitePixels": pixels.white, "decodedAudioPeak": exportedAudio, "previewAudioPeak": previewPeak,
+            "captionWhitePixels": pixels.white, "earlyRedPixels": pixels.red, "laterBluePixels": laterPixels.blue, "decodedAudioPeak": exportedAudio, "previewAudioPeak": previewPeak,
             "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback"],
             "remaining": ["real capture and permissions", "native UI light/dark walkthrough", "human inspection of framing, caption placement and audible mix"]
         ]
@@ -137,9 +142,9 @@ enum MediaVerification {
                 for x in 0..<320 {
                     let p = y * stride + x * 4
                     pixels[p] = 255
-                    pixels[p + 1] = green ? 0 : 150
+                    pixels[p + 1] = green ? 0 : (x < 160 ? 150 : 30)
                     pixels[p + 2] = green ? 230 : 20
-                    pixels[p + 3] = green ? 0 : 60
+                    pixels[p + 3] = green ? 0 : (x < 160 ? 60 : 150)
                 }
             }
             CVPixelBufferUnlockBaseAddress(buffer, [])
@@ -171,7 +176,7 @@ enum MediaVerification {
         try require(reader.status == .completed, "Exported audio decode failed")
         return peak
     }
-    private static func analyse(_ image: CGImage) throws -> (green: Int, yellow: Int, white: Int) {
+    private static func analyse(_ image: CGImage) throws -> (green: Int, yellow: Int, white: Int, red: Int, blue: Int) {
         var data = [UInt8](repeating: 0, count: image.width * image.height * 4)
         return try data.withUnsafeMutableBytes { raw in
         guard let context = CGContext(data: raw.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8,
@@ -179,15 +184,17 @@ enum MediaVerification {
             throw Failure(message: "Couldn't decode frame pixels")
         }
         context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-        var green = 0, yellow = 0, white = 0
+        var green = 0, yellow = 0, white = 0, red = 0, blue = 0
         let bytes = raw.bindMemory(to: UInt8.self)
         for p in stride(from: 0, to: raw.count, by: 4) {
             let r = Int(bytes[p]), g = Int(bytes[p + 1]), b = Int(bytes[p + 2])
             if g > 140 && g > r + 50 && g > b + 50 { green += 1 }
             if r > 180 && g > 180 && b < 80 { yellow += 1 }
             if r > 220 && g > 220 && b > 220 { white += 1 }
+            if r > b + 30 && r > g + 30 { red += 1 }
+            if b > r + 30 && b > g + 30 { blue += 1 }
         }
-        return (green, yellow, white)
+        return (green, yellow, white, red, blue)
         }
     }
     private static func save(_ image: CGImage, to url: URL) throws {

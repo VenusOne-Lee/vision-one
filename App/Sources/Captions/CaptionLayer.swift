@@ -59,13 +59,17 @@ struct CaptionLayer: View {
         .onChange(of: model.edits) { _, _ in rebuild() }
         .onChange(of: settings) { _, newValue in
             rebuild()
-            do { try model.take.saveCaptionSettings(newValue); saveProblem = nil }
+            do {
+                try model.take.saveCaptionSettings(newValue)
+                saveProblem = nil
+                NotificationCenter.default.post(name: .takeStyleChanged, object: model.take.folder)
+            }
             catch { saveProblem = "Couldn't save captions: \(error.localizedDescription)" }
         }
     }
 
     private func rebuild() {
-        guard let transcript = model.transcript else {
+        guard let transcript = try? model.take.captionTranscript(language: settings.language) else {
             track = CaptionTrack(cues: [])
             return
         }

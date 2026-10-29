@@ -28,6 +28,7 @@ struct ExportSheet: View {
     @State private var loadProblem: String?
     @State private var captions = CaptionSettings()
     @State private var savedCaptions: CaptionSettings?
+    @State private var captionProblem: String?
 
     init(take: Take, keep: [Range<Double>]?, close: @escaping () -> Void) {
         self.take = take
@@ -80,6 +81,9 @@ struct ExportSheet: View {
                 .padding(Theme.Space.lg)
                 .frame(maxHeight: .infinity, alignment: .top)
             }
+            if let captionProblem {
+                Text(captionProblem).textStyle(.caption).foregroundStyle(Theme.error).padding(.horizontal, Theme.Space.lg)
+            }
             if let warnings = queue.warnings[take.folder], !warnings.isEmpty {
                 Text(warnings.joined(separator: "\n")).textStyle(.caption).foregroundStyle(Theme.error)
                     .padding(.horizontal, Theme.Space.lg).padding(.bottom, Theme.Space.sm)
@@ -107,8 +111,12 @@ struct ExportSheet: View {
             // Saved the way the editor's caption controls save, so the
             // export (which reads captions.json) uses what's shown here.
             guard newValue != savedCaptions else { return }
-            try? take.saveCaptionSettings(newValue)
-            savedCaptions = newValue
+            do {
+                try take.saveCaptionSettings(newValue)
+                savedCaptions = newValue
+                captionProblem = nil
+                NotificationCenter.default.post(name: .takeStyleChanged, object: take.folder)
+            } catch { captionProblem = "Couldn't save captions: \(error.localizedDescription)" }
         }
     }
 
@@ -311,8 +319,8 @@ struct ExportSheet: View {
                 }
                 .buttonStyle(PillButtonStyle(kind: .primary))
                 .keyboardShortcut(.defaultAction)
-                .disabled(picked.isEmpty)
-                .opacity(picked.isEmpty ? 0.5 : 1)
+                .disabled(picked.isEmpty || captionProblem != nil)
+                .opacity(picked.isEmpty || captionProblem != nil ? 0.5 : 1)
             }
         }
         .padding(.horizontal, Theme.Space.lg)
