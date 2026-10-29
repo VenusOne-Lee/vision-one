@@ -38,7 +38,9 @@ if CommandLine.arguments.contains("--mcp") {
             exit(1)
         }
     }
-    RunLoop.main.run()
+    // Native focus/menu verification needs AppKit's event dispatch, including
+    // WindowServer activation events, rather than only the CF run loop.
+    MainActor.assumeIsolated { NSApplication.shared.run() }
 } else if let index = CommandLine.arguments.firstIndex(of: "--verify-media"), index + 1 < CommandLine.arguments.count {
     let output = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
     Task { @MainActor in

@@ -34,13 +34,26 @@ enum WorkspaceUndoVerification {
         model.mode = .editor
         await model.workspace?.load()
         guard let first = model.workspace?.editor else { throw MediaVerification.Failure(message: "A editor missing") }
+        let priorPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.regular)
+        if !NSApp.isRunning { NSApp.finishLaunching() }
+        defer { NSApp.setActivationPolicy(priorPolicy) }
         let controller = EditorWindowController(model: model)
         controller.present()
         guard let window = controller.window else { throw MediaVerification.Failure(message: "Harness window missing") }
         defer { window.close() }
-        window.makeKeyAndOrderFront(nil)
-        try await Task.sleep(for: .milliseconds(100))
-        try MediaVerification.require(NSApp.keyWindow === window, "Harness undo fixture is not key")
+        // A CLI fixture uses a CF run loop rather than NSApplication.run().
+        // Finish launching and wait for WindowServer activation before testing
+        // the real key-window responder chain. Never skip the focus assertion.
+        for _ in 0..<100 {
+            if NSApp.isActive && window.isKeyWindow && NSApp.keyWindow === window { break }
+            NSApp.activate(ignoringOtherApps: true)
+            window.orderFrontRegardless()
+            window.makeKeyAndOrderFront(nil)
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try MediaVerification.require(NSApp.isActive && window.isKeyWindow && NSApp.keyWindow === window,
+                                      "Harness undo fixture is not active/key after bounded activation")
         window.makeFirstResponder(nil)
 
         let actions = WorkspaceUndoActions.shared
