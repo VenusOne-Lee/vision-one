@@ -1,0 +1,291 @@
+{
+  "brandYellowPixels": 3596,
+  "cameraGreenPixels": 31930,
+  "captionWhitePixels": 12108,
+  "checks": [
+    "actual MP4 decode",
+    "accepted-cut duration",
+    "separate camera",
+    "caption pixels",
+    "brand overlay",
+    "timed sidecars",
+    "invalid import",
+    "silent import",
+    "stale mic start/callback",
+    "square and 4:5 MP4 dimensions",
+    "manual fixed framing",
+    "fit framing",
+    "silent import edit/undo/redo/export",
+    "camera late-start gap",
+    "rotated import matches native orientation",
+    "independent microphone/system levels and preview/export agreement"
+  ],
+  "decodedAudioPeak": 0.13038228452205658,
+  "dimensions": [
+    1080,
+    1920
+  ],
+  "duration": 2.5,
+  "earlyRedPixels": 2006050,
+  "laterBluePixels": 1174509,
+  "previewAudioPeak": 0.1253771185874939,
+  "remaining": [
+    "real capture and permissions",
+    "native UI light/dark walkthrough",
+    "human inspection of framing, caption placement and audible mix"
+  ],
+  "separateSourcePeaks": {
+    "microphoneExport": 0.2580064535140991,
+    "microphonePreview": 0.250070720911026,
+    "systemExport": 0.10354480147361755,
+    "systemPreview": 0.10021650791168213
+  },
+  "commit": "3f3f4702719d53236e0e6c2f73094106d2ad3a14",
+  "run": 40924902600,
+  "artifact": 12919838385,
+  "independentFFmpeg": [
+    {
+      "file": "fit-portrait.mp4",
+      "sha256": "0ec24bd1f2036f997262f4592e823020055d12d1754885ad62243c4b2efffae5",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1920
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "sample_rate": "48000",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "2.500000"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "file": "fixed-portrait.mp4",
+      "sha256": "26e14d2e3af12e5fab3da296a591c0a5ea3f39561cd12a171db529b7eadcfd91",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1920
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "sample_rate": "48000",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "2.500000"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "file": "portrait-with-captions.mp4",
+      "sha256": "bd396ca45ed271d9cf833f212673d5eeed0209aff720e3251907aa013758c621",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1920
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "sample_rate": "48000",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "2.500000"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "file": "portrait.mp4",
+      "sha256": "4a83f12b541e48a466c5b10e64d978680d4007946130ee6077e4871662915126",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1350
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "sample_rate": "48000",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "2.500000"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "file": "rotated-import.mp4",
+      "sha256": "a4f115ae7f1bf21ba1b9639ab6c4a519628fdc7cc486211ec0a3b6d247d6b9df",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 180,
+            "height": 320
+          }
+        ],
+        "format": {
+          "duration": "3.000000"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "file": "silent-import-edited.mp4",
+      "sha256": "4dcdb10488f53e516998fc6f3b6ec33063c454d000a7eddaa1a982ff8bbbfaba",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 320,
+            "height": 180
+          }
+        ],
+        "format": {
+          "duration": "2.500000"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "file": "source-level-microphone.mp4",
+      "sha256": "731b15b648d1351234eb2cd8ab612a100ff2135213029230c7fc442c2e5a8b17",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 320,
+            "height": 180
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "sample_rate": "48000",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "3.000000"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "file": "source-level-system.mp4",
+      "sha256": "7f6581f0e20ffa11ba244212747eb5e51d3f11b552dda7e3f952b0d2241cf953",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 320,
+            "height": 180
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "sample_rate": "48000",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "3.000000"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "file": "square.mp4",
+      "sha256": "aba53bb8edc073d69ac7c7465685e72b97a8fb877c60b0638dd99d140e02b7d3",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1080
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "sample_rate": "48000",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "2.500000"
+        }
+      },
+      "fullDecode": "passed"
+    },
+    {
+      "file": "workspace/fixture-take/fixture-take - Welcome to the producer workspace. Start (vertical).mp4",
+      "sha256": "e077a08c94569653f70beee042179b4e0fbab2f05f4bc6cdcffcef3986f75f95",
+      "probe": {
+        "programs": [],
+        "streams": [
+          {
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1080,
+            "height": 1920
+          },
+          {
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "sample_rate": "48000",
+            "channels": 2
+          }
+        ],
+        "format": {
+          "duration": "2.500000"
+        }
+      },
+      "fullDecode": "passed"
+    }
+  ],
+  "visualInspection": [
+    "Sound light/dark minimum: legible Energy, mic/system controls and Show tracks; composer visible",
+    "Sound light narrow and dark wide preserve mixer/context and tracks",
+    "Earlier portrait/fixed/fit/rotation frames inspected in their original retained artifacts; latest source gain metrics provide separate track evidence"
+  ]
+}

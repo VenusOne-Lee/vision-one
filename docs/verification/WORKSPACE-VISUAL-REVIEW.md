@@ -42,3 +42,33 @@ The delivery screenshot still sampled the first keyframe, omitting the later cam
 Package/native/media/render steps passed. Inspected agents-dark-narrow, recording-light-narrow, sound-light-narrow, pending-dark-narrow, task-light-wide and autopilot-dark-wide. The agent capture now has an opaque themed background and real setup controls without starting MCP. Recording header/footer remain within the requested 900×640 capture with internal scrolling. Narrow mixer and pending approval are reachable at full pane width. Transcript paragraphs, accepted cuts and captions now use a richer isolated fixture; Autopilot displays prerequisites and an Access settings route.
 
 These are named inspected states, not an assertion that all 60 images or every advanced interaction are accepted. The exact-frame follow-up and later code require their own current evidence.
+
+## Complete static set: 859180f / CI 40923474305
+
+All **66** PNGs in artifact **12919422422** were opened individually and visually inspected, not just generated. Coverage is 15 states × two appearances × wide/narrow, plus new task/editor/sound at the 760×520 window minimum. [Per-image dimensions and SHA-256](859180f-workspace.json) identify the inspected files. CI ran 838 package tests, native build, media and screenshot checks successfully, including current-settings caption-toggle regressions and the native notification/reopen check.
+
+Comparison with the approved family:
+
+| Approved target | Observed native result | Limit / follow-up |
+| --- | --- | --- |
+| 01 task light / 04 task dark | Compact sidebar, concise thread, larger preview/transcript; readable pending and failed states; narrow Task/Review switch | Static fixture only; no live provider/keyboard/VoiceOver walkthrough |
+| 02 new task | Four productive actions, wide defaults/recent/source rail, compact 2×2 and initially reachable composer at both smaller sizes | Source/default editing and record/import pickers still need interaction acceptance |
+| 03 recording preparation | Unified source/audio/camera/mic/script/countdown controls in an adaptive sheet; one Record action; persistent header/footer and scroll area | Permission-safe static source placeholder, not actual screen/camera preview or capture evidence; lower controls require scroll interaction acceptance |
+| 05 expanded editor | Horizontal tools, left task context rail, large canvas/transcript, full-width timeline/composer, wrapping transport | Optional panels collapse primary Transcript/Changes into a menu; fixed in subsequent revision, inspect its images |
+| 06 sound | Expanding preview, adjacent mixer, readable Energy, source gains, music/effects and lanes; narrow Preview/Mix switch | At minimum height optional tracks crowd the mixer; subsequent revision defaults them closed with Show tracks; inspect its images. No audible acceptance |
+| 07 finishing | Large selected actual clip render with camera/captions, labeled format/caption/export controls, candidates/post tooling and related handoffs | Last rendered file requires rerender after edits, explicitly labeled. Real share/provider flows remain unverified |
+| Advanced tool family | All four size/appearance combinations inspected for task tools, Script Coach, rehearsal, voice tools, Autopilot and agents. Consistent tokens, clear prerequisites, provider-disabled actions and readable idle/setup content | Does not accept running capture/rehearsal/Autopilot, voice-provider proposals or connected-agent activity |
+
+No new clipping was observed in this set beyond the minimum-height mixer issue. The 760×520 editor's roughly 80px preview was insufficient for useful caption review. The follow-up closes the timeline by default at that height and uses a compact transport, with Show timeline and Details keeping controls reachable. Its actual minimum-size images must be inspected before accepting the fix. Static observation is not a substitute for interactive usability testing.
+
+## Caption ownership and separate audio sources
+
+`0ac14f2` / CI 40924522042 passed package/native/media/render checks. The native diagnostic mounts the actual HarnessView with Clips active, switches A→B→A, checks the mounted caption state owner, toggles B, preserves its current language/style, and verifies A's settings bytes are unchanged. The visibility helper also preserves unreadable settings by failing rather than replacing them with defaults.
+
+The expanded media diagnostic uses two distinct tone tracks, with system audio deliberately first and microphone second, to check source identity and independent saved gains. Actual exported audio and editor-preview audio are decoded and compared. Synthetic audio evidence does not establish real audible quality, provider replacement audio or capture hardware.
+
+## Minimum mixer follow-up: 3f3f470 / CI 40924902600
+
+Inspected sound-light-minimum, sound-dark-minimum, sound-light-narrow and sound-dark-wide. At 760×520, Energy, voice clarity, mic/system gains, Show tracks and composer are visible. At larger sizes, optional tracks remain available below the mixer/preview. Independent FFmpeg full decode passed for all ten valid MP4 files in artifact 12919838385; the intentional invalid-import fixture was excluded. [Metrics and file hashes](3f3f470-media.json) record microphone export/preview peaks 0.25801/0.25007 and system peaks 0.10354/0.10022.
+
+The next minimum-editor change uses a one-row compact transport and defaults the timeline closed, with visible Details and Show timeline controls. Its preview size must be verified in the generated minimum images. A newly identified clip-card wiring gap is also fixed: clip export now passes the same template-aware CardMaker as the full-video queue. A native owned-HTML-asset render check is added; results are pending for that revision.
