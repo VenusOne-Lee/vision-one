@@ -36,6 +36,7 @@ struct EditorFullMode<Rail: View>: View {
     @State private var spaceDown = false
     @State private var comparing = false
     @State private var compactPane = "Canvas"
+    @State private var timelineOverride: Bool?
 
     static var holdToTalk: Duration { .milliseconds(350) }
 
@@ -79,12 +80,12 @@ struct EditorFullMode<Rail: View>: View {
                                     Spacer()
                                 }.padding(8).background(Theme.paper)
                             }
-                            if !showAside || compactPane == "Canvas" { stage }
+                            if !showAside || compactPane == "Canvas" { stage(height: outer.size.height) }
                             else { asidePanel }
                         }
                     } else {
                         HStack(spacing: 0) {
-                            stage.frame(minWidth: 380, maxWidth: .infinity).layoutPriority(1)
+                            stage(height: outer.size.height).frame(minWidth: 380, maxWidth: .infinity).layoutPriority(1)
                             if showAside {
                                 SideResizeHandle(width: $asideWidth, range: 260...min(640, geometry.size.width * 0.5))
                                 asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 470)))
@@ -123,7 +124,7 @@ struct EditorFullMode<Rail: View>: View {
     // MARK: Stage
 
     @ViewBuilder
-    private var stage: some View {
+    private func stage(height: CGFloat) -> some View {
         VStack(spacing: 0) {
             ToolStrip(model: model, tool: $toolRaw)
             switch model.phase {
@@ -135,7 +136,7 @@ struct EditorFullMode<Rail: View>: View {
             case .ready:
                 video
                     .padding([.horizontal, .top], 12)
-                TransportBar(model: model, zoom: $zoom) {
+                TransportBar(model: model, zoom: $zoom, isCompact: height < 600) {
                     VersionMenu(model: model.versions) { comparing = true }
                         .sheet(isPresented: $comparing) {
                             CompareView(versions: model.versions, take: model.take) { comparing = false }
@@ -172,13 +173,21 @@ struct EditorFullMode<Rail: View>: View {
     }
 
     private func editingFooter(height: CGFloat) -> some View {
-        VStack(spacing: 0) {
+        let timelineVisible = timelineOverride ?? (height >= 540)
+        return VStack(spacing: 0) {
+            HStack {
+                Button(timelineVisible ? "Hide timeline" : "Show timeline") { timelineOverride = !timelineVisible }
+                    .buttonStyle(.secondary)
+                Spacer()
+            }.padding(.horizontal, 12).padding(.top, 4)
+            if timelineVisible {
                 TimelineResizeBar(height: $timelineHeight)
                 EditorTimeline(model: model, effects: model.effects, filmstrip: filmstrip, zoom: $zoom,
                                showWaveform: showWaveform, showEffects: showTracks, showSound: showTracks,
                                cutsOnRelease: tool == .cut)
                     .frame(height: min(timelineHeight, max(80, height * 0.22)))
                     .padding(.horizontal, 12)
+            }
                 AskBar(model: model)
                     .padding(12)
         }.background(Theme.canvas)

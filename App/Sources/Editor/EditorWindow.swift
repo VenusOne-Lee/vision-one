@@ -38,10 +38,36 @@ struct TransportBar<Accessory: View>: View {
     @ObservedObject var model: EditorModel
     @Binding var zoom: Double
     var showsZoom = true
+    var isCompact = false
+    @State private var showingDetails = false
     /// Extra controls at the right end, such as Show tracks.
     @ViewBuilder var accessory: () -> Accessory
 
     var body: some View {
+        if isCompact {
+            VStack(spacing: 4) {
+                HStack(spacing: 8) {
+                    playback
+                    timecode
+                    Spacer(minLength: 0)
+                    Button(showingDetails ? "Hide details" : "Details") { showingDetails.toggle() }
+                        .buttonStyle(.secondary)
+                }.frame(height: 36)
+                if showingDetails {
+                    HStack {
+                        length
+                        Spacer()
+                        if showsZoom { zoomControls(slider: false) }
+                    }
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        HStack(spacing: 8) { accessory() }.fixedSize()
+                    }.frame(height: 32)
+                }
+            }
+        } else { adaptive }
+    }
+
+    private var adaptive: some View {
         ViewThatFits(in: .horizontal) {
             wide.fixedSize(horizontal: true, vertical: false)
             VStack(spacing: 6) {
