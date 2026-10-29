@@ -13,6 +13,7 @@ final class ExportQueue: ObservableObject {
         let take: Take
         let presets: [ExportPreset]
         let keep: [Range<Double>]?
+        var initialBatch: ExportBatch? = nil
     }
     @Published private(set) var batch: ExportBatch?
     @Published private(set) var waiting: [Request] = []
@@ -23,6 +24,7 @@ final class ExportQueue: ObservableObject {
     private let controller: ExportController
     private var keep: [Range<Double>]?
     private var watching: AnyCancellable?
+    private var requests: [URL: Request] = [:]
 
     private init() {
         controller = ExportController.shared
@@ -36,6 +38,7 @@ final class ExportQueue: ObservableObject {
         guard !presets.isEmpty else { return }
         guard batch(for: take)?.isRunning != true else { return }
         let request = Request(take: take, presets: presets, keep: keep)
+        requests[take.folder] = request
         finished[take.folder] = nil
         warnings[take.folder] = []
         if batch?.isRunning == true {
@@ -48,7 +51,7 @@ final class ExportQueue: ObservableObject {
         guard let target else { return }
         if let index = waiting.firstIndex(where: { $0.take.folder == target.folder }) {
             let request = waiting.remove(at: index)
-            var cancelled = ExportBatch(request.presets)
+            var cancelled = request.initialBatch ?? ExportBatch(request.presets)
             cancelled.cancel()
             finished[target.folder] = cancelled
             return
@@ -60,26 +63,26 @@ final class ExportQueue: ObservableObject {
     }
 
     func retry(_ take: Take) {
-        guard let batch = batch(for: take), !batch.isRunning else { return }
-        let retry = batch.presets.filter {
-            switch batch.status(of: $0) {
-            case .failed?, .cancelled?: return true
-            default: return false
-            }
-        }
-        export(take, presets: retry, keep: nil)
+        guard var resumed = batch(for: take), !resumed.isRunning else { return }
+        resumed.retryUnfinished()
+        guard resumed.isRunning else { return }
+        let request = Request(take: take, presets: resumed.presets, keep: requests[take.folder]?.keep, initialBatch: resumed)
+        requests[take.folder] = request
+        if batch?.isRunning == true { waiting.append(request) }
+        else { begin(request) }
     }
 
     func reset(_ target: Take? = nil) {
         guard let target = target ?? take, batch(for: target)?.isRunning != true else { return }
         finished[target.folder] = nil
         warnings[target.folder] = nil
+        requests[target.folder] = nil
         if take?.folder == target.folder { batch = nil; startedAt = nil }
     }
 
     func batch(for take: Take) -> ExportBatch? {
         if self.take?.folder == take.folder { return batch }
-        if let request = waiting.first(where: { $0.take.folder == take.folder }) { return ExportBatch(request.presets) }
+        if let request = waiting.first(where: { $0.take.folder == take.folder }) { return request.initialBatch ?? ExportBatch(request.presets) }
         return finished[take.folder]
     }
     func position(of take: Take) -> Int? {
@@ -93,12 +96,12 @@ final class ExportQueue: ObservableObject {
         take = request.take
         keep = request.keep
         startedAt = Date()
-        batch = ExportBatch(request.presets)
+        batch = request.initialBatch ?? ExportBatch(request.presets)
         startNext()
     }
     private func follow(_ phase: ExportPhase) {
         guard batch?.isRunning == true else { return }
-        if case .done = phase, let take, let warning = controller.warning {
+        if case let .done(preset, _, _) = phase, batch?.current == preset, let take, let warning = controller.warning {
             warnings[take.folder, default: []].append(warning)
         }
         batch?.apply(phase)
