@@ -51,6 +51,7 @@ enum WorkspaceVerification {
         try await verifyTakeSwitch(source: take, in: root)
         try await TranscriptViewVerification.run(source: take, in: root)
         try await WorkspaceUndoVerification.run(source: take, in: root)
+        try await PostDraftVerification.run(in: root)
         try await AutopilotPreflightVerification.run(in: root)
         let transcriptFixtures = try TranscriptViewVerification.stateFixtures(source: take, in: root)
         guard let emptyPostTake = transcriptFixtures.first(where: { $0.0 == "transcript-empty" })?.1 else {
