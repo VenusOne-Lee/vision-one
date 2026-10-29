@@ -70,6 +70,16 @@ final class CaptureChoiceTests: XCTestCase {
         XCTAssertNil(CaptureChoice(mode: .area, area: CaptureRect(x: 0, y: 0, width: 640, height: 360)).missingStep)
     }
 
+    func testCameraOnlyNeedsNothingPicked() throws {
+        let choice = CaptureChoice(mode: .camera)
+        XCTAssertNil(choice.missingStep)
+        XCTAssertFalse(CaptureMode.camera.recordsScreen)
+        XCTAssertTrue(CaptureMode.area.recordsScreen)
+        XCTAssertEqual(CaptureMode.camera.menuTitle, "Camera only")
+        XCTAssertEqual(CaptureMode.window.menuTitle, "Window")
+        XCTAssertEqual(CaptureChoice.decoded(from: try choice.encoded()).mode, .camera)
+    }
+
     func testRoundTripsAndFallsBackToDefault() throws {
         let choice = CaptureChoice(mode: .area, displayID: 2, area: CaptureRect(x: 10, y: 20, width: 640, height: 360),
                                    includeMicrophone: false, includeSystemSound: true)

@@ -57,6 +57,16 @@ final class CameraBubble {
 
     var isShown: Bool { panel?.isVisible == true }
 
+    /// Hidden while Camera only records: the camera is already the whole
+    /// picture, and the stage has the camera to itself.
+    private var suppressed = false
+
+    func setSuppressed(_ suppressed: Bool) {
+        guard self.suppressed != suppressed else { return }
+        self.suppressed = suppressed
+        update()
+    }
+
     // MARK: Recording
 
     /// Starts camera.mov for a take. Returns why the camera is missing,
@@ -123,7 +133,7 @@ final class CameraBubble {
     private func update() {
         guard recording == nil else { return }  // Choices are locked mid-take.
         let devices = CaptureDevices.shared
-        guard devices.cameraChoice != .off, devices.hasVideoAccess, let device = devices.cameraToRecord() else {
+        guard !suppressed, devices.cameraChoice != .off, devices.hasVideoAccess, let device = devices.cameraToRecord() else {
             hide()
             return
         }

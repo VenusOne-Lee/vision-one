@@ -35,6 +35,7 @@ struct Composer: View {
                     autonomyMenu
                     whereMenu
                     Spacer(minLength: Theme.Space.sm)
+                    modeMenu
                     recordButton
                     sendButton
                 }
@@ -145,6 +146,30 @@ struct Composer: View {
         .help("Where the AI runs. On this Mac keeps everything private; Best available can ask before using your keys.")
     }
 
+    /// What the next take records. Camera only is one click away, and the
+    /// pick is saved, so ⇧⌘R records the same way.
+    private var modeMenu: some View {
+        Menu {
+            ForEach(CaptureMode.allCases, id: \.self) { mode in
+                Button {
+                    recorder.choice.mode = mode
+                } label: {
+                    MenuCheck(mode.menuTitle, isOn: recorder.choice.mode == mode)
+                }
+            }
+            Divider()
+            Text("Camera only records just you and your mic. It doesn't need Screen Recording.")
+        } label: {
+            ComposerPill(title: recorder.choice.mode.menuTitle, systemImage: recorder.choice.mode.symbol)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(recorder.phase.isLive || recorder.phase.isBusy)
+        .help("What the record button records")
+    }
+
     private var recordButton: some View {
         Button {
             Task { await recorder.toggle() }
@@ -163,7 +188,8 @@ struct Composer: View {
         }
         .buttonStyle(.plain)
         .disabled(recorder.phase.isBusy)
-        .help(recorder.phase.isLive ? "Stop recording (⇧⌘R)" : "Record your screen (⇧⌘R)")
+        .help(recorder.phase.isLive ? "Stop recording (⇧⌘R)"
+              : recorder.choice.mode == .camera ? "Record yourself (⇧⌘R)" : "Record your screen (⇧⌘R)")
         .accessibilityLabel(recorder.phase.isLive ? "Stop recording" : "Record")
     }
 
