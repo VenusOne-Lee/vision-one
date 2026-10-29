@@ -166,7 +166,7 @@ final class StyleWatcher: NSObject, WKNavigationDelegate {
     }
 
     private func startCapture(_ rect: CGRect) async {
-        guard CGPreflightScreenCaptureAccess() else {
+        guard AccessCenter.shared.checklist.canRecord else {
             fail(Failure.noAccess)
             return
         }

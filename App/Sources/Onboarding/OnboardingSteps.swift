@@ -68,7 +68,9 @@ struct AccessStep: View {
                 if state == .denied {
                     // Screen Recording reads as "denied" as soon as it's been
                     // asked, so it gets a calm note rather than an error.
-                    Text("Switch on Vision One in System Settings. This moves on by itself.")
+                    Text(kind == .screen
+                         ? "Press Open System Settings and switch on Vision One. This moves on by itself."
+                         : "Switch on Vision One in System Settings. This moves on by itself.")
                         .font(.system(size: 12))
                         .foregroundStyle(kind == .screen ? Theme.textMuted : Theme.error)
                         .fixedSize(horizontal: false, vertical: true)
@@ -77,7 +79,7 @@ struct AccessStep: View {
 
             if kind == .screen {
                 if state == .denied {
-                    DragHint()
+                    ReopenHint(access: AccessCenter.shared)
                 }
                 Text("macOS asks again about once a month whether Vision One may still record. Choose Allow.")
                     .font(.system(size: 11))
@@ -117,6 +119,21 @@ struct AccessStep: View {
         case .screen: return "Let Vision One see your screen"
         case .microphone: return "Let Vision One hear you"
         case .camera: return "Show your face, if you like"
+        }
+    }
+}
+
+/// The rare switch that's on but not passed on yet: one reopen.
+private struct ReopenHint: View {
+    let access: AccessCenter
+
+    var body: some View {
+        HStack(spacing: Theme.Space.sm) {
+            Text("Switched on and still here?")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textMuted)
+            Button("Reopen Vision One") { access.relaunch() }
+                .buttonStyle(PillButtonStyle(kind: .quiet))
         }
     }
 }
