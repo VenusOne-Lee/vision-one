@@ -81,7 +81,7 @@ struct HarnessView: View {
             }
             IconButton(theme.palette.isDark ? "Use light appearance" : "Use dark appearance",
                        systemImage: theme.palette.isDark ? "sun.max" : "moon") {
-                theme.apply(theme.palette.isDark ? .paper : .studio)
+                theme.appearance.toggleMode()
             }
             if recorder.phase.isLive {
                 HStack(spacing: 6) {
