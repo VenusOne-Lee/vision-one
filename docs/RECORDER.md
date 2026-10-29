@@ -22,6 +22,16 @@ The menu bar panel picks Screen, Window or Area, plus Mic and System sound. The 
 - **Window:** `SCContentFilter(desktopIndependentWindow:)`, which follows the window when it's moved or covered.
 - **Area:** the display filter with `sourceRect` set to the chosen rectangle. You draw it, then move it or resize it from eight handles; it stays on screen and at least 64 points a side. Sides are rounded down to even pixels for HEVC. A thin orange frame marks the area while live; it isn't recorded.
 
+## Camera only
+
+The fourth choice next to Screen, Window and Area, and a pill beside Home's record button. It records just you and your mic, with nothing from the screen. See the [visual](https://claude.ai/artifact/JrGtfiEMAkW22fxkk91uJ5) (source in `docs/visuals/camera-only.html`).
+
+- **No Screen Recording needed.** It never touches ScreenCaptureKit, only Camera and Microphone, asked for the first time you record this way.
+- **The camera is the main video.** `CameraOnlyCapture` runs one `AVCaptureSession` with the camera and mic and writes `screen.mov` itself: H.264 at 1080p when the camera has it (else 720p), plus a mono AAC mic track and `audio-tracks.json`. So the transcript, editor, captions, clips and export treat it like any take. There's no `events.json`, `camera.mov` or system sound.
+- **Which camera:** the one picked in Sources, or Automatic when the bubble is off.
+- **The stage.** A big 16:9 preview in your ring colour, mirrored like a mirror (the file isn't). It opens when you press record, so you can frame yourself during the countdown. Drag it, resize it from any edge, and it opens where you left it. The orange dot shows it's live. The bubble hides while the stage is up.
+- Countdown, pause, restart, delete, the mic meter and the teleprompter work as they do for the screen.
+
 ## The camera bubble
 
 Switch on Camera in Sources and a round live preview in your ring colour (from Brand) floats over everything. See the [visual](https://claude.ai/artifact/GqVoHVpgnxe2oZwed2GMY5) (source in `docs/visuals/camera-bubble.html`). It's mirrored, like a mirror; camera.mov isn't.

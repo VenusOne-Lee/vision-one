@@ -14,14 +14,15 @@ public enum AccessKind: String, CaseIterable, Sendable {
         }
     }
 
-    /// Only needed for the camera bubble, so setup is done without it.
+    /// Only needed for the camera bubble and Camera only, so setup is
+    /// done without it.
     public var isOptional: Bool { self == .camera }
 
     public var why: String {
         switch self {
         case .screen: return "To record your screen and the sound your Mac plays."
         case .microphone: return "To record your voice for the transcript."
-        case .camera: return "Optional. To show you in the camera bubble."
+        case .camera: return "Optional. To show you in the camera bubble, or record just you."
         }
     }
 }
@@ -64,5 +65,12 @@ public struct AccessChecklist: Equatable, Sendable {
     /// Ready to record without a restart.
     public var canRecord: Bool {
         screenAtLaunch == .granted && state(of: .screen) == .granted
+    }
+
+    /// Ready to record in `mode`. Camera only needs the camera, not
+    /// Screen Recording; asking for it the first time is still to come
+    /// when it's `notAsked`, so only a refusal stops it.
+    public func canRecord(_ mode: CaptureMode) -> Bool {
+        mode.recordsScreen ? canRecord : state(of: .camera) != .denied
     }
 }

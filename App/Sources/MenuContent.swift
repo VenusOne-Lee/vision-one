@@ -127,6 +127,8 @@ struct MenuContent: View {
         case .area:
             guard let area = choice.area else { return "Area · none yet" }
             return "Area · \(Int(area.width)) × \(Int(area.height))"
+        case .camera:
+            return CaptureDevices.shared.cameraForCameraOnly().map { "Camera only · \($0.localizedName)" } ?? "Camera only"
         }
     }
 
@@ -135,7 +137,7 @@ struct MenuContent: View {
         if recorder.choice.includeMicrophone {
             on.append(microphones.resolved(for: recorder.choice)?.name ?? "Mic")
         }
-        if recorder.choice.includeSystemSound { on.append("Sound") }
+        if recorder.choice.includeSystemSound, recorder.choice.mode.recordsScreen { on.append("Sound") }
         if devices.cameraChoice != .off { on.append("Camera") }
         return on.isEmpty ? "Video only" : on.joined(separator: " · ")
     }
@@ -400,6 +402,8 @@ struct CapturePicker: View {
                 windowRow
             case .area:
                 areaRow
+            case .camera:
+                cameraRow
             }
         }
     }
@@ -446,6 +450,15 @@ struct CapturePicker: View {
         .task { windows = await recorder.pickableWindows() }
     }
 
+    private var cameraRow: some View {
+        ChoiceRow(label: "Camera") {
+            Text(CaptureDevices.shared.cameraForCameraOnly()?.localizedName ?? "None connected")
+                .foregroundStyle(Theme.text)
+                .lineLimit(1)
+        }
+        .help("Records just you and your mic. No Screen Recording needed. Change the camera in Sources.")
+    }
+
     private var areaRow: some View {
         ChoiceRow(label: "Area") {
             if let area = recorder.choice.area {
@@ -482,7 +495,7 @@ private struct ChoiceRow<Control: View>: View {
     }
 }
 
-/// Three ink segments with icons. The chosen one is a black pill, like a
+/// Four ink segments with icons. The chosen one is a black pill, like a
 /// primary button; the others are plain text.
 private struct ModeSwitch: View {
     @Binding var selection: CaptureMode
@@ -496,6 +509,8 @@ private struct ModeSwitch: View {
                     Label(mode.title, systemImage: mode.symbol)
                         .labelStyle(.titleAndIcon)
                         .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 5)
                         .foregroundStyle(selection == mode ? Theme.paper : Theme.text)
@@ -511,12 +526,13 @@ private struct ModeSwitch: View {
     }
 }
 
-private extension CaptureMode {
+extension CaptureMode {
     var symbol: String {
         switch self {
         case .screen: return "display"
         case .window: return "macwindow"
         case .area: return "rectangle.dashed"
+        case .camera: return "person.crop.rectangle"
         }
     }
 }

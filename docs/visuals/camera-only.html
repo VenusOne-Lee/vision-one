@@ -1,0 +1,242 @@
+<title>Vision One Camera Only</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: research first, then three true-to-life mockups (Home, menu panel, recording), then one flow diagram. Light only, Paper look, per Vision One's rules. */
+:root {
+  --paper: #FFFFFF;
+  --canvas: #F4F4F1;
+  --line: #E2E1DC;
+  --text: #121212;
+  --muted: #5C5B57;
+  --tally: #FF5A1F;
+  --ring: #1F3FBF;
+  --skin: #C9B8A6;
+  --shirt: #8C7B6C;
+  --room: #E6E1D8;
+  --display: "Bricolage Grotesque", -apple-system, "Helvetica Neue", sans-serif;
+  --body: "Bricolage Grotesque", -apple-system, "Helvetica Neue", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+body {
+  background: var(--canvas); color: var(--text); font-family: var(--body); font-size: 14px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+header { display: flex; flex-direction: column; gap: 10px; max-width: 700px; }
+.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+h1 { font-family: var(--display); font-weight: 300; font-size: clamp(2rem, 5vw, 3.2rem); letter-spacing: -0.025em; line-height: 1.05; margin: 0; text-wrap: balance; }
+h1 b { font-weight: 800; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.35rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h3 { margin: 0; font-size: 14px; font-weight: 600; }
+p { margin: 0; max-width: 65ch; }
+code { font-family: var(--mono); font-size: 0.88em; }
+.lead { font-size: 16px; color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 18px; }
+
+/* Research table */
+.tablewrap { overflow-x: auto; background: var(--paper); border-radius: 12px; box-shadow: 0 0 0 1px var(--line); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+.picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.pick { background: var(--paper); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 0 0 1px var(--line); min-width: 0; }
+.pick p { font-size: 13px; color: var(--muted); }
+
+/* Mockups */
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; }
+.shot { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cap { font-size: 12px; color: var(--muted); }
+.cap b { color: var(--text); font-weight: 600; }
+
+.composer { background: var(--paper); border-radius: 14px; padding: 14px; box-shadow: 0 10px 30px rgba(18,18,18,0.10), 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 12px; position: relative; }
+.composer .ph { color: #9A9893; font-size: 13px; }
+.row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cpill { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.cpill.on { color: var(--text); border-color: var(--text); }
+.cpill i { font-style: normal; font-size: 8px; }
+.spacer { flex: 1; }
+.rec { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--text); display: grid; place-items: center; }
+.rec::after { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--text); }
+.send { width: 28px; height: 28px; border-radius: 50%; background: #B9B7B1; color: var(--paper); display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.dropdown { position: absolute; right: 70px; bottom: 50px; background: var(--paper); border-radius: 8px; box-shadow: 0 8px 22px rgba(18,18,18,0.18), 0 0 0 0.5px rgba(18,18,18,0.2); padding: 4px; font-size: 12px; display: flex; flex-direction: column; min-width: 150px; }
+.dropdown span { padding: 4px 10px; border-radius: 5px; display: flex; gap: 8px; }
+.dropdown span b { width: 10px; font-weight: 600; }
+.dropdown .hl { background: #1F6FE5; color: var(--paper); }
+.dropdown hr { border: 0; border-top: 1px solid var(--line); margin: 3px 0; }
+
+.panel { width: 100%; max-width: 300px; background: var(--paper); border-radius: 12px; box-shadow: 0 10px 30px rgba(18,18,18,0.12), 0 0 0 0.5px rgba(18,18,18,0.18); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; }
+.seg span { text-align: center; font-size: 11px; font-weight: 500; padding: 4px 0; border-radius: 999px; }
+.seg .on { background: var(--text); color: var(--paper); }
+.kv { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+.kv b { color: var(--text); font-weight: 500; }
+.big { height: 34px; border-radius: 999px; background: var(--text); color: var(--paper); display: grid; place-items: center; font-weight: 600; font-size: 13px; }
+.note { font-size: 11.5px; color: var(--muted); }
+
+.screen { position: relative; aspect-ratio: 16 / 10; max-width: 100%; border-radius: 10px; overflow: hidden; background: #D9D8D2; box-shadow: 0 0 0 1px rgba(18,18,18,0.12); }
+.menubar { position: absolute; inset: 0 0 auto; height: 18px; background: rgba(255,255,255,0.85); display: flex; align-items: center; padding: 0 10px; font-size: 9px; }
+.menubar .dot { margin-left: auto; width: 9px; height: 9px; border-radius: 50%; background: var(--tally); }
+.stage { position: absolute; left: 14%; top: 17%; width: 72%; aspect-ratio: 16 / 9; border-radius: 12px; border: 3px solid var(--ring); overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, var(--skin) 0 13%, transparent 13.5%), radial-gradient(ellipse at 50% 108%, var(--shirt) 0 34%, transparent 34.5%), var(--room); }
+.stage .tally { position: absolute; right: 10px; top: 10px; width: 12px; height: 12px; border-radius: 50%; background: var(--tally); border: 2px solid var(--paper); }
+.stage .grip { position: absolute; right: 4px; bottom: 4px; width: 12px; height: 12px; border-right: 2px solid var(--paper); border-bottom: 2px solid var(--paper); border-radius: 0 0 4px 0; }
+.stage .mirror { position: absolute; left: 10px; top: 8px; font-size: 9px; color: var(--paper); background: rgba(18,18,18,0.45); padding: 1px 6px; border-radius: 999px; }
+.recbar { position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%); background: var(--paper); border-radius: 999px; box-shadow: 0 4px 14px rgba(18,18,18,0.18); display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 10px; font-family: var(--mono); white-space: nowrap; }
+.recbar .live { width: 8px; height: 8px; border-radius: 50%; background: var(--tally); }
+.recbar .meter { width: 34px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--text) 60%, var(--line) 60%); }
+.recbar .stop { width: 16px; height: 16px; border-radius: 50%; background: var(--text); display: grid; place-items: center; }
+.recbar .stop::after { content: ""; width: 6px; height: 6px; background: var(--paper); border-radius: 1px; }
+
+/* Diagram */
+.diagram { overflow-x: auto; background: var(--paper); border-radius: 12px; box-shadow: 0 0 0 1px var(--line); padding: 16px; }
+.diagram svg { display: block; min-width: 760px; width: 100%; height: auto; }
+.diagram text { font-family: var(--body); fill: var(--text); }
+.diagram .m { fill: var(--muted); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 22px; height: 14px; border-radius: 4px; border: 1.5px solid var(--text); background: var(--paper); }
+.sw.dash { border-style: dashed; }
+ul.plain { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; max-width: 70ch; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Recording · new mode</div>
+    <h1>Just <b>the camera</b></h1>
+    <p class="lead">A fourth way to record, next to Screen, Window and Area. Camera only records you talking to the camera and your mic, with nothing from the screen. It doesn't need Screen Recording access at all, just Camera and Microphone.</p>
+  </header>
+
+  <section>
+    <h2>How other recorders do it</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>App</th><th>Where you pick it</th><th>What you see while recording</th><th>What it saves</th></tr></thead>
+        <tbody>
+          <tr><td>Loom</td><td>Three modes in the recorder: Screen and Cam, Screen only, Cam only</td><td>A big camera window instead of the bubble</td><td>The camera is the whole video, ready to trim and share</td></tr>
+          <tr><td>Tella (Mac)</td><td>"Camera only" in what to record</td><td>A large preview; layouts can change after</td><td>A camera clip that edits like any other</td></tr>
+          <tr><td>QuickTime</td><td>File › New Movie Recording</td><td>A mirrored window you can move and resize</td><td>One movie with camera and mic</td></tr>
+          <tr><td>Riverside, Descript</td><td>Camera-first; screen is the add-on</td><td>Framing preview with a level meter</td><td>Camera and audio on their own tracks, edited by transcript</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="picks">
+      <div class="pick"><h3>Same place as the other modes</h3><p>Everyone puts it beside the screen choices, not in a separate app. So it's a fourth segment, and a pick on Home's record button.</p></div>
+      <div class="pick"><h3>A big mirrored preview</h3><p>The bubble is too small to frame yourself. You get a resizable 16:9 window that reads like a mirror. The saved file isn't mirrored, so text behind you reads the right way.</p></div>
+      <div class="pick"><h3>Camera is the main video</h3><p>The camera and mic go into the take's main movie, so the transcript editor, captions, cuts, clips and export all work with no changes.</p></div>
+      <div class="pick"><h3>No screen permission</h3><p>Camera only never touches ScreenCaptureKit. If you've never turned on Screen Recording, you can still record yourself today.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What it looks like</h2>
+    <div class="legend"><span><i class="sw"></i>Solid: built</span><span><i class="sw dash"></i>Dashed: later</span></div>
+    <div class="shots">
+      <div class="shot">
+        <div class="composer">
+          <div class="ph">Ask for a change, / for commands, @ for a take</div>
+          <div class="row">
+            <span class="cpill">Just do it <i>▼</i></span>
+            <span class="cpill">On this Mac <i>▼</i></span>
+            <span class="spacer"></span>
+            <span class="cpill on">Camera only <i>▼</i></span>
+            <span class="rec"></span>
+            <span class="send">↑</span>
+          </div>
+          <div class="dropdown">
+            <span><b></b>Screen</span>
+            <span><b></b>Window</span>
+            <span><b></b>Area</span>
+            <span class="hl"><b>✓</b>Camera only</span>
+          </div>
+        </div>
+        <div class="cap"><b>Home.</b> A pill beside the record button says what the next take records. One click picks Camera only, the next click records. The choice is remembered, so ⇧⌘R records the same way.</div>
+      </div>
+
+      <div class="shot">
+        <div class="panel">
+          <div class="seg"><span>Screen</span><span>Window</span><span>Area</span><span class="on">Camera</span></div>
+          <div class="kv"><span>Camera</span><b>Auto · FaceTime HD Camera</b></div>
+          <div class="kv"><span>Mic</span><b>MacBook Pro Microphone</b></div>
+          <div class="big">Record camera</div>
+          <div class="note">No Screen Recording needed. System sound is left out, since nothing on screen is recorded.</div>
+        </div>
+        <div class="cap"><b>Menu bar panel.</b> Camera is the fourth segment. It uses the camera picked in Sources (Automatic if the bubble is off) and the same mic.</div>
+      </div>
+
+      <div class="shot">
+        <div class="screen">
+          <div class="menubar">Vision One<span class="dot"></span></div>
+          <div class="stage"><span class="mirror">Mirrored preview</span><span class="tally"></span><span class="grip"></span></div>
+          <div class="recbar"><span class="live"></span>00:42<span class="meter"></span><span class="stop"></span></div>
+        </div>
+        <div class="cap"><b>Recording.</b> A big preview in your ring colour, centred on the screen. Drag it, resize it from the corner, and it opens where you left it. The orange dot only means live. The REC bar, countdown, pause and teleprompter work as they do for the screen.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>How it works</h2>
+    <div class="diagram">
+      <svg viewBox="0 0 900 300" role="img" aria-label="Camera and mic feed one capture session, which writes screen.mov; the transcriber, editor and export then work as for any take.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#121212"/></marker>
+        </defs>
+        <rect x="10" y="40" width="140" height="56" rx="10" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="80" y="64" text-anchor="middle" font-weight="600" font-size="13">Camera</text>
+        <text x="80" y="82" text-anchor="middle" class="m">picked in Sources</text>
+        <rect x="10" y="130" width="140" height="56" rx="10" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="80" y="154" text-anchor="middle" font-weight="600" font-size="13">Microphone</text>
+        <text x="80" y="172" text-anchor="middle" class="m">avoids Bluetooth</text>
+
+        <rect x="210" y="70" width="170" height="86" rx="10" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="295" y="100" text-anchor="middle" font-weight="600" font-size="13">CameraOnlyCapture</text>
+        <text x="295" y="118" text-anchor="middle" class="m">one AVCaptureSession</text>
+        <text x="295" y="134" text-anchor="middle" class="m">video + audio outputs</text>
+        <path d="M150 68 L210 98" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+        <path d="M150 158 L210 128" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+
+        <rect x="210" y="210" width="170" height="56" rx="10" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="295" y="234" text-anchor="middle" font-weight="600" font-size="13">Camera stage</text>
+        <text x="295" y="252" text-anchor="middle" class="m">mirrored preview window</text>
+        <path d="M295 156 L295 210" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+
+        <rect x="440" y="58" width="190" height="110" rx="10" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="535" y="84" text-anchor="middle" font-weight="600" font-size="13">Take folder</text>
+        <text x="535" y="106" text-anchor="middle" class="m" font-family="JetBrains Mono, monospace">screen.mov</text>
+        <text x="535" y="122" text-anchor="middle" class="m">camera video (H.264) + mic</text>
+        <text x="535" y="142" text-anchor="middle" class="m" font-family="JetBrains Mono, monospace">audio-tracks.json</text>
+        <path d="M380 113 L440 113" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+
+        <rect x="690" y="20" width="190" height="50" rx="10" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="785" y="50" text-anchor="middle" font-weight="600" font-size="13">Transcriber</text>
+        <rect x="690" y="88" width="190" height="50" rx="10" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="785" y="118" text-anchor="middle" font-weight="600" font-size="13">Editor · captions · cuts</text>
+        <rect x="690" y="156" width="190" height="50" rx="10" fill="#FFFFFF" stroke="#121212" stroke-width="1.5"/>
+        <text x="785" y="186" text-anchor="middle" font-weight="600" font-size="13">Export · clips</text>
+        <rect x="690" y="224" width="190" height="50" rx="10" fill="#FFFFFF" stroke="#121212" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <text x="785" y="248" text-anchor="middle" font-weight="600" font-size="13">Vertical by default</text>
+        <text x="785" y="264" text-anchor="middle" class="m">later, if you want it</text>
+        <path d="M630 90 L690 50" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+        <path d="M630 113 L690 113" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+        <path d="M630 136 L690 178" stroke="#121212" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+
+        <text x="440" y="214" class="m">No ScreenCaptureKit, no Screen Recording access,</text>
+        <text x="440" y="230" class="m">no cursor log, no camera bubble. Countdown, pause,</text>
+        <text x="440" y="246" class="m">restart, mic meter and teleprompter all still work.</text>
+      </svg>
+    </div>
+    <ul class="plain">
+      <li><b>Defaults:</b> 1080p if the camera has it, otherwise 720p. Landscape 16:9. Mic on, system sound off.</li>
+      <li><b>Camera access</b> is asked for the first time you record this way. If it was turned off, the message says where to turn it back on.</li>
+      <li><b>Bubble:</b> hidden while Camera only records, since the camera is already the whole picture.</li>
+      <li><b>The stage opens when you press record,</b> so you can frame yourself during the countdown. It isn't recorded; the camera is.</li>
+    </ul>
+  </section>
+</div>

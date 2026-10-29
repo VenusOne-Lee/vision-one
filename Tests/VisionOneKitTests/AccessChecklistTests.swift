@@ -18,6 +18,16 @@ final class AccessChecklistTests: XCTestCase {
         XCTAssertFalse(list.canRecord)
     }
 
+    func testCameraOnlyNeedsNoScreenRecording() {
+        let fresh = AccessChecklist(states: [:], screenAtLaunch: .notAsked)
+        XCTAssertFalse(fresh.canRecord(.screen))
+        XCTAssertTrue(fresh.canRecord(.camera), "the camera is asked for when recording starts")
+        let refused = AccessChecklist(states: [.camera: .denied], screenAtLaunch: .granted)
+        XCTAssertFalse(refused.canRecord(.camera))
+        let ready = AccessChecklist(states: [.screen: .granted, .camera: .denied], screenAtLaunch: .granted)
+        XCTAssertTrue(ready.canRecord(.window))
+    }
+
     func testGrantedAtLaunchIsReady() {
         let list = AccessChecklist(states: [.screen: .granted, .microphone: .granted], screenAtLaunch: .granted)
         XCTAssertTrue(list.canRecord)

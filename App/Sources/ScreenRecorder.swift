@@ -37,6 +37,10 @@ final class ScreenRecorder: NSObject, ObservableObject {
     private var cursor: CursorLogger?
     private var take: Take?
     private let deviceTracks = DeviceTracks()
+    /// Camera only: open from just before the countdown until the take
+    /// ends, so the preview is live while counting down.
+    private var cameraCapture: CameraOnlyCapture?
+    private var cameraCaptureHasMic = false
 
     private override init() {
         choice = CaptureChoice.decoded(from: UserDefaults.standard.data(forKey: Self.choiceKey))
@@ -76,11 +80,17 @@ final class ScreenRecorder: NSObject, ObservableObject {
         // Without access there's nothing to count down to.
         let access = AccessCenter.shared
         access.refresh()
-        guard access.checklist.canRecord else {
-            SetupWindowController.shared.show()
-            return
-        }
         if case .failed = phase { phase = .idle }
+        if choice.mode == .camera {
+            // Camera only needs no Screen Recording: open the camera now,
+            // so you can frame yourself during the countdown.
+            guard await openCameraOnly(choice) else { return }
+        } else {
+            guard access.checklist.canRecord else {
+                SetupWindowController.shared.show()
+                return
+            }
+        }
         MainWindowStepAside.hide()
         // The script shows during the countdown, so the first line is
         // ready to read.
@@ -90,12 +100,14 @@ final class ScreenRecorder: NSObject, ObservableObject {
         isCountingDown = false
         guard go else {
             Teleprompter.shared.hide()
+            closeCameraOnly()
             MainWindowStepAside.restore()
             return
         }
         await start()
         if !phase.isLive {
             Teleprompter.shared.hide()
+            closeCameraOnly()
             MainWindowStepAside.restore()
         }
     }
@@ -106,6 +118,11 @@ final class ScreenRecorder: NSObject, ObservableObject {
     func start(choosing override: CaptureChoice? = nil) async {
         guard !phase.isBusy, !phase.isLive else { return }
         let choice = override ?? self.choice
+
+        if choice.mode == .camera {
+            await startCameraOnly(choice)
+            return
+        }
 
         // Area mode with no area yet: drag one first, then record.
         if choice.missingStep == .dragArea {
@@ -221,6 +238,91 @@ final class ScreenRecorder: NSObject, ObservableObject {
         }
     }
 
+    // MARK: Camera only
+
+    /// Asks for the camera (and mic) the first time, starts the camera and
+    /// shows the stage. False, with the reason in `phase`, when it can't.
+    private func openCameraOnly(_ choice: CaptureChoice) async -> Bool {
+        if cameraCapture != nil { return true }
+        let access = AccessCenter.shared
+        if AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
+            _ = await AVCaptureDevice.requestAccess(for: .video)
+            CaptureDevices.shared.refresh()
+        }
+        if choice.includeMicrophone, AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+            _ = await AVCaptureDevice.requestAccess(for: .audio)
+        }
+        access.refresh()
+        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
+            phase = .failed(message: CameraOnlyError.noAccess.localizedDescription)
+            return false
+        }
+        guard let camera = CaptureDevices.shared.cameraForCameraOnly() else {
+            phase = .failed(message: CameraOnlyError.noCamera.localizedDescription)
+            return false
+        }
+        var microphone: AVCaptureDevice?
+        if choice.includeMicrophone, AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
+            let microphones = Microphones.shared
+            microphones.refresh()
+            microphone = microphones.resolved(for: choice).flatMap { AVCaptureDevice(uniqueID: $0.id) }
+                ?? AVCaptureDevice.default(for: .audio)
+        }
+        // The bubble lets go of the camera first.
+        CameraBubble.shared.setSuppressed(true)
+        let capture = CameraOnlyCapture()
+        do {
+            try await capture.open(camera: camera, microphone: microphone)
+        } catch {
+            CameraBubble.shared.setSuppressed(false)
+            phase = .failed(message: error.localizedDescription)
+            return false
+        }
+        cameraCapture = capture
+        cameraCaptureHasMic = microphone != nil
+        CameraStage.shared.show(capture.previewLayer, on: recordedScreen())
+        return true
+    }
+
+    /// Stops the camera and hides the stage. Safe to call when it's closed.
+    private func closeCameraOnly() {
+        guard let cameraCapture else { return }
+        cameraCapture.close()
+        self.cameraCapture = nil
+        CameraStage.shared.hide()
+        CameraBubble.shared.setSuppressed(false)
+    }
+
+    /// Records the camera and mic into screen.mov. No ScreenCaptureKit,
+    /// no cursor log, no system sound.
+    private func startCameraOnly(_ choice: CaptureChoice) async {
+        phase = .preparing
+        guard await openCameraOnly(choice), let capture = cameraCapture else {
+            if case .preparing = phase { phase = .idle }
+            return
+        }
+        var notes: [String] = []
+        if choice.includeMicrophone, !cameraCaptureHasMic {
+            notes.append("Recording without your voice. Turn on Microphone in Access.")
+        }
+        do {
+            let take = try library.newTake()
+            capture.startWriting(to: take.screenURL, withMicrophone: cameraCaptureHasMic) { _ in }
+            self.take = take
+            trackNotes = notes
+            pauses = PauseLog()
+            MicMonitor.shared.begin(withMicrophone: cameraCaptureHasMic)
+            if Teleprompter.shared.isShowing, let script = ScriptStore.shared.script {
+                try? script.write(to: take.scriptURL)
+                Teleprompter.shared.begin(withMicrophone: cameraCaptureHasMic)
+            }
+            CameraStage.shared.isLive = true
+            phase = .recording(startedAt: Date())
+        } catch {
+            fail(error)
+        }
+    }
+
     /// Opens the full-screen overlay to drag an area. With `thenRecord`,
     /// recording starts as soon as the area is accepted.
     func chooseArea(thenRecord: Bool = false) {
@@ -258,9 +360,9 @@ final class ScreenRecorder: NSObject, ObservableObject {
 
     func stop() async {
         guard let ended = await endCapture() else { return }
-        let (take, sink, saved) = ended
+        let (take, saved, firstFrame, writerError) = ended
         if saved {
-            writePauseCuts(for: take, firstFrame: sink.firstFrameSeconds)
+            writePauseCuts(for: take, firstFrame: firstFrame)
             // Remember what it's for now, so a later pick on Home
             // doesn't change what this take is.
             try? TakePlan.stamp(take, from: .standard)
@@ -272,8 +374,10 @@ final class ScreenRecorder: NSObject, ObservableObject {
             // pick). Both wait for the transcript.
             ReadyToShareWindowController.shared.afterStop(take)
         } else {
-            phase = .failed(message: sink.writerError?.localizedDescription
-                ?? "Nothing was recorded. Try again, and check Screen Recording access.")
+            phase = .failed(message: writerError?.localizedDescription
+                ?? (choice.mode == .camera
+                    ? "Nothing was recorded. Try again, and check the camera is connected."
+                    : "Nothing was recorded. Try again, and check Screen Recording access."))
             MainWindowStepAside.restore()
         }
         pauses = PauseLog()
@@ -296,16 +400,18 @@ final class ScreenRecorder: NSObject, ObservableObject {
     /// Stops writing screen, sound, mic and camera until resumed. Clocks
     /// keep running, so nothing needs lining up again afterwards.
     func pause() {
-        guard phase.isLive, !pauses.isPaused, let sink else { return }
+        guard phase.isLive, !pauses.isPaused, sink != nil || cameraCapture != nil else { return }
         pauses.pause(at: HostClock.now)
-        sink.setPaused(true)
+        sink?.setPaused(true)
+        cameraCapture?.setPaused(true)
         CameraBubble.shared.setPaused(true)
     }
 
     func resume() {
-        guard phase.isLive, pauses.isPaused, let sink else { return }
+        guard phase.isLive, pauses.isPaused, sink != nil || cameraCapture != nil else { return }
         pauses.resume(at: HostClock.now)
-        sink.setPaused(false)
+        sink?.setPaused(false)
+        cameraCapture?.setPaused(false)
         CameraBubble.shared.setPaused(false)
         MicMonitor.shared.restartSilenceTimer()
     }
@@ -333,13 +439,15 @@ final class ScreenRecorder: NSObject, ObservableObject {
     }
 
     /// Stops every track of the live take and finishes its files.
-    private func endCapture() async -> (take: Take, sink: CaptureSink, saved: Bool)? {
-        guard phase.isLive, let stream, let sink, let take else { return nil }
+    private func endCapture() async -> (take: Take, saved: Bool, firstFrame: Double?, error: Error?)? {
+        guard phase.isLive, let take, stream != nil || cameraCapture != nil else { return nil }
         phase = .finishing
-        do {
-            try await stream.stopCapture()
-        } catch {
-            // Keep going: whatever was written is still worth finishing.
+        if let stream {
+            do {
+                try await stream.stopCapture()
+            } catch {
+                // Keep going: whatever was written is still worth finishing.
+            }
         }
         await deviceTracks.stop()
         CameraBubble.shared.setPaused(false)
@@ -348,9 +456,18 @@ final class ScreenRecorder: NSObject, ObservableObject {
         AgentSession.shared.end(writingTo: take)
         MicMonitor.shared.end()
         Teleprompter.shared.hide()
-        let saved = await sink.finish()
+        let result: (saved: Bool, firstFrame: Double?, error: Error?)
+        if let cameraCapture {
+            result = await cameraCapture.finishWriting()
+            closeCameraOnly()
+        } else if let sink {
+            let saved = await sink.finish()
+            result = (saved, sink.firstFrameSeconds, sink.writerError)
+        } else {
+            result = (false, nil, nil)
+        }
         reset()
-        return (take, sink, saved)
+        return (take, result.saved, result.firstFrame, result.error)
     }
 
     /// The take's pauses as accepted cuts, so the editor and export play
@@ -390,6 +507,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
         pauses = PauseLog()
         MainWindowStepAside.restore()
         if let sink { Task { _ = await sink.finish() } }
+        if let cameraCapture { Task { _ = await cameraCapture.finishWriting() } }
+        closeCameraOnly()
         Task {
             await deviceTracks.stop()
             await CameraBubble.shared.stopRecording()
@@ -520,6 +639,9 @@ struct CaptureTarget {
 
     static func resolve(_ choice: CaptureChoice, in content: SCShareableContent) throws -> CaptureTarget {
         switch choice.mode {
+        case .camera:
+            // Camera only never goes through ScreenCaptureKit.
+            throw RecorderError.noDisplay
         case .window:
             guard let id = choice.windowID,
                   let window = content.windows.first(where: { $0.windowID == id }) else {

@@ -62,6 +62,16 @@ final class CaptureDevices: ObservableObject {
         return AVCaptureDevice(uniqueID: info.id)
     }
 
+    /// The camera for Camera only: the one picked in Sources, or the
+    /// automatic pick when the bubble is off.
+    func cameraForCameraOnly() -> AVCaptureDevice? {
+        let choice = cameraChoice == .off ? CameraChoice.auto : cameraChoice
+        guard let info = choice.resolve(among: cameras, systemPreferredID: systemPreferredCameraID) else {
+            return AVCaptureDevice.default(for: .video)
+        }
+        return AVCaptureDevice(uniqueID: info.id)
+    }
+
     /// The plugged-in phone to record, if one is chosen and still there.
     func phoneToRecord() -> AVCaptureDevice? {
         guard let info = phoneChoice.resolve(among: phones) else { return nil }

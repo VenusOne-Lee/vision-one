@@ -1,16 +1,27 @@
 import Foundation
 
-/// What a take records: the whole screen, one window, or an area you drag.
+/// What a take records: the whole screen, one window, an area you drag,
+/// or just you on camera.
 public enum CaptureMode: String, Codable, CaseIterable, Sendable {
-    case screen, window, area
+    case screen, window, area, camera
 
     public var title: String {
         switch self {
         case .screen: return "Screen"
         case .window: return "Window"
         case .area: return "Area"
+        case .camera: return "Camera"
         }
     }
+
+    /// Longer name for menus, where "Camera" alone could mean the bubble.
+    public var menuTitle: String {
+        self == .camera ? "Camera only" : title
+    }
+
+    /// Camera only records the camera and mic, so it never needs Screen
+    /// Recording access and has no system sound or cursor to log.
+    public var recordsScreen: Bool { self != .camera }
 }
 
 /// A rectangle in display points, origin top left of the display. That's
@@ -132,6 +143,7 @@ public struct CaptureChoice: Codable, Equatable, Sendable {
         case .screen: return nil
         case .window: return windowID == nil ? .pickWindow : nil
         case .area: return area?.isBigEnough == true ? nil : .dragArea
+        case .camera: return nil
         }
     }
 
