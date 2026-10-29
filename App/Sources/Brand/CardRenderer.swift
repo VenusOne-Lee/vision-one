@@ -166,7 +166,7 @@ final class CardRenderer: NSObject, WKNavigationDelegate {
         let height = Int(size.height)
         guard width > 0, height > 0,
               let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
                                       space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         var rect = CGRect(x: 0, y: 0, width: width, height: height)
         guard let source = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else { return nil }

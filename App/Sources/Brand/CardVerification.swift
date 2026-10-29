@@ -52,7 +52,16 @@ enum CardVerification {
         lastPaint.observe(try pixels(last))
         try MediaVerification.require(firstPaint.hasPaint, "Animated card's first frame did not paint")
         try MediaVerification.require(!lastPaint.hasPaint, "Animated card did not end on a flat frame")
-        let report: [String: Any] = ["compiledOfflineRules": true, "unprotectedConnections": baseline,
+        let flat = folder.appendingPathComponent("flat.html")
+        try Data("<html><style>html,body{margin:0;width:100%;height:100%;background:#ffff00}</style><body></body></html>".utf8).write(to: flat)
+        do {
+            _ = try await CardRenderer().render(card: flat, readAccess: folder, variables: CardVariables(brand: BrandKit()),
+                                                 size: CGSize(width: 239, height: 161), frameRate: 1, duration: 1)
+            throw MediaVerification.Failure(message: "A wholly flat card was accepted as painted")
+        } catch CardRenderer.Failure.blank {
+            // Preserve blank rejection, including sizes with an unaligned pixel row.
+        }
+        let report: [String: Any] = ["flatCardRejected": true, "compiledOfflineRules": true, "unprotectedConnections": baseline,
                                     "protectedConnections": server.connectionCount - baseline,
                                     "paintedFirstFrame": true, "flatFinalFrameRetained": true]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
