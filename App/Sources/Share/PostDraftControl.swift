@@ -7,7 +7,7 @@ import VisionOneKit
 final class PostDraftControl: ObservableObject {
     let take: Take
     let destination: String
-    @Published private(set) var override: String?
+    @Published private(set) var manualText: String?
     @Published private(set) var problem: String?
     @Published private(set) var loaded = false
     @Published var open = false
@@ -23,7 +23,7 @@ final class PostDraftControl: ObservableObject {
     func reload() {
         do {
             let drafts = try PostDrafts.read(for: take)
-            override = drafts[destination]
+            manualText = drafts[destination]
             loaded = true
             problem = nil
         } catch {
@@ -34,16 +34,16 @@ final class PostDraftControl: ObservableObject {
 
     func edit(_ text: String) {
         guard loaded else { return }
-        override = text
+        manualText = text
         asking = false
         posted = false
         save()
     }
 
     func save() {
-        guard loaded, let override else { return }
+        guard loaded, let manualText else { return }
         do {
-            try PostDrafts.save(override, destination: destination, for: take)
+            try PostDrafts.save(manualText, destination: destination, for: take)
             problem = nil
         } catch {
             problem = "Couldn't save post copy. Your draft is still here: \(error.localizedDescription)"

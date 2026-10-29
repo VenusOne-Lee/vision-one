@@ -81,3 +81,9 @@ The pane distinguishes active work from an absent file: queued/running work show
 The native text coordinator rebinds when another editor model is shown and resets the previous take's selection. Transcript replacement advances a revision counter, so equal-word-count changes rebuild text and character ranges without scanning contents on playback ticks. Word clicks and cuts use the replacement timing. Selection/cut actions write edits.json, not transcript.json.
 
 Native CI mounts the production view, switches A→B→A, checks current-take cuts/undo/redo and saved-byte preservation, then replaces equal-count words/times and checks text/ranges/seek/cut timing. Synthetic native key events also exercise Delete, Undo, Redo and Space with first responder assigned. Real-file missing/corrupt/empty states render inside HarnessView. These checks do not establish OS-wide shortcuts, VoiceOver, real speech-model downloads or transcription quality. See [the full evidence matrix](CLOUD-VERIFICATION.md).
+
+## Silent sources and workspace shortcuts
+
+A permanent `TranscriptFailure.reason.noAudio` becomes the editor's typed `noAudio` state. It offers importing a source with audio or opening recording preparation, rather than retrying an immutable silent file. Genuine transient/corrupt failures retain Retry; a valid empty transcript retains No words found and editing/export. The native silent-source regression passed at 208cb79, and the tracking assistant independently exercised these actions' visible recovery state locally.
+
+The Harness Edit commands resolve the current window/editor undo manager at invocation. An editable native text/field editor retains its own typing history. Real local 7869fb6 canvas Cmd-Z/Cmd-Shift-Z and focused Ask typing undo/redo passed. The whole-Harness synthetic task-switch/key fixture has a separate current CI redo-dispatch correction pending; the older transcript-only synthetic test never established full canvas shortcut acceptance.

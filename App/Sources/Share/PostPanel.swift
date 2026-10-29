@@ -310,7 +310,7 @@ private struct NetworkRow: View {
 
     private var file: (preset: ExportPreset, url: URL)? { target.file(from: files) }
     private var draft: String { target.text(in: agents.share) ?? "" }
-    private var words: String { copy.override ?? draft }
+    private var words: String { copy.manualText ?? draft }
 
     private var exporting: Double? {
         guard let batch = queue.batch(for: take), batch.isRunning,
@@ -341,7 +341,7 @@ private struct NetworkRow: View {
                         BuilderRing(state: .exporting(exporting))
                     } else if copy.posted {
                         StateChip(.accepted, "Opened")
-                    } else if !draft.isEmpty {
+                    } else if !words.isEmpty {
                         StateChip(.proposed, "Draft")
                     }
                     Image(systemName: copy.open ? "chevron.up" : "chevron.down")

@@ -62,3 +62,11 @@ A file bed has `filePath` instead of `libraryID`. If the file has moved, the edi
 Energy changes effect suggestions, not vocal delivery or loudness. Voice cleanup, re-saying a line and provider-dependent voice tools remain available through Task tools → Voice tools. Small windows show mixer controls below the video instead of hiding them.
 
 CI's synthetic audio check compares decoded preview and exported signal peaks. This does not replace listening to real voice, music, ducking and replacement audio; see `CLOUD-VERIFICATION.md`.
+
+## Silent-source music verification
+
+Music/effect source assets are retained through composition insertion and export. A selected track that cannot be composed reports an export failure with recovery text instead of silently producing a partial mix. Preview retains the same source assets.
+
+At 208cb79, native CI exported an actual silent import with bundled Still water at −14 dB and checked an audio stream/nonzero decoded samples and preview/export agreement. The tracking assistant independently repeated the real UI export: H264+AAC, 2.5 s, 240000 decoded samples, mean −33.1 dB/max −21.4 dB. These metrics prove nonzero output; subjective music/voice/ducking quality remains open.
+
+Music selection and audition use separate native buttons; actual AX activation selected Workbench and restored Still water. This is scoped accessible-action evidence, not a complete VoiceOver review.

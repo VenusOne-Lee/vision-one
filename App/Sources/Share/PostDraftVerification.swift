@@ -48,7 +48,7 @@ enum PostDraftVerification {
         let aBytes = try Data(contentsOf: PostDrafts.url(for: a))
         fixture.take = b
         let second = try await mounted(fixture, take: b)
-        try MediaVerification.require(second !== first && second.override == nil && !second.asking && !second.posted && !second.open,
+        try MediaVerification.require(second !== first && second.manualText == nil && !second.asking && !second.posted && !second.open,
                                       "Post copy or approval state leaked from A to B")
         second.edit("B manual LinkedIn")
         try MediaVerification.require(try Data(contentsOf: PostDrafts.url(for: a)) == aBytes, "Editing B changed A's post copy")
@@ -56,13 +56,13 @@ enum PostDraftVerification {
         // Wait for a newly mounted owner, not the old fixture dictionary entry.
         fixture.owners.removeAll()
         let returned = try await mounted(fixture, take: a)
-        try MediaVerification.require(returned !== first && returned.override == "A manual LinkedIn" && !returned.asking && !returned.posted,
+        try MediaVerification.require(returned !== first && returned.manualText == "A manual LinkedIn" && !returned.asking && !returned.posted,
                                       "Returning to A lost manual copy or retained approval")
         let relaunched = PostDraftControl(take: b, destination: "linkedin")
-        try MediaVerification.require(relaunched.override == "B manual LinkedIn" && !relaunched.asking && !relaunched.posted,
+        try MediaVerification.require(relaunched.manualText == "B manual LinkedIn" && !relaunched.asking && !relaunched.posted,
                                       "Recreated post owner lost B's saved draft")
         relaunched.edit("")
-        try MediaVerification.require(PostDraftControl(take: b, destination: "linkedin").override == "",
+        try MediaVerification.require(PostDraftControl(take: b, destination: "linkedin").manualText == "",
                                       "Explicitly cleared copy fell back to generated text")
         let invalid = Data("invalid saved draft".utf8)
         try invalid.write(to: PostDrafts.url(for: b))
