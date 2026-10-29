@@ -15,6 +15,7 @@ struct SoundFullMode<Rail: View>: View {
     @AppStorage("sound.asideWidth") private var asideWidth = 320.0
     @AppStorage("sound.aside") private var asideRaw = SoundAside.mix.rawValue
     @State private var compactPane = "Mix"
+    @State private var tracksOverride: Bool?
 
     init(model: EditorModel, onBack: @escaping () -> Void, @ViewBuilder rail: @escaping () -> Rail) {
         self.model = model
@@ -25,6 +26,8 @@ struct SoundFullMode<Rail: View>: View {
     private var aside: SoundAside { SoundAside(rawValue: asideRaw) ?? .mix }
 
     var body: some View {
+        GeometryReader { outer in
+        let tracksVisible = tracksOverride ?? (outer.size.height >= 540)
         HStack(spacing: 0) {
             rail()
             VStack(spacing: 0) {
@@ -34,6 +37,8 @@ struct SoundFullMode<Rail: View>: View {
                             HStack {
                                 SegmentedTabs(selection: $compactPane, options: ["Preview", "Mix"]) { $0 }
                                 Spacer()
+                                Button(tracksVisible ? "Hide tracks" : "Show tracks") { tracksOverride = !tracksVisible }
+                                    .buttonStyle(.secondary)
                             }.padding(8).background(Theme.paper)
                             if compactPane == "Preview" { main }
                             else { asidePanel }
@@ -48,11 +53,14 @@ struct SoundFullMode<Rail: View>: View {
                 }
                 if model.phase == .ready {
                     Divider().overlay(Theme.line)
-                    ScrollView { MixLanes(model: model).padding(12) }
-                        .frame(height: 225)
+                    if tracksVisible {
+                        ScrollView { MixLanes(model: model).padding(12) }
+                            .frame(height: min(225, outer.size.height * 0.28))
+                    }
                     AskBar(model: model).padding(12)
                 }
             }
+        }
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
