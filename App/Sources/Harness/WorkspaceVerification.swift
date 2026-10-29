@@ -44,29 +44,32 @@ enum WorkspaceVerification {
             TranscriptWord(id: index, text: String(word), start: Double(index) * 0.075, end: Double(index + 1) * 0.075)
         }
         try Transcript(language: "en", engine: "workspace fixture", duration: 3, segments: [.init(words: words)]).write(to: take.transcriptURL)
-        try WorkspaceMotion.verify()
-        try await ExportControllerVerification.run(in: root)
-        try await ExportControllerVerification.verifyQueue(in: root)
-        try verifyCaptionPaneUpdates(in: root)
-        try await verifyTakeSwitch(source: take, in: root)
-        try await TranscriptViewVerification.run(source: take, in: root)
-        try await WorkspaceUndoVerification.run(source: take, in: root)
-        try await PostDraftVerification.run(in: root)
-        try await AutopilotPreflightVerification.run(in: root)
+        let checks = WorkspaceRuntimeChecks()
+        await checks.run("reduceMotion") { try WorkspaceMotion.verify() }
+        await checks.run("exportRunIdentity") { try await ExportControllerVerification.run(in: root) }
+        await checks.run("exportQueue") { try await ExportControllerVerification.verifyQueue(in: root) }
+        await checks.run("captionUpdates") { try verifyCaptionPaneUpdates(in: root) }
+        await checks.run("captionTakeSwitch") { try await verifyTakeSwitch(source: take, in: root) }
+        await checks.run("transcriptSwitchAndReplacement") { try await TranscriptViewVerification.run(source: take, in: root) }
+        await checks.run("workspaceUndo") { try await WorkspaceUndoVerification.run(source: take, in: root) }
+        await checks.run("postDrafts") { try await PostDraftVerification.run(in: root) }
+        await checks.run("autopilotPreflight") { try await AutopilotPreflightVerification.run(in: root) }
         let transcriptFixtures = try TranscriptViewVerification.stateFixtures(source: take, in: root)
         guard let emptyPostTake = transcriptFixtures.first(where: { $0.0 == "transcript-empty" })?.1 else {
             throw MediaVerification.Failure(message: "No-speech post fixture missing")
         }
-        let postModel = AgentsModel(take: emptyPostTake)
-        postModel.runSharer()
-        for _ in 0..<200 {
-            if !postModel.sharerRun.isRunning { break }
-            try await Task.sleep(for: .milliseconds(10))
+        await checks.run("noSpeechPostRecovery") {
+            let postModel = AgentsModel(take: emptyPostTake)
+            postModel.runSharer()
+            for _ in 0..<200 {
+                if !postModel.sharerRun.isRunning { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            guard case let .done(message) = postModel.sharerRun, message.contains("write your own copy"), postModel.share == nil else {
+                throw MediaVerification.Failure(message: "No-speech post copy appeared as a failed run")
+            }
+            print("Native no-speech post-copy recovery verification passed")
         }
-        guard case let .done(message) = postModel.sharerRun, message.contains("write your own copy"), postModel.share == nil else {
-            throw MediaVerification.Failure(message: "No-speech post copy appeared as a failed run")
-        }
-        print("Native no-speech post-copy recovery verification passed")
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -172,6 +175,7 @@ enum WorkspaceVerification {
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("workspace-render.json"))
         print("Workspace renders saved: \(names.count)")
+        try checks.finish(in: root)
     }
 
     /// Mount the real HarnessView, retain it across a task switch with Clips
@@ -286,5 +290,31 @@ enum WorkspaceVerification {
             throw MediaVerification.Failure(message: "Native workspace render is empty")
         }
         try png.write(to: url, options: .atomic)
+    }
+}
+
+    
+/// Independent regressions still all fail the CI step, but one failure must not
+/// hide evidence for unrelated runtime checks or prevent static captures.
+@MainActor
+private final class WorkspaceRuntimeChecks {
+    private var results: [String: String] = [:]
+
+    func run(_ name: String, operation: @MainActor () async throws -> Void) async {
+        do {
+            try await operation()
+            results[name] = "passed"
+        } catch {
+            results[name] = String(describing: error)
+            print("Workspace check failed [\(name)]: \(error)")
+        }
+    }
+
+    func finish(in root: URL) throws {
+        try JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys])
+            .write(to: root.appendingPathComponent("workspace-checks.json"))
+        let failures = results.filter { $0.value != "passed" }.sorted { $0.key < $1.key }
+        try MediaVerification.require(failures.isEmpty,
+            failures.map { "\($0.key): \($0.value)" }.joined(separator: "; "))
     }
 }

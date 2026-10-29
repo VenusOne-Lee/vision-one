@@ -71,10 +71,21 @@ enum PostDraftVerification {
         broken.edit("must not replace unreadable copy")
         try MediaVerification.require(!broken.loaded && broken.problem != nil && (try Data(contentsOf: PostDrafts.url(for: b))) == invalid,
                                       "Unreadable manual drafts were silently overwritten")
+        let c = Take(folder: parent.appendingPathComponent("write-retry"))
+        try FileManager.default.createDirectory(at: c.folder, withIntermediateDirectories: true)
+        let retry = PostDraftControl(take: c, destination: "linkedin")
+        try FileManager.default.createDirectory(at: PostDrafts.url(for: c), withIntermediateDirectories: false)
+        retry.edit("Retain unsaved copy")
+        try MediaVerification.require(retry.loaded && retry.manualText == "Retain unsaved copy" && retry.problem != nil,
+                                      "Post save failure lost the visible draft or retry")
+        try FileManager.default.removeItem(at: PostDrafts.url(for: c))
+        retry.save()
+        try MediaVerification.require(retry.problem == nil && PostDraftControl(take: c, destination: "linkedin").manualText == "Retain unsaved copy",
+                                      "Retry did not persist the retained post copy")
         try MediaVerification.require(!PostCopy.canDraft(for: a) && !PostCopy.canDraft(for: b), "Silent post-copy entry incorrectly enabled")
         try JSONSerialization.data(withJSONObject: ["mountedTakeSwitch": true, "manualDraftsPersist": true,
             "approvalStateReset": true, "otherTakeBytesUnchanged": true, "explicitEmptyPreserved": true,
-            "unreadableDraftPreserved": true], options: [.prettyPrinted, .sortedKeys])
+            "unreadableDraftPreserved": true, "saveFailureRetryRetainsCopy": true], options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("post-drafts.json"))
         print("Native mounted post take-switch, saved copy and approval-state isolation verification passed")
     }
