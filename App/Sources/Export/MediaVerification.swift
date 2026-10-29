@@ -146,7 +146,7 @@ enum MediaVerification {
                                 intro: .file("intro.html"), outro: .off,
                                 formats: [.init(.vertical, reframe: .follow)], captionStyle: .subtitle, watermark: false)
         try look.save(to: template)
-        try Data("<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='#ffff00'/></svg>".utf8)
+        try Data("<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='#ffff00'/><rect y='90' width='100' height='10' fill='#0000ff'/></svg>".utf8)
             .write(to: assets.appendingPathComponent("paper.svg"))
         try Data("<html><head><style>html,body{margin:0;width:100%;height:100%;background:#000}img{width:100%;height:100%;object-fit:fill}</style></head><body><img src='assets/paper.svg'></body></html>".utf8)
             .write(to: template.appendingPathComponent("intro.html"))
