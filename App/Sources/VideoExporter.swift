@@ -307,7 +307,9 @@ struct VideoExporter {
                                                 : .black,
                                              camera: cameraTrack.flatMap { track in
                                                  camera.map { CameraLayer(trackID: track.trackID, track: $0.info,
-                                                                          timeline: timeline, ringColour: Self.cgColor(ring)) }
+                                                                          timeline: timeline, ringColour: Self.cgColor(ring),
+                                                                          background: BackgroundRenderer(
+                                                                              background: CameraBackground.read(from: take.backgroundURL))) }
                                              }))
         if let outro = cards.outro, let range = plan.outro {
             // Cover the composition to its very end, whatever rounding did.

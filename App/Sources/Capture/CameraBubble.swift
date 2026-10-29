@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import Combine
+import CoreImage
 import VisionOneKit
 
 /// The camera bubble: a round live preview in the builder's ring that
@@ -28,6 +29,8 @@ final class CameraBubble {
         let cameraName: String
         /// What screen.mov records, in Core Graphics global points.
         let captureFrame: CGRect
+        /// Saved with the take, so export draws what the bubble showed.
+        let background: CameraBackground
         var screenStart: Double?
         /// Host clock seconds and the bubble's frame (CG global) each time
         /// it moved.
@@ -53,6 +56,21 @@ final class CameraBubble {
             .receive(on: RunLoop.main)
             .sink { [weak self] ring in self?.view?.ringColour = Self.colour(ring) }
             .store(in: &cancellables)
+        BackgroundStore.shared.$background.removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] background in self?.useBackground(background) }
+            .store(in: &cancellables)
+        // A picture's depth layers can be made once the model arrives.
+        DepthModelStore.shared.$state.removeDuplicates().filter { $0 == .ready }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.useBackground(BackgroundStore.shared.background) }
+            .store(in: &cancellables)
+    }
+
+    /// The live preview draws `background`; camera.mov stays clean.
+    private func useBackground(_ background: CameraBackground) {
+        feed.setBackground(background)
+        if !background.isOn { view?.showProcessed(nil) }
     }
 
     var isShown: Bool { panel?.isVisible == true }
@@ -83,7 +101,8 @@ final class CameraBubble {
         if feedCameraID != device.uniqueID { useCamera(device) }
         show()
         feed.startWriting(to: take.cameraURL)
-        var recording = Recording(take: take, cameraName: device.localizedName, captureFrame: captureFrame)
+        var recording = Recording(take: take, cameraName: device.localizedName, captureFrame: captureFrame,
+                                  background: BackgroundStore.shared.background)
         if let frame = panel?.frame { recording.moves.append((Self.hostNow(), Self.globalFrame(frame))) }
         self.recording = recording
         view?.isLive = true
@@ -125,6 +144,7 @@ final class CameraBubble {
             }
         }
         try? track.write(to: recording.take.cameraInfoURL)
+        if recording.background.isOn { try? recording.background.write(to: recording.take.backgroundURL) }
         update()
     }
 
@@ -159,6 +179,7 @@ final class CameraBubble {
 
     private func hide() {
         panel?.orderOut(nil)
+        view?.showProcessed(nil)
         if feedCameraID != nil {
             feed.stop()
             feedCameraID = nil
@@ -181,6 +202,12 @@ final class CameraBubble {
         view.onDrag = { [weak self] frame, done in self?.dragged(to: frame, done: done) }
         view.onSize = { [weak self] size in self?.resize(to: size) }
         view.onTurnOff = { CaptureDevices.shared.cameraChoice = .off }
+        view.backgroundMenu = { [weak self] in self?.backgroundMenuItem() }
+        feed.onProcessedFrame = { [weak view] image in
+            // A frame still on its way after Off is dropped.
+            guard BackgroundStore.shared.background.isOn else { return }
+            view?.showProcessed(image)
+        }
         panel.contentView = view
         self.panel = panel
         self.view = view
@@ -221,6 +248,47 @@ final class CameraBubble {
         }
     }
 
+    /// Background ▸ in the bubble's right-click menu.
+    private func backgroundMenuItem() -> NSMenuItem {
+        let store = BackgroundStore.shared
+        let current = store.background
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        func add(_ title: String, on: Bool, enabled: Bool = true, _ action: @escaping () -> Void) {
+            let item = menuActions.item(title, action)
+            item.state = on ? .on : .off
+            item.isEnabled = enabled
+            menu.addItem(item)
+        }
+        add("Off", on: current.style == .off) { store.background = store.background.with(style: .off) }
+        add("Blur", on: current.style == .blur) { store.background = store.background.with(style: .blur) }
+        menu.addItem(.separator())
+        for room in RoomID.allCases {
+            add(room.title, on: current.style == .room && current.room == room) {
+                store.background = store.background.with(style: .room, room: room)
+            }
+        }
+        menu.addItem(.separator())
+        if let picture = current.picture ?? store.lastPicture {
+            add("Your picture", on: current.style == .picture) {
+                store.background = store.background.with(style: .picture, picture: picture)
+            }
+        }
+        add("Choose picture…", on: false) { store.choosePicture() }
+        menu.addItem(.separator())
+        add("Match my light", on: current.matchLight, enabled: current.replacesRoom) {
+            store.background.matchLight.toggle()
+        }
+        add("Move with me", on: current.moveWithMe, enabled: current.replacesRoom) {
+            store.background.moveWithMe.toggle()
+        }
+        let item = NSMenuItem(title: "Background", action: nil, keyEquivalent: "")
+        item.submenu = menu
+        return item
+    }
+
+    private let menuActions = MenuActions()
+
     private func screen(for placement: BubblePlacement?) -> NSScreen {
         if let id = placement?.displayID, let screen = NSScreen.screens.first(where: { $0.displayID == id }) {
             return screen
@@ -256,6 +324,26 @@ final class CameraBubble {
     }
 }
 
+/// Menu items that run a closure.
+@MainActor
+private final class MenuActions: NSObject {
+    private final class Box {
+        let action: () -> Void
+        init(_ action: @escaping () -> Void) { self.action = action }
+    }
+
+    func item(_ title: String, _ action: @escaping () -> Void) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(run(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = Box(action)
+        return item
+    }
+
+    @objc private func run(_ item: NSMenuItem) {
+        (item.representedObject as? Box)?.action()
+    }
+}
+
 /// Floats without taking focus from the app being recorded.
 private final class BubblePanel: NSPanel {
     override var canBecomeKey: Bool { false }
@@ -268,6 +356,7 @@ private final class BubbleView: NSView {
     var onDrag: ((CGRect, Bool) -> Void)?
     var onSize: ((BubblePlacement.Size) -> Void)?
     var onTurnOff: (() -> Void)?
+    var backgroundMenu: (() -> NSMenuItem?)?
 
     var ringColour: NSColor = .black {
         didSet { ring.strokeColor = ringColour.cgColor }
@@ -277,6 +366,8 @@ private final class BubbleView: NSView {
     }
 
     private let previewLayer: AVCaptureVideoPreviewLayer
+    /// The camera with its background drawn in, over the plain preview.
+    private let processedLayer = CALayer()
     private let ring = CAShapeLayer()
     private let grip = CALayer()
     private let tally = CALayer()
@@ -298,6 +389,11 @@ private final class BubbleView: NSView {
         previewLayer.backgroundColor = NSColor(srgbRed: 0xF4 / 255, green: 0xF4 / 255, blue: 0xF1 / 255, alpha: 1).cgColor
         previewLayer.masksToBounds = true
         layer?.addSublayer(previewLayer)
+
+        processedLayer.contentsGravity = .resizeAspectFill
+        processedLayer.masksToBounds = true
+        processedLayer.isHidden = true
+        layer?.addSublayer(processedLayer)
 
         ring.fillColor = nil
         ring.lineWidth = Self.ringWidth
@@ -322,6 +418,16 @@ private final class BubbleView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    /// Shows a frame with its background drawn in, or the plain camera
+    /// again with nil.
+    func showProcessed(_ image: CGImage?) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        processedLayer.contents = image
+        processedLayer.isHidden = image == nil
+        CATransaction.commit()
+    }
+
     override var isFlipped: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -336,6 +442,8 @@ private final class BubbleView: NSView {
         let circle = bounds.insetBy(dx: Self.ringWidth / 2, dy: Self.ringWidth / 2)
         previewLayer.frame = bounds.insetBy(dx: Self.ringWidth, dy: Self.ringWidth)
         previewLayer.cornerRadius = previewLayer.frame.width / 2
+        processedLayer.frame = previewLayer.frame
+        processedLayer.cornerRadius = previewLayer.cornerRadius
         ring.path = CGPath(ellipseIn: circle, transform: nil)
         // On the circle's edge at the bottom right, and the tally at the
         // top right, both at 45 degrees from the centre.
@@ -399,6 +507,10 @@ private final class BubbleView: NSView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
+        if let background = backgroundMenu?() {
+            menu.addItem(background)
+            menu.addItem(.separator())
+        }
         for size in BubblePlacement.Size.allCases {
             let item = NSMenuItem(title: size.title, action: #selector(pickSize(_:)), keyEquivalent: "")
             item.representedObject = size.rawValue
@@ -430,6 +542,17 @@ private final class CameraFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDe
     private let output = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "za.co.versionone.visionone.camera-session")
     private let frameQueue = DispatchQueue(label: "za.co.versionone.visionone.camera-frames", qos: .userInitiated)
+    /// Draws the background for the preview, off the frame queue so
+    /// camera.mov never waits on it.
+    private let previewQueue = DispatchQueue(label: "za.co.versionone.visionone.camera-background", qos: .userInitiated)
+    private let previewContext = CIContext(options: [.cacheIntermediates: false])
+    /// Called on the main thread with each previewed frame.
+    var onProcessedFrame: ((CGImage) -> Void)?
+    // Touched only on previewQueue.
+    private var renderer: BackgroundRenderer?
+    // Touched only on frameQueue: draw backgrounds, and one is in flight.
+    private var drawsBackground = false
+    private var drawing = false
 
     // Touched only on frameQueue.
     private var pendingURL: URL?
@@ -464,6 +587,29 @@ private final class CameraFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDe
                     connection.isVideoMirrored = true
                 }
             }
+        }
+    }
+
+    /// What the preview draws behind the person. camera.mov is unchanged.
+    func setBackground(_ background: CameraBackground) {
+        previewQueue.async { [self] in renderer = BackgroundRenderer(background: background) }
+        frameQueue.async { [self] in drawsBackground = background.isOn }
+    }
+
+    /// One frame at a time; frames that arrive meanwhile only go to the
+    /// writer. Mirrored like the plain preview, and at most 540 high.
+    private func preview(_ sampleBuffer: CMSampleBuffer) {
+        guard drawsBackground, !drawing, let pixels = sampleBuffer.imageBuffer else { return }
+        drawing = true
+        let time = sampleBuffer.presentationTimeStamp.seconds
+        previewQueue.async { [self] in
+            defer { frameQueue.async { [self] in drawing = false } }
+            guard let renderer else { return }
+            let height = CGFloat(CVPixelBufferGetHeight(pixels))
+            let image = renderer.render(pixels, scale: min(1, 540 / max(height, 1)), at: time)
+            let mirrored = image.transformed(by: CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: image.extent.width, ty: 0))
+            guard let cg = previewContext.createCGImage(mirrored, from: mirrored.extent) else { return }
+            DispatchQueue.main.async { [self] in onProcessedFrame?(cg) }
         }
     }
 
@@ -514,6 +660,7 @@ private final class CameraFeed: NSObject, AVCaptureVideoDataOutputSampleBufferDe
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        preview(sampleBuffer)
         guard let url = pendingURL, !paused else { return }
         let time = sampleBuffer.presentationTimeStamp
         if writer == nil {

@@ -565,6 +565,9 @@ struct SourcesList: View {
             SourceRow(symbol: "web.camera", title: "Camera", isOn: cameraOn) {
                 cameraMenu
             }
+            if devices.cameraChoice != .off {
+                BackgroundRow()
+            }
             // iPhone screen over USB, from the device tracks work.
             SourcesRow(devices: devices)
         }

@@ -82,6 +82,9 @@ struct EditorPanel: View {
                 .font(.system(size: 12, design: .monospaced).monospacedDigit())
                 .lineLimit(1)
             Spacer(minLength: 0)
+            if FileManager.default.fileExists(atPath: model.take.cameraURL.path) {
+                TakeBackgroundMenu(take: model.take)
+            }
             if let onExpand {
                 IconButton("Open the editor", systemImage: "arrow.up.left.and.arrow.down.right", action: onExpand)
             }
