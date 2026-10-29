@@ -4,10 +4,17 @@ import Darwin
 
 /// Where the app listens: ~/Library/Application Support/Vision One/mcp.sock.
 /// A Unix socket readable only by this Mac user; there is no network port.
+/// A side-by-side test build (bundle id ending ".dev") gets mcp-dev.sock,
+/// so it never takes over the installed release's socket.
 public enum MCPSocketPath {
     public static var standard: String {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Vision One", isDirectory: true).appendingPathComponent("mcp.sock").path
+        return base.appendingPathComponent("Vision One", isDirectory: true)
+            .appendingPathComponent(fileName(bundleID: Bundle.main.bundleIdentifier)).path
+    }
+
+    public static func fileName(bundleID: String?) -> String {
+        bundleID?.hasSuffix(".dev") == true ? "mcp-dev.sock" : "mcp.sock"
     }
 }
 

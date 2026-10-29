@@ -112,6 +112,9 @@ struct NewTaskView: View {
                 .textStyle(.display)
                 .foregroundStyle(Theme.text)
                 .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             if model.takes.isEmpty, !recorder.phase.isLive {
                 firstRecording

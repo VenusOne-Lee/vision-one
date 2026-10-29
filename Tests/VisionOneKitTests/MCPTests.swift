@@ -158,6 +158,14 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(back["id"]?.intValue, 1)
     }
 
+    #if canImport(Darwin)
+    func testDevBuildsUseTheirOwnSocket() {
+        XCTAssertEqual(MCPSocketPath.fileName(bundleID: "za.co.versionone.visionone"), "mcp.sock")
+        XCTAssertEqual(MCPSocketPath.fileName(bundleID: "za.co.versionone.visionone.dev"), "mcp-dev.sock")
+        XCTAssertEqual(MCPSocketPath.fileName(bundleID: nil), "mcp.sock")
+    }
+    #endif
+
     func testClientNames() {
         XCTAssertEqual(MCPClient(name: "claude-code").displayName, "Claude Code")
         XCTAssertEqual(MCPClient(name: "codex-mcp-client").displayName, "Codex")

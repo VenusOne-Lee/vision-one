@@ -40,8 +40,10 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Vision One
-        CFBundleName: Vision One
+        # APP_DISPLAY_NAME is "Vision One"; side-by-side test builds pass
+        # "Vision One Dev" so the Dock and menus tell the two apart.
+        CFBundleDisplayName: $(APP_DISPLAY_NAME)
+        CFBundleName: $(APP_DISPLAY_NAME)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSUIElement: false
@@ -73,6 +75,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: za.co.versionone.visionone
         PRODUCT_NAME: Vision One
+        APP_DISPLAY_NAME: Vision One
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
         # App/Resources/Assets.xcassets; source SVGs in docs/icon.
