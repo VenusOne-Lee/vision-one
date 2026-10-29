@@ -24,6 +24,24 @@ public enum AppliedTemplate {
     }
     public static func look(for take: Take) -> TemplateLook? { try? TemplateLook.load(from: folder(for: take)) }
     public static func style(for take: Take) -> CopiedStyle? { CopiedStyle.load(from: folder(for: take)) }
+    /// Explicit brand paper/ink overrides win over copied palette suggestions.
+    public static func cardBrand(for take: Take, base: BrandKit) -> BrandKit {
+        guard let style = style(for: take), style.copies(.colours),
+              base.paperHex == BrandKit().paperHex, base.inkHex == BrandKit().inkHex else { return base }
+        let colours = style.profile.palette.compactMap { swatch -> (hex: UInt32, luminance: Double)? in
+            guard let hex = UInt32(swatch.hex.replacingOccurrences(of: "#", with: ""), radix: 16) else { return nil }
+            return (hex, StyleRGB(hex: hex).luminance)
+        }.sorted { $0.luminance < $1.luminance }
+        guard let dark = colours.first, let light = colours.last,
+              light.luminance - dark.luminance > 0.45 else { return base }
+        let ink = dark.hex
+        let paper = light.hex
+        var result = base
+        result.inkHex = ink
+        result.paperHex = paper
+        return result
+    }
+
     public static func presets(for take: Take) -> [ExportPreset]? {
         guard let look = look(for: take) else { return nil }
         let values: [ExportPreset] = look.pickedFormats.compactMap {

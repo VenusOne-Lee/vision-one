@@ -405,7 +405,7 @@ struct ExportSheet: View {
                 edits.sourceDuration = seconds
                 timeline = ExportTimeline(edits: edits, frameRate: rate)
             }
-            let plan = brand.cardMaker().plan(bodyDuration: timeline.duration)
+            let plan = brand.cardMaker(look: AppliedTemplate.look(for: take), templateFolder: AppliedTemplate.folder(for: take)).plan(bodyDuration: timeline.duration)
             source = ExportSource(width: Int(size.width), height: Int(size.height), frameRate: rate)
             duration = plan.duration
             loadProblem = nil

@@ -73,3 +73,23 @@ extension AppliedTemplateTests {
         XCTAssertEqual(take.loadCaptionSettings(), captions)
     }
 }
+
+extension AppliedTemplateTests {
+    func testCopiedCardPaletteRespectsExplicitBrandOverrides() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let take = Take(folder: root)
+        var profile = StyleScanner.profile(from: StyleInput(duration: 1, width: 1920, height: 1080, frames: []), source: "fixture")
+        profile.palette = [.init(hex: "#101020", share: 0.5), .init(hex: "#F0F0E0", share: 0.5)]
+        try CopiedStyle(profile: profile, copying: [.colours]).save(to: AppliedTemplate.folder(for: take))
+        let base = BrandKit()
+        let copied = AppliedTemplate.cardBrand(for: take, base: base)
+        XCTAssertEqual(copied.paperHex, 0xF0F0E0)
+        XCTAssertEqual(copied.inkHex, 0x101020)
+        XCTAssertEqual(copied.ring, base.ring)
+        var branded = base
+        branded.paperHex = 0xEEEEEE
+        XCTAssertEqual(AppliedTemplate.cardBrand(for: take, base: branded), branded)
+    }
+}

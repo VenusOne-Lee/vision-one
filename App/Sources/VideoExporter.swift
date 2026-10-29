@@ -110,7 +110,14 @@ struct VideoExporter {
             edits.sourceDuration = assetDuration.seconds
             timeline = ExportTimeline(edits: edits, frameRate: Double(frameRate))
         }
-        let plan = cards?.plan(bodyDuration: timeline.duration)
+        let appliedLook = AppliedTemplate.look(for: take)
+        let cardMaker: CardMaker? = cards.map { maker in
+            guard let look = appliedLook else { return maker }
+            return CardMaker(brand: AppliedTemplate.cardBrand(for: take, base: maker.brand),
+                             brandFolder: maker.brandFolder, look: look,
+                             templateFolder: AppliedTemplate.folder(for: take), personal: maker.personal)
+        }
+        let plan = cardMaker?.plan(bodyDuration: timeline.duration)
             ?? TemplatePlan(introDuration: nil, bodyDuration: timeline.duration, outroDuration: nil)
         let source = ExportSource(width: Int(naturalSize.width), height: Int(naturalSize.height), frameRate: Double(frameRate))
         var settings: ExportSettings
@@ -149,7 +156,7 @@ struct VideoExporter {
         // Cards are drawn once at the export's size, then reused if the
         // export has to go again.
         var cardSet = BrandCardSet.empty
-        if plan.hasCards, let cards {
+        if plan.hasCards, let cards = cardMaker {
             cardSet = await cards.make(plan: plan,
                                        size: CGSize(width: settings.width, height: settings.height),
                                        frameRate: settings.frameRate)
@@ -160,7 +167,8 @@ struct VideoExporter {
         let captions = captionRingHex.map {
             CaptionExport.overlays(for: take, timeline: timeline, ringHex: $0, language: captionLanguage)
         } ?? []
-        let allOverlays = captions + overlays
+        let allowedOverlays = appliedLook?.watermark == false ? overlays.filter { !($0 is WatermarkOverlay) } : overlays
+        let allOverlays = captions + allowedOverlays
         let url = outputURL ?? take.exportURL(for: preset)
 
         // A single-pass encoder only roughly meets its average bitrate. If

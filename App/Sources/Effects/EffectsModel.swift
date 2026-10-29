@@ -84,8 +84,16 @@ final class EffectsModel: ObservableObject {
 
     private func plannedZooms(energy: ZoomEnergy, edits: EditList) -> [Zoom] {
         guard let events else { return [] }
-        return ZoomPlanner.propose(from: events, style: .energy(energy),
-                                   sourceDuration: edits.sourceDuration, removed: edits.removedSpans)
+        let proposals = ZoomPlanner.propose(from: events, style: .energy(energy),
+                                            sourceDuration: edits.sourceDuration, removed: edits.removedSpans)
+        guard let rate = AppliedTemplate.style(for: take)?.zoomsPerMinute, rate.isFinite else { return proposals }
+        guard rate > 0 else { return [] }
+        var selected: [Zoom] = []
+        for proposal in proposals {
+            if let previous = selected.last, proposal.start - previous.start < 60 / rate { continue }
+            selected.append(proposal)
+        }
+        return selected
     }
 
     /// Re-plans from the clicks at an energy. Unanswered proposals are

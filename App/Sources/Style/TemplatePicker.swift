@@ -36,7 +36,7 @@ struct ApplyTemplateSheet: View {
             TemplatePicker(selection: $selection)
             Text("Applies caption style, Energy, cleanup rhythm and output defaults. Intro, outro and watermark choices follow the template. Existing cuts, manual framing, caption size, position and language are kept.")
                 .textStyle(.body).foregroundStyle(Theme.textMuted).fixedSize(horizontal: false, vertical: true)
-            Text("Copied music traits never copy copyrighted audio. Choose a music track in Sound. Palette and zoom-frequency analysis remain reference information.")
+            Text("Copied music traits never copy copyrighted audio. Choose a music track in Sound. Copied zoom frequency limits new click-zoom suggestions. Copied card colours apply when the brand has no custom paper/ink override.")
                 .textStyle(.caption).foregroundStyle(Theme.textMuted).fixedSize(horizontal: false, vertical: true)
             if let problem { Text(problem).textStyle(.caption).foregroundStyle(Theme.error) }
             HStack {
@@ -54,6 +54,8 @@ struct ApplyTemplateSheet: View {
             try AppliedTemplate.apply(id: selection, to: workspace.take, overwrite: true)
             let energy = TakePlan.load(for: workspace.take)?.energy ?? .calm
             workspace.editor.setEnergy(energy)
+            workspace.editor.effects.findZooms(energy: ZoomEnergy(rawValue: energy.rawValue) ?? .calm,
+                                                edits: workspace.editor.edits)
             NotificationCenter.default.post(name: .takeStyleChanged, object: workspace.take.folder)
             close()
         } catch { problem = "Couldn't apply this template: \(error.localizedDescription)" }
