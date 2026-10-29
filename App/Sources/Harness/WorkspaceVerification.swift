@@ -15,6 +15,13 @@ extension EnvironmentValues {
 }
 
 @MainActor
+enum WorkspaceRenderEvidence {
+    static var generation = 0
+    static var frames = 0
+    static var failures: [String] = []
+}
+
+@MainActor
 enum WorkspaceVerification {
     static func run(take source: Take, in root: URL) async throws {
         let defaults = UserDefaults.standard
@@ -80,7 +87,8 @@ enum WorkspaceVerification {
                     if state == "editor" { model.mode = .editor }
                     if state == "sound" { model.mode = .sound }
                     let name = "\(state)-\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide").png"
-                    try await capture(HarnessView(model: model, compactPane: ["pending", "error"].contains(state) ? "Task" : "Review"), size: size, to: root.appendingPathComponent(name))
+                    try await capture(HarnessView(model: model, compactPane: ["pending", "error"].contains(state) ? "Task" : "Review"), size: size, to: root.appendingPathComponent(name),
+                                      requiresFrame: ["task", "editor", "delivery"].contains(state) || (state == "sound" && !narrow) || (["pending", "error"].contains(state) && !narrow))
                     model.workspace?.close()
                     names.append(name)
                 }
@@ -110,7 +118,10 @@ enum WorkspaceVerification {
         print("Workspace renders saved: \(names.count)")
     }
 
-    private static func capture<V: View>(_ view: V, size: CGSize, to url: URL) async throws {
+    private static func capture<V: View>(_ view: V, size: CGSize, to url: URL, requiresFrame: Bool = false) async throws {
+        WorkspaceRenderEvidence.generation += 1
+        WorkspaceRenderEvidence.frames = 0
+        WorkspaceRenderEvidence.failures = []
         let host = NSHostingView(rootView: view
             .frame(width: size.width, height: size.height)
             .background(Theme.canvas).foregroundStyle(Theme.text).themed()
@@ -123,6 +134,13 @@ enum WorkspaceVerification {
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
         // Let production .task loads, SwiftUI layout and AppKit drawing settle.
         try await Task.sleep(for: .milliseconds(700))
+        if requiresFrame {
+            for _ in 0..<40 where WorkspaceRenderEvidence.frames == 0 && WorkspaceRenderEvidence.failures.isEmpty {
+                try await Task.sleep(for: .milliseconds(50))
+            }
+            try MediaVerification.require(WorkspaceRenderEvidence.frames > 0 && WorkspaceRenderEvidence.failures.isEmpty,
+                                          "Fixture media frame unavailable in \(url.lastPathComponent): \(WorkspaceRenderEvidence.failures)")
+        }
         host.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
         guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {

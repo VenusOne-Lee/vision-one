@@ -538,12 +538,27 @@ struct VerificationPlayerFrame: View {
             if let frame { Image(decorative: frame, scale: 1).resizable().scaledToFit() }
         }
         .task {
+            let generation = WorkspaceRenderEvidence.generation
             guard let item = player.currentItem else { return }
             let generator = AVAssetImageGenerator(asset: item.asset)
             generator.videoComposition = item.videoComposition
             generator.appliesPreferredTrackTransform = item.videoComposition == nil
             generator.maximumSize = CGSize(width: 1512, height: 982)
-            frame = try? await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
+            generator.requestedTimeToleranceBefore = .zero
+            generator.requestedTimeToleranceAfter = .zero
+            do {
+                let result = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600))
+                guard !Task.isCancelled, generation == WorkspaceRenderEvidence.generation else { return }
+                frame = result.image
+                WorkspaceRenderEvidence.frames += 1
+                if abs(result.actualTime.seconds - 0.5) > 1.0 / 30 {
+                    WorkspaceRenderEvidence.failures.append("Fixture frame time differs from requested 0.5 seconds")
+                }
+            } catch {
+                if !Task.isCancelled, generation == WorkspaceRenderEvidence.generation {
+                    WorkspaceRenderEvidence.failures.append(error.localizedDescription)
+                }
+            }
         }
     }
 }
