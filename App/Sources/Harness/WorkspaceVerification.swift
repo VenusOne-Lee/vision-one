@@ -61,8 +61,8 @@ enum WorkspaceVerification {
             ThemeStore.shared.renderAppearance(appearance)
             for narrow in [false, true] {
                 let size = narrow ? CGSize(width: 900, height: 640) : CGSize(width: 1512, height: 982)
-                for state in ["new-task", "task", "editor", "sound", "delivery", "pending", "error", "loading"] {
-                    let page: HarnessPage = state == "new-task" ? .newTask : .task(task.id)
+                for state in ["new-task", "library", "task", "editor", "sound", "delivery", "pending", "error", "loading"] {
+                    let page: HarnessPage = state == "new-task" ? .newTask : (state == "library" ? .library : .task(task.id))
                     var stateSnapshot = snapshot
                     if state == "pending" {
                         stateSnapshot.tasks[0].cells.append(TaskCell(.plan(DeskPlan(steps: [.init(agent: .editor, title: "Tighten the opening", action: .edit(ask: "Remove long pauses")), .init(agent: .clipper, title: "Prepare two clips", action: .clips(count: 2))])), at: date))
@@ -149,6 +149,8 @@ enum WorkspaceVerification {
             try ClipList(clips: [.init(title: "Switch fixture", span: TimeSpan(start: 0, end: 3), state: .accepted)])
                 .write(to: take.clipsURL)
         }
+        try a.setTitle("First imported video")
+        try b.setTitle("Second imported video")
         try a.saveCaptionSettings(CaptionSettings(isOn: true, style: .subtitle, position: 0.25))
         try b.saveCaptionSettings(CaptionSettings(isOn: false, style: .keyword, position: 0.4, language: .zulu))
         let originalA = try Data(contentsOf: a.captionSettingsURL)

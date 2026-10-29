@@ -97,9 +97,12 @@ final class HarnessModel: ObservableObject {
 
     /// Native render diagnostics use an isolated snapshot, never the live Desk.
     let isFixture: Bool
+    let library: TakeLibrary
 
     init(snapshot: DeskSnapshot, takes: [Take], page: HarnessPage, renderPhase: EditorModel.Phase? = nil) {
         isFixture = true
+        library = TakeLibrary(folder: takes.first?.folder.deletingLastPathComponent()
+                              ?? FileManager.default.temporaryDirectory.appendingPathComponent("vision-empty-render-library"))
         panels = PanelLayoutBook()
         self.snapshot = snapshot
         self.takes = takes
@@ -111,6 +114,7 @@ final class HarnessModel: ObservableObject {
 
     private init() {
         isFixture = false
+        library = .standard
         panels = PanelLayoutBook.decode(UserDefaults.standard.data(forKey: "harness.panels"))
         refreshTakes()
         watchDesk()
@@ -126,7 +130,7 @@ final class HarnessModel: ObservableObject {
 
     func refreshTakes() {
         guard !isFixture else { return }
-        let latest = TakeLibrary.standard.takes()
+        let latest = library.takes()
         var names: [String: String] = [:]
         for take in latest { names[take.name] = take.displayTitle() }
         if latest != takes { takes = latest }

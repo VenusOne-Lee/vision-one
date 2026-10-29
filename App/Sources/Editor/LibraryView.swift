@@ -10,9 +10,10 @@ import VisionOneKit
 struct LibraryView: View {
     @ObservedObject private var recorder = ScreenRecorder.shared
     let open: (Take) -> Void
+    private let library: TakeLibrary
     /// Read again whenever the window comes forward or a take finishes,
     /// the same way the harness reads its takes.
-    @State private var takes: [Take] = TakeLibrary.standard.takes()
+    @State private var takes: [Take]
     @State private var items: [TakeListing] = []
     @State private var indexed = false
     /// Bumped on every refresh so rows read their frame from disk again
@@ -25,6 +26,12 @@ struct LibraryView: View {
     @State private var trashed: Trashed?
     @State private var fileProblem: String?
     @AppStorage("library.sort") private var sort = LibrarySort.newest
+
+    init(library: TakeLibrary = .standard, open: @escaping (Take) -> Void) {
+        self.library = library
+        self.open = open
+        _takes = State(initialValue: library.takes())
+    }
 
     private var query: LibraryQuery { LibraryQuery(search: search, filter: filter, sort: sort) }
 
@@ -61,7 +68,7 @@ struct LibraryView: View {
     }
 
     private func refresh() {
-        let latest = TakeLibrary.standard.takes()
+        let latest = library.takes()
         if latest != takes { takes = latest }
         generation += 1
     }
@@ -85,7 +92,10 @@ struct LibraryView: View {
                 EmptyState("No takes yet",
                            message: "Every take you record lands here, with its words to search. ⇧⌘R records from anywhere.",
                            action: (title: recorder.phase.isLive ? "Stop recording" : "Record your first take",
-                                    run: { Task { await ScreenRecorder.shared.toggle() } }))
+                                    run: {
+                                        if recorder.phase.isLive { Task { await ScreenRecorder.shared.toggle() } }
+                                        else { HarnessModel.shared.preparingRecording = true }
+                                    }))
                     .disabled(recorder.phase.isBusy)
             } else {
                 takesHeader

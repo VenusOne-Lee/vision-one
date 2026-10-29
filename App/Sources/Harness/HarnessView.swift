@@ -258,7 +258,7 @@ struct HarnessView: View {
         case .newTask:
             NewTaskView(model: model)
         case .library:
-            LibraryView { model.open($0) }
+            LibraryView(library: model.library) { model.open($0) }
         case .task:
             if let task = model.task {
                 GeometryReader { geometry in
