@@ -16,8 +16,8 @@ final class WorkspaceUndoActions: NSObject, ObservableObject {
         super.init()
         let names: [Notification.Name] = [
             NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSWindow.didUpdateNotification,
-            UndoManager.didCloseUndoGroupNotification, UndoManager.didUndoChangeNotification,
-            UndoManager.didRedoChangeNotification, NSControl.textDidBeginEditingNotification,
+            Notification.Name.NSUndoManagerDidCloseUndoGroup, Notification.Name.NSUndoManagerDidUndoChange,
+            Notification.Name.NSUndoManagerDidRedoChange, NSControl.textDidBeginEditingNotification,
             NSControl.textDidEndEditingNotification, NSText.didChangeNotification
         ]
         for name in names {

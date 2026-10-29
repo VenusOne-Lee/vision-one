@@ -59,9 +59,9 @@ enum WorkspaceUndoVerification {
         first.undoManager.endUndoGrouping()
         actions.refresh()
         try MediaVerification.require(actions.canUndo && actions.undoTitle == "Undo Trim End", "Workspace Edit state missed trim")
-        try MediaVerification.require(menu.performKeyEquivalent(with: key(in: window, redo: false)), "Canvas Cmd-Z was not dispatched")
+        try MediaVerification.require(menu.performKeyEquivalent(with: try key(in: window, redo: false)), "Canvas Cmd-Z was not dispatched")
         try MediaVerification.require(abs(first.edits.outputDuration - 3) < 0.001 && actions.canRedo, "Canvas Cmd-Z did not undo trim")
-        try MediaVerification.require(menu.performKeyEquivalent(with: key(in: window, redo: true)), "Canvas redo key was not dispatched")
+        try MediaVerification.require(menu.performKeyEquivalent(with: try key(in: window, redo: true)), "Canvas redo key was not dispatched")
         try MediaVerification.require(abs(first.edits.outputDuration - 2.5) < 0.001, "Canvas Cmd-Shift-Z did not redo trim")
 
         model.page = .task(b.id)
@@ -74,10 +74,10 @@ enum WorkspaceUndoVerification {
         actions.refresh()
         try MediaVerification.require(WorkspaceUndoActions.manager(in: window) === second.undoManager,
                                       "Undo routing retained A after task switch")
-        _ = menu.performKeyEquivalent(with: key(in: window, redo: false))
+        _ = menu.performKeyEquivalent(with: try key(in: window, redo: false))
         try MediaVerification.require(abs(second.edits.outputDuration - 3) < 0.001 && abs(first.edits.outputDuration - 2.5) < 0.001,
                                       "B undo changed A or failed to undo B")
-        _ = menu.performKeyEquivalent(with: key(in: window, redo: true))
+        _ = menu.performKeyEquivalent(with: try key(in: window, redo: true))
 
         // Standard field-editor typing must retain its own active undo context.
         let field = NSTextField(frame: NSRect(x: 20, y: 20, width: 240, height: 28))
@@ -93,10 +93,10 @@ enum WorkspaceUndoVerification {
         typingUndo.endUndoGrouping()
         actions.refresh()
         try MediaVerification.require(WorkspaceUndoActions.manager(in: window) === typingUndo, "Typing lost its native undo owner")
-        _ = menu.performKeyEquivalent(with: key(in: window, redo: false))
+        _ = menu.performKeyEquivalent(with: try key(in: window, redo: false))
         try MediaVerification.require(text.string == "Draft" && first.edits == beforeA && second.edits == beforeB,
                                       "Text-field undo consumed a video edit")
-        _ = menu.performKeyEquivalent(with: key(in: window, redo: true))
+        _ = menu.performKeyEquivalent(with: try key(in: window, redo: true))
         try MediaVerification.require(text.string == "Draft extra", "Text-field redo failed")
         window.makeFirstResponder(nil)
         field.removeFromSuperview()
