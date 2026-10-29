@@ -109,17 +109,25 @@ public enum AppliedTemplate {
         let marker = take.folder.appendingPathComponent("project-defaults.json")
         guard !FileManager.default.fileExists(atPath: marker.path) else { return }
         try transact(take) {
-        let hadCaptions = FileManager.default.fileExists(atPath: take.captionSettingsURL.path)
-        if let id = defaults.templateID { try apply(id: id, to: take) }
-        // Existing explicit caption settings win. A template supplies style,
-        // while the project's captions and language choices supply availability.
-        if !hadCaptions {
-            var settings = take.loadCaptionSettings()
-            settings.isOn = defaults.captions
-            settings.language = defaults.language
-            try take.saveCaptionSettings(settings)
+            let hadCaptions = FileManager.default.fileExists(atPath: take.captionSettingsURL.path)
+            if let id = defaults.templateID { try apply(id: id, to: take) }
+            // Existing explicit caption settings win. A template supplies style,
+            // while the project's captions and language choices supply availability.
+            if !hadCaptions {
+                var settings = take.loadCaptionSettings()
+                settings.isOn = defaults.captions
+                settings.language = defaults.language
+                try take.saveCaptionSettings(settings)
+            }
+            try JSONEncoder().encode(defaults).write(to: marker, options: .atomic)
         }
-        try JSONEncoder().encode(defaults).write(to: marker, options: .atomic)
+    }
+
+    private struct RollbackFailure: LocalizedError {
+        let original: Error
+        let recovery: URL
+        var errorDescription: String? {
+            "Template application failed (\(original.localizedDescription)) and could not be fully restored. The previous settings are preserved at \(recovery.path)."
         }
     }
 
@@ -130,7 +138,8 @@ public enum AppliedTemplate {
         let backup = take.folder.appendingPathComponent(".template-rollback-\(UUID().uuidString)", isDirectory: true)
         let names = ["template", "captions.json", "plan.json", "sound.json", "project-defaults.json"]
         try fm.createDirectory(at: backup, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: backup) }
+        var canDiscardBackup = true
+        defer { if canDiscardBackup { try? fm.removeItem(at: backup) } }
         for name in names {
             let source = take.folder.appendingPathComponent(name)
             if fm.fileExists(atPath: source.path) { try fm.copyItem(at: source, to: backup.appendingPathComponent(name)) }
@@ -138,11 +147,16 @@ public enum AppliedTemplate {
         do { try change() }
         catch {
             let original = error
-            for name in names {
-                let target = take.folder.appendingPathComponent(name)
-                let saved = backup.appendingPathComponent(name)
-                if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
-                if fm.fileExists(atPath: saved.path) { try fm.copyItem(at: saved, to: target) }
+            do {
+                for name in names {
+                    let target = take.folder.appendingPathComponent(name)
+                    let saved = backup.appendingPathComponent(name)
+                    if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
+                    if fm.fileExists(atPath: saved.path) { try fm.copyItem(at: saved, to: target) }
+                }
+            } catch {
+                canDiscardBackup = false
+                throw RollbackFailure(original: original, recovery: backup)
             }
             throw original
         }

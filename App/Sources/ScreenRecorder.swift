@@ -346,6 +346,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
     /// Normal app windows that can be recorded, for the picker. Empty
     /// without Screen Recording access.
     func pickableWindows() async -> [WindowCandidate] {
+        // Merely opening a picker must not request an OS permission.
+        guard AccessCenter.shared.checklist.state(of: .screen) == .granted else { return [] }
         guard let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true) else {
             return []
         }

@@ -146,7 +146,9 @@ struct VideoExporter {
             }
         } else if let format = preset.format {
             let focus = (try? EventLog.read(from: take.eventsURL)).map { ReframePlanner.focus(from: $0) } ?? []
-            crop = .follow(ReframePlanner.plan(format: format, mode: AppliedTemplate.look(for: take)?.reframe(for: format) ?? .follow,
+            var mode = appliedLook?.reframe(for: format) ?? .follow
+            if mode == .split, await Self.camera(for: take) == nil { mode = .follow }
+            crop = .follow(ReframePlanner.plan(format: format, mode: mode,
                                                sourceWidth: Int(naturalSize.width), sourceHeight: Int(naturalSize.height),
                                                duration: assetDuration.seconds, focus: focus))
         } else {
