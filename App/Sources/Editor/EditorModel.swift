@@ -15,9 +15,10 @@ final class EditorModel: ObservableObject {
 
     enum TranscriptState: Equatable {
         case loading
-        /// No transcript.json yet; the editor checks again every few
-        /// seconds, so it appears when transcription finishes.
+        /// A transcription job is queued or running; check for its result.
         case waiting
+        /// No file and no transcription job is queued or running.
+        case missing
         case ready
         case failed(String)
     }
@@ -256,7 +257,7 @@ final class EditorModel: ObservableObject {
             return
         }
         guard FileManager.default.fileExists(atPath: take.transcriptURL.path) else {
-            transcriptState = .waiting
+            transcriptState = .missing
             return
         }
         do {

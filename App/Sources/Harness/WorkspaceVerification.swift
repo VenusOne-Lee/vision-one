@@ -50,6 +50,7 @@ enum WorkspaceVerification {
         try verifyCaptionPaneUpdates(in: root)
         try await verifyTakeSwitch(source: take, in: root)
         try await TranscriptViewVerification.run(source: take, in: root)
+        let transcriptFixtures = try TranscriptViewVerification.stateFixtures(source: take, in: root)
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -65,9 +66,12 @@ enum WorkspaceVerification {
             ThemeStore.shared.renderAppearance(appearance)
             for narrow in [false, true] {
                 let size = narrow ? CGSize(width: 900, height: 640) : CGSize(width: 1512, height: 982)
-                for state in ["new-task", "library", "task", "editor", "sound", "delivery", "pending", "error", "loading"] {
-                    let page: HarnessPage = state == "new-task" ? .newTask : (state == "library" ? .library : .task(task.id))
-                    var stateSnapshot = snapshot
+                for state in ["new-task", "library", "task", "editor", "sound", "delivery", "pending", "error", "loading", "transcript-missing", "transcript-failed", "transcript-empty"] {
+                    let stateTake = transcriptFixtures.first(where: { $0.0 == state })?.1 ?? take
+                    let selectedTask = stateTake == take ? task : DeskTask(projectID: project.id, title: "Transcript recovery",
+                                                                          takes: [stateTake], createdAt: date)
+                    let page: HarnessPage = state == "new-task" ? .newTask : (state == "library" ? .library : .task(selectedTask.id))
+                    var stateSnapshot = stateTake == take ? snapshot : DeskSnapshot(projects: [project], tasks: [selectedTask])
                     if state == "pending" {
                         stateSnapshot.tasks[0].cells.append(TaskCell(.plan(DeskPlan(steps: [.init(agent: .editor, title: "Tighten the opening", action: .edit(ask: "Remove long pauses")), .init(agent: .clipper, title: "Prepare two clips", action: .clips(count: 2))])), at: date))
                         stateSnapshot.tasks[0].cells.append(TaskCell(.approval(.plan("Review edits and two clip proposals. Nothing is posted.")), at: date))
@@ -75,10 +79,11 @@ enum WorkspaceVerification {
                     if state == "error" {
                         stateSnapshot.tasks[0].cells.append(TaskCell(.failed(.editor, "The provider is unavailable. Your original and saved changes are safe. Try again or choose an on-device provider."), at: date))
                     }
-                    let model = HarnessModel(snapshot: stateSnapshot, takes: [take], page: page,
+                    let model = HarnessModel(snapshot: stateSnapshot, takes: [stateTake], page: page,
                                              renderPhase: state == "loading" ? .loading : nil)
                     if let workspace = model.workspace {
                         await workspace.load()
+                        if state.hasPrefix("transcript-") { try TranscriptViewVerification.verifyState(state, editor: workspace.editor) }
                         if state == "delivery" {
                             try ClipList().write(to: take.clipsURL)
                             await workspace.clips.load()
@@ -95,7 +100,7 @@ enum WorkspaceVerification {
                     if state == "sound" { model.mode = .sound }
                     let name = "\(state)-\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide").png"
                     try await capture(HarnessView(model: model, compactPane: ["pending", "error"].contains(state) ? "Task" : "Review"), size: size, to: root.appendingPathComponent(name),
-                                      requiresFrame: ["task", "editor", "delivery"].contains(state) || (state == "sound" && !narrow) || (["pending", "error"].contains(state) && !narrow))
+                                      requiresFrame: state.hasPrefix("transcript-") || ["task", "editor", "delivery"].contains(state) || (state == "sound" && !narrow) || (["pending", "error"].contains(state) && !narrow))
                     model.workspace?.close()
                     names.append(name)
                 }

@@ -28,6 +28,36 @@ enum TranscriptViewVerification {
         throw MediaVerification.Failure(message: message)
     }
 
+    static func stateFixtures(source: Take, in root: URL) throws -> [(String, Take)] {
+        let parent = root.appendingPathComponent("transcript-state-fixtures")
+        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+        return try ["transcript-missing", "transcript-failed", "transcript-empty"].map { name in
+            let take = Take(folder: parent.appendingPathComponent(name))
+            if FileManager.default.fileExists(atPath: take.folder.path) { try FileManager.default.removeItem(at: take.folder) }
+            try FileManager.default.copyItem(at: source.folder, to: take.folder)
+            for url in [take.transcriptURL, take.transcriptFailedURL] where FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            if name == "transcript-failed" { try Data("invalid transcript fixture".utf8).write(to: take.transcriptURL) }
+            if name == "transcript-empty" {
+                try Transcript(language: "en", engine: "no-words fixture", duration: 3, segments: []).write(to: take.transcriptURL)
+            }
+            return (name, take)
+        }
+    }
+
+    static func verifyState(_ name: String, editor: EditorModel) throws {
+        try MediaVerification.require(editor.phase == .ready, "Transcript recovery blocked video editing")
+        switch (name, editor.transcriptState) {
+        case ("transcript-missing", .missing): break
+        case ("transcript-failed", .failed(let message)):
+            try MediaVerification.require(!message.isEmpty, "Transcript failure had no explanation")
+        case ("transcript-empty", .ready):
+            try MediaVerification.require(editor.words.isEmpty, "Empty transcript fixture had words")
+        default: throw MediaVerification.Failure(message: "Incorrect transcript recovery state for \(name)")
+        }
+    }
+
     static func run(source: Take, in root: URL) async throws {
         let parent = root.appendingPathComponent("transcript-view-regression")
         let takes = ["A", "B"].map { Take(folder: parent.appendingPathComponent($0)) }

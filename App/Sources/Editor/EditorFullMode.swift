@@ -511,6 +511,16 @@ struct TranscriptPane: View {
                              message: "Vision One is writing out what you said. The words appear here as soon as it's done, and you can play the take meanwhile.",
                              isError: false)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .missing:
+                VStack(spacing: Theme.Space.md) {
+                    EditorNotice(title: "No transcript yet",
+                                 message: "Create a transcript on this Mac. The speech model downloads on first use.",
+                                 isError: false)
+                    Button("Create transcript") { model.retryTranscript() }.buttonStyle(.secondary)
+                    Text("Playback, timeline edits and export remain available.")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             case let .failed(message):
                 VStack(spacing: Theme.Space.md) {
                     EditorNotice(title: "Transcript unavailable", message: message, isError: true)
