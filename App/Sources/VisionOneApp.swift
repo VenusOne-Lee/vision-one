@@ -165,12 +165,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return
         }
-        // First launch, or access was turned off: show only what's
-        // missing, then New task once it's done. Otherwise open straight
-        // on New task, ready to record or ask.
-        if !AccessCenter.shared.checklist.canRecord {
+        // First launch, or the mic was never asked: show only what's
+        // missing, then New task. Screen Recording waits for the first
+        // screen recording, so camera-only never needs it. Otherwise open
+        // straight on New task, ready to record or ask.
+        let welcomeSeen = UserDefaults.standard.bool(forKey: SetupView.welcomeSeenKey)
+        if !welcomeSeen || AccessCenter.shared.checklist.state(of: .microphone) == .notAsked {
             SetupWindowController.shared.opensHarnessWhenDone = true
-            SetupWindowController.shared.show()
+            SetupWindowController.shared.show(askScreen: false)
         } else {
             EditorWindowController.shared.showNewTask()
         }

@@ -12,16 +12,24 @@ public enum OnboardingStep: Hashable, Sendable {
 /// when the window opens, so the step count doesn't jump while the user is
 /// in System Settings. Returning users skip the welcome and anything
 /// already on; with nothing missing they get the plain checklist instead.
+///
+/// First run leaves Screen Recording out (`askScreen` false): it's asked
+/// the first time a screen, window or area recording starts, so a
+/// camera-only recording never needs it.
 public struct OnboardingFlow: Equatable, Sendable {
     public let steps: [OnboardingStep]
+    public let askScreen: Bool
 
-    public init(checklist: AccessChecklist, welcomeSeen: Bool) {
-        if welcomeSeen && checklist.allGranted {
+    public init(checklist: AccessChecklist, welcomeSeen: Bool, askScreen: Bool = true) {
+        self.askScreen = askScreen
+        let kinds = AccessKind.allCases.filter { askScreen || $0 != .screen }
+        let needed = kinds.filter { !$0.isOptional }
+        if welcomeSeen && needed.allSatisfy({ checklist.state(of: $0) == .granted }) {
             self.steps = []
             return
         }
         var list: [OnboardingStep] = welcomeSeen ? [] : [.welcome]
-        for kind in AccessKind.allCases where checklist.state(of: kind) != .granted {
+        for kind in kinds where checklist.state(of: kind) != .granted {
             // The camera is optional: once someone has said no to it, a
             // returning visit doesn't ask again. The checklist still shows it.
             if kind.isOptional && welcomeSeen && checklist.state(of: kind) == .denied { continue }
@@ -34,6 +42,12 @@ public struct OnboardingFlow: Equatable, Sendable {
     /// Nothing is missing: show the compact checklist, not the steps.
     public var isOverview: Bool { steps.isEmpty }
 
+    /// The finish can offer to record. Without the screen step it always
+    /// can: starting a screen recording asks for Screen Recording then.
+    public func isReady(_ checklist: AccessChecklist) -> Bool {
+        askScreen ? checklist.canRecord : true
+    }
+
     /// The step at `index` is finished. Permission steps are done once
     /// granted (a skipped camera stays not done), the welcome once passed,
     /// and the finish once Vision One can record.
@@ -42,7 +56,7 @@ public struct OnboardingFlow: Equatable, Sendable {
         switch steps[index] {
         case .welcome: return index < current
         case .access(let kind): return checklist.state(of: kind) == .granted
-        case .finish: return checklist.canRecord
+        case .finish: return isReady(checklist)
         }
     }
 

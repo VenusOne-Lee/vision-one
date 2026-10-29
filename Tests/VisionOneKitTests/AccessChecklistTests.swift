@@ -59,6 +59,20 @@ final class OnboardingFlowTests: XCTestCase {
         XCTAssertFalse(flow.isOverview)
     }
 
+    func testFirstRunWithoutScreenAsksOnlyMicAndCamera() {
+        let flow = OnboardingFlow(checklist: fresh, welcomeSeen: false, askScreen: false)
+        XCTAssertEqual(flow.steps, [.welcome, .access(.microphone), .access(.camera), .finish])
+        XCTAssertTrue(flow.isReady(fresh))
+        XCTAssertTrue(flow.isDone(3, current: 3, checklist: fresh))
+    }
+
+    func testMissingScreenAloneDoesNotReopenSetupWhenNotAsked() {
+        let list = AccessChecklist(states: [.screen: .denied, .microphone: .granted, .camera: .denied],
+                                   screenAtLaunch: .denied)
+        XCTAssertTrue(OnboardingFlow(checklist: list, welcomeSeen: true, askScreen: false).isOverview)
+        XCTAssertFalse(OnboardingFlow(checklist: list, welcomeSeen: true).isReady(list))
+    }
+
     func testReturningUserLandsOnWhatIsMissing() {
         let list = AccessChecklist(states: [.screen: .granted, .microphone: .denied, .camera: .notAsked],
                                    screenAtLaunch: .granted)
