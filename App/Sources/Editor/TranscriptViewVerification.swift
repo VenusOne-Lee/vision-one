@@ -46,12 +46,15 @@ enum TranscriptViewVerification {
     static func stateFixtures(source: Take, in root: URL) throws -> [(String, Take)] {
         let parent = root.appendingPathComponent("transcript-state-fixtures")
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-        return try ["transcript-missing", "transcript-failed", "transcript-empty"].map { name in
+        return try ["transcript-missing", "transcript-failed", "transcript-empty", "transcript-no-audio"].map { name in
             let take = Take(folder: parent.appendingPathComponent(name))
             if FileManager.default.fileExists(atPath: take.folder.path) { try FileManager.default.removeItem(at: take.folder) }
             try FileManager.default.copyItem(at: source.folder, to: take.folder)
             for url in [take.transcriptURL, take.transcriptFailedURL] where FileManager.default.fileExists(atPath: url.path) {
                 try FileManager.default.removeItem(at: url)
+            }
+            if name == "transcript-no-audio" {
+                try TranscriptFailure(reason: .noAudio, message: "This video has no audio.").write(to: take.transcriptFailedURL)
             }
             if name == "transcript-failed" { try Data("invalid transcript fixture".utf8).write(to: take.transcriptURL) }
             if name == "transcript-empty" {
@@ -66,11 +69,37 @@ enum TranscriptViewVerification {
         switch (name, editor.transcriptState) {
         case ("transcript-missing", .missing): break
         case ("transcript-failed", .failed(let message)):
-            try MediaVerification.require(!message.isEmpty, "Transcript failure had no explanation")
+            try MediaVerification.require(!message.isEmpty && editor.canRetryTranscript, "Transient transcript failure lost retry")
+        case ("transcript-no-audio", .noAudio):
+            try MediaVerification.require(!editor.canRetryTranscript, "Silent source incorrectly offers retry")
         case ("transcript-empty", .ready):
             try MediaVerification.require(editor.words.isEmpty, "Empty transcript fixture had words")
         default: throw MediaVerification.Failure(message: "Incorrect transcript recovery state for \(name)")
         }
+    }
+
+    static func verifySilentSource(_ source: URL, in root: URL) async throws {
+        let take = Take(folder: root.appendingPathComponent("no-audio-recovery"))
+        try FileManager.default.createDirectory(at: take.folder, withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: take.screenURL.path) { try FileManager.default.removeItem(at: take.screenURL) }
+        try FileManager.default.copyItem(at: source, to: take.screenURL)
+        let transcriber = Transcriber.shared
+        transcriber.transcribe(take)
+        try await wait("Silent source transcription did not settle") { !transcriber.isWorking(on: take) }
+        let marker = try Data(contentsOf: take.transcriptFailedURL)
+        let editor = EditorModel(take: take)
+        await editor.loadIfNeeded()
+        defer { editor.close() }
+        try verifyState("transcript-no-audio", editor: editor)
+        editor.retryTranscript()
+        transcriber.retry(take)
+        try MediaVerification.require(editor.transcriptState == .noAudio && !transcriber.isWorking(on: take),
+                                      "Retry requeued immutable silent media")
+        try MediaVerification.require(try Data(contentsOf: take.transcriptFailedURL) == marker,
+                                      "Silent-source retry discarded permanent reason")
+        try MediaVerification.require(transcriber.failures[take.name] == nil,
+                                      "Silent source advertised a global transient Retry")
+        print("Native silent-source non-retry recovery verification passed")
     }
 
     static func run(source: Take, in root: URL) async throws {

@@ -71,6 +71,8 @@ final class Transcriber: ObservableObject {
     }
 
     func retry(_ take: Take) {
+        // The owned silent source cannot gain speech by retrying transcription.
+        if (try? TranscriptFailure.read(from: take.transcriptFailedURL))?.reason == .noAudio { return }
         try? FileManager.default.removeItem(at: take.transcriptFailedURL)
         failures.clear(take.name)
         failedTakes[take.name] = nil
@@ -133,14 +135,16 @@ final class Transcriber: ObservableObject {
         } catch {
             let message = Self.describe(error)
             if (error as? TakeAudio.ReadError) == .noAudio {
-                // Recording again is the only fix, so don't try it again on
-                // every launch. Retry in the menu still works.
+                // Keep the permanent marker and offer import/recording recovery
+                // in the task rather than a global Retry that cannot help.
                 try? TranscriptFailure(reason: .noAudio, message: message).write(to: take.transcriptFailedURL)
                 // Agent recordings often have no sound; the waits can
                 // still be skipped.
                 if let seconds = try? await AVURLAsset(url: take.screenURL).load(.duration).seconds, seconds > 0 {
                     try? AgentWaiting.propose(on: take, transcript: nil, sourceDuration: seconds)
                 }
+                activity = .idle
+                return
             }
             failedTakes[take.name] = take
             failures.record(message, for: take.name)

@@ -19,6 +19,8 @@ final class EditorModel: ObservableObject {
         case waiting
         /// No file and no transcription job is queued or running.
         case missing
+        /// The owned video has no audio; retry cannot create speech.
+        case noAudio
         case ready
         case failed(String)
     }
@@ -239,7 +241,10 @@ final class EditorModel: ObservableObject {
         if mergeOutsideCuts() { scheduleRebuild() }
     }
 
+    var canRetryTranscript: Bool { transcriptState != .noAudio }
+
     func retryTranscript() {
+        guard canRetryTranscript else { return }
         transcriptState = .waiting
         Transcriber.shared.retry(take)
     }
@@ -249,7 +254,9 @@ final class EditorModel: ObservableObject {
         let transcriber = Transcriber.shared
         if transcriber.isWorking(on: take) { transcriptState = .waiting; return }
         if let failure = try? TranscriptFailure.read(from: take.transcriptFailedURL) {
-            transcriptState = .failed(failure.message)
+            switch failure.reason {
+            case .noAudio: transcriptState = .noAudio
+            }
             return
         }
         if let message = transcriber.failures[take.name] {

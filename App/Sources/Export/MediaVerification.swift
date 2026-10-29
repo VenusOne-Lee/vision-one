@@ -115,6 +115,7 @@ enum MediaVerification {
         catch { /* expected AVFoundation rejection */ }
         try await VideoImporter.validate(silent)
         try await verifyOtherOutputs(take: take, silent: silent, in: root)
+        try await TranscriptViewVerification.verifySilentSource(silent, in: root)
         try await verifyRotatedImport(silent, in: root)
         try await verifyStoppedMic()
         let sourcePeaks = try await verifySeparateSourceLevels(video: silent, in: root)

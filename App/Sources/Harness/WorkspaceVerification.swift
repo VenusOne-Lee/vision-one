@@ -66,7 +66,7 @@ enum WorkspaceVerification {
             ThemeStore.shared.renderAppearance(appearance)
             for narrow in [false, true] {
                 let size = narrow ? CGSize(width: 900, height: 640) : CGSize(width: 1512, height: 982)
-                for state in ["new-task", "library", "task", "editor", "sound", "delivery", "pending", "error", "loading", "transcript-missing", "transcript-failed", "transcript-empty"] {
+                for state in ["new-task", "library", "task", "editor", "sound", "delivery", "pending", "error", "loading", "transcript-missing", "transcript-failed", "transcript-empty", "transcript-no-audio"] {
                     let stateTake = transcriptFixtures.first(where: { $0.0 == state })?.1 ?? take
                     let selectedTask = stateTake == take ? task : DeskTask(projectID: project.id, title: "Transcript recovery",
                                                                           takes: [stateTake], createdAt: date)

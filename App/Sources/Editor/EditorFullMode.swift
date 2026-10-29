@@ -521,6 +521,22 @@ struct TranscriptPane: View {
                         .textStyle(.caption).foregroundStyle(Theme.textMuted)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .noAudio:
+                ScrollView {
+                    VStack(spacing: Theme.Space.sm) {
+                        EditorNotice(title: "No audio in this video",
+                                     message: "A transcript needs speech. Keep editing this silent video, or start with a video that includes audio.",
+                                     isError: false)
+                        Button("Import a video with audio…") { HarnessModel.shared.importVideo() }
+                            .buttonStyle(.secondary)
+                        Button("Open recording setup…") { HarnessModel.shared.preparingRecording = true }
+                            .buttonStyle(.secondary)
+                        Text("Playback, timeline edits and export remain available.")
+                            .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(Theme.Space.md)
+                }
             case let .failed(message):
                 VStack(spacing: Theme.Space.md) {
                     EditorNotice(title: "Transcript unavailable", message: message, isError: true)
