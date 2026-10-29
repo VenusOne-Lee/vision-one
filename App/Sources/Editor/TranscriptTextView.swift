@@ -48,12 +48,13 @@ struct TranscriptTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.bind(model)
         context.coordinator.update()
     }
 
     @MainActor
     final class Coordinator {
-        let model: EditorModel
+        private(set) var model: EditorModel
         weak var textView: TranscriptNSTextView?
         /// Character range of each word, by word position.
         private(set) var wordRanges: [NSRange] = []
@@ -64,6 +65,19 @@ struct TranscriptTextView: NSViewRepresentable {
 
         init(model: EditorModel) {
             self.model = model
+        }
+
+        /// NSViewRepresentable can reuse this coordinator across task switches.
+        /// A selection from another take must never cut the previous model.
+        func bind(_ next: EditorModel) {
+            guard model !== next else { return }
+            model = next
+            wordRanges = []
+            renderedEdits = nil
+            renderedWordCount = -1
+            renderedFixes = nil
+            underlined = nil
+            textView?.setSelectedRange(NSRange(location: 0, length: 0))
         }
 
         func update() {

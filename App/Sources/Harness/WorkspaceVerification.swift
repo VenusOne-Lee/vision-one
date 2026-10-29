@@ -49,6 +49,7 @@ enum WorkspaceVerification {
         try await ExportControllerVerification.verifyQueue(in: root)
         try verifyCaptionPaneUpdates(in: root)
         try await verifyTakeSwitch(source: take, in: root)
+        try await TranscriptViewVerification.run(source: take, in: root)
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
