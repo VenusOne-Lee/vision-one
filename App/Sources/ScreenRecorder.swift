@@ -36,6 +36,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
     private var sink: CaptureSink?
     private var cursor: CursorLogger?
     private var take: Take?
+    private var destinationTaskID: UUID?
+    private var destinationProjectID: UUID?
     private let deviceTracks = DeviceTracks()
     /// Camera only: open from just before the countdown until the take
     /// ends, so the preview is live while counting down.
@@ -91,6 +93,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
                 return
             }
         }
+        destinationTaskID = HarnessModel.shared.page.taskID
+        destinationProjectID = HarnessModel.shared.currentProject?.id
         MainWindowStepAside.hide()
         // The script shows during the countdown, so the first line is
         // ready to read.
@@ -99,6 +103,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
         let go = await Countdown.shared.run(on: recordedScreen())
         isCountingDown = false
         guard go else {
+            destinationTaskID = nil
+            destinationProjectID = nil
             Teleprompter.shared.hide()
             closeCameraOnly()
             MainWindowStepAside.restore()
@@ -365,6 +371,15 @@ final class ScreenRecorder: NSObject, ObservableObject {
             writePauseCuts(for: take, firstFrame: firstFrame)
             // Remember what it's for now, so a later pick on Home
             // doesn't change what this take is.
+            let desk = AIServices.shared.desk
+            let snapshot = await desk.snapshot
+            if let id = destinationTaskID, snapshot.task(id) != nil {
+                await desk.addTake(take, to: id)
+            } else {
+                _ = await desk.taskForRecording(take, in: destinationProjectID)
+            }
+            destinationTaskID = nil
+            destinationProjectID = nil
             try? TakePlan.stamp(take, from: .standard)
             lastTake = take
             Transcriber.shared.transcribe(take)

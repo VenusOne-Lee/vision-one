@@ -257,8 +257,9 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
 
     /// The take in the editor full mode.
     func edit(_ take: Take) {
-        open(take)
-        model.mode = .editor
+        model.refreshTakes()
+        model.open(take, mode: .editor)
+        present()
     }
 
     private func present() {

@@ -158,7 +158,8 @@ struct NewTaskView: View {
                 Composer(model: model, placeholder: "Describe a video, or press record")
                     .frame(maxWidth: 640)
             }
-            Spacer(minLength: Theme.Space.xl)
+            projectDefaults
+            Spacer(minLength: Theme.Space.lg)
         }
         .padding(.horizontal, Theme.Space.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -201,6 +202,30 @@ struct NewTaskView: View {
         }
         .buttonStyle(.plain)
         .focusRing(RoundedRectangle(cornerRadius: Theme.Radius.lg))
+    }
+
+    @State private var showingProjectSettings = false
+    private var projectDefaults: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.sm) {
+            HStack {
+                Text("Project defaults").textStyle(.bodyStrong)
+                Spacer()
+                Button("Edit…") { showingProjectSettings = true }.buttonStyle(.secondary)
+                    .disabled(model.currentProject == nil)
+            }
+            let defaults = model.currentProject?.mediaDefaults
+            let id = defaults?.templateID
+            let look = TemplateLook.builtIn.first { $0.id == id } ?? UserTemplates.loadAll().map(\.look).first { $0.id == id }
+            Text("\(look?.title ?? "No template") · Captions \(defaults?.captions == false ? "off" : "on") · Saved on this Mac")
+                .textStyle(.caption).foregroundStyle(Theme.textMuted)
+            if let newest = model.takes.first {
+                Button("Resume \(model.title(of: newest))") { model.open(newest) }.buttonStyle(.quiet)
+            }
+        }
+        .panelStyle().frame(maxWidth: 640)
+        .sheet(isPresented: $showingProjectSettings) {
+            if let project = model.currentProject { ProjectSettingsSheet(project: project) { showingProjectSettings = false } }
+        }
     }
 
     private var projectSuffix: String {

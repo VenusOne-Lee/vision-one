@@ -12,20 +12,22 @@ public struct DeskProject: Codable, Equatable, Identifiable, Sendable {
     public var sources: [ScriptSourceRef]
     /// The prompt preset agents use here, if not the app's default.
     public var presetName: String?
+    public var mediaDefaults: ProjectMediaDefaults?
     public var createdAt: Date
 
     public init(id: UUID = UUID(), name: String, notes: String = "", sources: [ScriptSourceRef] = [],
-                presetName: String? = nil, createdAt: Date = Date()) {
+                presetName: String? = nil, createdAt: Date = Date(), mediaDefaults: ProjectMediaDefaults? = nil) {
         self.id = id
         self.name = name
         self.notes = notes
         self.sources = sources
         self.presetName = presetName
+        self.mediaDefaults = mediaDefaults
         self.createdAt = createdAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, notes, sources, presetName, createdAt
+        case id, name, notes, sources, presetName, createdAt, mediaDefaults
     }
 
     /// Lenient, so a desk.json from an older build (no notes, sources or
@@ -37,7 +39,8 @@ public struct DeskProject: Codable, Equatable, Identifiable, Sendable {
                   notes: try c.decodeIfPresent(String.self, forKey: .notes) ?? "",
                   sources: try c.decodeIfPresent([ScriptSourceRef].self, forKey: .sources) ?? [],
                   presetName: try c.decodeIfPresent(String.self, forKey: .presetName),
-                  createdAt: try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date())
+                  createdAt: try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date(),
+                  mediaDefaults: try c.decodeIfPresent(ProjectMediaDefaults.self, forKey: .mediaDefaults))
     }
 
     /// The letter on the project's tile.
@@ -61,6 +64,7 @@ extension DeskProject {
             kept.append(ScriptSourceRef(clean.kind, clean.id, enabled: ref.enabled))
         }
         sources = kept
+        mediaDefaults = settings.mediaDefaults
     }
 
     /// A source from what was typed in Project settings, or nil when it

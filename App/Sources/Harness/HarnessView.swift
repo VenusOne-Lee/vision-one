@@ -21,6 +21,7 @@ struct HarnessView: View {
     /// Editor or Sound picked with no takes yet: their empty state shows.
     @State private var noTakesMode: HarnessMode?
     @State private var showingExport = false
+    @State private var showingTemplate = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,6 +57,9 @@ struct HarnessView: View {
         .foregroundStyle(Theme.text)
         .themed()
         .background(shortcuts)
+        .sheet(isPresented: $showingTemplate) {
+            if let workspace = model.workspace { ApplyTemplateSheet(workspace: workspace) { showingTemplate = false } }
+        }
         .sheet(isPresented: $model.preparingRecording) {
             RecordingPreparationView(model: model)
         }
@@ -98,6 +102,7 @@ struct HarnessView: View {
                 Button("Export…") { showingExport = true }
                     .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
             }
+            contextualTools
             IconButton(theme.palette.isDark ? "Use light appearance" : "Use dark appearance",
                        systemImage: theme.palette.isDark ? "sun.max" : "moon") {
                 theme.appearance.toggleMode()
@@ -118,6 +123,29 @@ struct HarnessView: View {
         .padding(.horizontal, Theme.Space.md - 2)
         .frame(height: Theme.Size.toolbar)
         .background(Theme.paper)
+    }
+
+    private var contextualTools: some View {
+        Menu {
+            Button("Prepare a recording…") { model.preparingRecording = true }
+            Button("Import a video…") { model.importVideo() }
+            Divider()
+            Button("Script Coach…") { ScriptCoachWindowController.shared.show() }
+            Button("Rehearse…") { RehearseWindowController.shared.show() }
+            Button("Voice tools…") { VoiceToolsWindowController.shared.show(for: model.workspace?.take) }
+            Button("Autopilot…") { AutopilotWindowController.shared.show() }
+            Button("Agent recording and MCP…") { SettingsWindowController.shared.show(.agents) }
+            Divider()
+            Button("Apply a reusable style…") { showingTemplate = true }.disabled(model.workspace == nil)
+            Button("Copy a style…") { CopyStyleWindowController.shared.show() }
+            Button("Languages and dubbing…") {
+                if let take = model.workspace?.take { LanguagesWindowController.shared.show(for: take) }
+            }
+                .disabled(model.workspace == nil)
+        } label: {
+            Image(systemName: "ellipsis").frame(width: Theme.Size.control, height: Theme.Size.control)
+        }
+        .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("Task tools")
     }
 
     /// "My videos › RankRide launch demo"

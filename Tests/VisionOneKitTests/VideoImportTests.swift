@@ -15,7 +15,7 @@ final class VideoImportTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: source), bytes)
         XCTAssertEqual(try Data(contentsOf: take.screenURL), bytes)
         XCTAssertEqual(take.customTitle(), "Product walkthrough")
-        XCTAssertEqual(library.takes(), [take])
+        XCTAssertEqual(library.takes().map { $0.folder.resolvingSymlinksInPath() }, [take.folder.resolvingSymlinksInPath()])
     }
 
     func testCancellationRemovesPartialTake() throws {

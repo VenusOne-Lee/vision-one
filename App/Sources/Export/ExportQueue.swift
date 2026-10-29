@@ -89,10 +89,11 @@ final class ExportQueue: ObservableObject {
         // export, from the timeline it renders; subtitle files follow once
         // the video is done.
         let brand = BrandStore.shared
+        let look = AppliedTemplate.look(for: take)
         controller.export(take, preset: preset, keep: keep,
-                          overlays: brand.overlays(),
+                          overlays: brand.overlays(look: look),
                           captionRingHex: brand.kit.ring.hex,
-                          cards: brand.cardMaker())
+                          cards: brand.cardMaker(look: look, templateFolder: AppliedTemplate.folder(for: take)))
 
         guard case let .exporting(running, _) = controller.phase, running == preset else {
             batch?.fail(preset, message: "Couldn't start the \(preset.title) export.")

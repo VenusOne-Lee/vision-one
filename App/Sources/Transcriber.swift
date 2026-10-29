@@ -111,8 +111,10 @@ final class Transcriber: ObservableObject {
             // first, so auto-clean's own retake guesses don't overlap.
             try? ScriptRetakes.run(on: take, transcript: transcript,
                                     sourceDuration: audio.videoDuration ?? transcript.duration)
+            var cleanup = CleanupSettings()
+            if let pause = AppliedTemplate.style(for: take)?.keptPause { cleanup.keptPause = pause }
             try? AutoClean.run(on: take, transcript: transcript, sourceDuration: audio.videoDuration,
-                               loudness: loudness)
+                               loudness: loudness, detector: CleanupDetector(settings: cleanup))
             // An agent recording: propose skipping the long waits.
             try? AgentWaiting.propose(on: take, transcript: transcript,
                                       sourceDuration: audio.videoDuration ?? transcript.duration)

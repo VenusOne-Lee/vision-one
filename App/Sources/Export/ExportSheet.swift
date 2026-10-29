@@ -35,7 +35,7 @@ struct ExportSheet: View {
         self.close = close
         let purpose = TakePlan.load(for: take)?.purpose
         self.purpose = purpose
-        _picked = State(initialValue: Set(purpose.map { ExportPreset.suggested(for: $0) } ?? Self.lastPicked))
+        _picked = State(initialValue: Set(AppliedTemplate.presets(for: take) ?? purpose.map { ExportPreset.suggested(for: $0) } ?? Self.lastPicked))
     }
 
     /// What was exported last time, for takes with no purpose.

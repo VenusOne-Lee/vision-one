@@ -109,15 +109,17 @@ struct RecordingPreparationView: View {
             .keyboardShortcut(.defaultAction)
         }
         .padding(Theme.Space.lg)
-        .frame(width: 660, height: 760)
+        .frame(width: min(660, (NSScreen.main?.visibleFrame.width ?? 900) - 80),
+               height: min(760, max(380, (NSScreen.main?.visibleFrame.height ?? 900) - 120)))
         .background(Theme.canvas).foregroundStyle(Theme.text).themed()
         .sheet(isPresented: $showingScript) { ScriptSheet(store: script) }
         .task { access.refresh(); script.reload(); await inputs.preview(recorder.choice) }
         .onChange(of: recorder.choice) { _, _ in
-            Task { await inputs.stop(); await inputs.preview(recorder.choice) }
+            inputs.cancel()
+            Task { await inputs.preview(recorder.choice) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in access.refresh() }
-        .onDisappear { Task { await inputs.stop() } }
+        .onDisappear { inputs.cancel(); inputs.cancelPreview() }
     }
 
     private var requiredAccess: [AccessKind] {
@@ -140,6 +142,7 @@ final class RecordingInputCheck: ObservableObject {
     @Published private(set) var problem: String?
     private var probe: PreparationMicProbe?
     private var previewGeneration = 0
+    private var micGeneration = 0
 
     func preview(_ choice: CaptureChoice) async {
         previewGeneration += 1
@@ -168,8 +171,19 @@ final class RecordingInputCheck: ObservableObject {
         }
     }
 
+    func cancelPreview() { previewGeneration += 1 }
+
     func testMicrophone(_ choice: CaptureChoice) async {
-        await stop()
+        // Establish ownership before the first suspension. Stop, another test,
+        // a source change, and sheet dismissal revoke this generation at once.
+        micGeneration += 1
+        let generation = micGeneration
+        let old = probe
+        probe = nil
+        testing = false
+        level = 0
+        await old?.stop()
+        guard generation == micGeneration else { return }
         problem = nil
         guard choice.includeMicrophone else { problem = "Turn on Microphone to test it."; return }
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
@@ -178,20 +192,43 @@ final class RecordingInputCheck: ObservableObject {
         let mic = Microphones.shared.resolved(for: choice)
         guard let id = mic?.id else { problem = "No microphone is connected."; return }
         let next = PreparationMicProbe { [weak self] peak in
-            Task { @MainActor in self?.level = min(1, max(0, (MicLevelMeter.decibels(peak) + 60) / 60)) }
+            Task { @MainActor in
+                guard let self, generation == self.micGeneration, self.testing else { return }
+                self.level = min(1, max(0, (MicLevelMeter.decibels(peak) + 60) / 60))
+            }
         }
         probe = next
-        do { try await next.start(id); testing = true }
-        catch { problem = "Couldn't test this microphone: \(error.localizedDescription)"; await stop() }
+        do {
+            try await next.start(id)
+            guard generation == micGeneration, probe === next else { await next.stop(); return }
+            testing = true
+        } catch {
+            guard generation == micGeneration else { await next.stop(); return }
+            problem = "Couldn't test this microphone: \(error.localizedDescription)"
+            await stop()
+        }
+    }
+
+    /// Synchronous invalidation prevents callbacks queued before dismissal from
+    /// changing any UI, even before the session queue has finished draining.
+    func cancel() {
+        micGeneration += 1
+        let old = probe
+        probe = nil
+        testing = false
+        level = 0
+        Task { await old?.stop() }
     }
 
     func stop() async {
+        micGeneration += 1
         let old = probe
         probe = nil
-        await old?.stop()
         testing = false
         level = 0
+        await old?.stop()
     }
+
 }
 
 /// All session work stays off the main queue. Nothing is recorded to disk.
