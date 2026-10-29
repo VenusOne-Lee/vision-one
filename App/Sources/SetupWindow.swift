@@ -15,7 +15,7 @@ struct SetupView: View {
     /// Set once the welcome's Get started is pressed.
     static let welcomeSeenKey = "onboarding.welcomeSeen"
 
-    init(access: AccessCenter, askScreen: Bool) {
+    init(access: AccessCenter, askScreen: Bool = true) {
         _access = ObservedObject(wrappedValue: access)
         let welcomeSeen = UserDefaults.standard.bool(forKey: Self.welcomeSeenKey)
         _flow = State(initialValue: OnboardingFlow(checklist: access.checklist, welcomeSeen: welcomeSeen,
