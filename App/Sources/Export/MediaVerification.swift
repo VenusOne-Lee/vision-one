@@ -117,17 +117,68 @@ enum MediaVerification {
         try await verifyOtherOutputs(take: take, silent: silent, in: root)
         try await verifyRotatedImport(silent, in: root)
         try await verifyStoppedMic()
+        let sourcePeaks = try await verifySeparateSourceLevels(video: silent, in: root)
 
         let report: [String: Any] = [
             "dimensions": [Int(size.width), Int(size.height)], "duration": length,
+            "separateSourcePeaks": sourcePeaks,
             "cameraGreenPixels": pixels.green, "brandYellowPixels": pixels.yellow,
             "captionWhitePixels": pixels.white, "earlyRedPixels": pixels.red, "laterBluePixels": laterPixels.blue, "decodedAudioPeak": exportedAudio, "previewAudioPeak": previewPeak,
-            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback", "square and 4:5 MP4 dimensions", "manual fixed framing", "fit framing", "silent import edit/undo/redo/export", "camera late-start gap", "rotated import matches native orientation"],
+            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback", "square and 4:5 MP4 dimensions", "manual fixed framing", "fit framing", "silent import edit/undo/redo/export", "camera late-start gap", "rotated import matches native orientation", "independent microphone/system levels and preview/export agreement"],
             "remaining": ["real capture and permissions", "native UI light/dark walkthrough", "human inspection of framing, caption placement and audible mix"]
         ]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("verification.json"), options: .atomic)
         print("Media verification passed; inspect verification.json, the MP4 and portrait-frame.png.")
+    }
+
+    private static func verifySeparateSourceLevels(video: URL, in root: URL) async throws -> [String: Double] {
+        let take = Take(folder: root.appendingPathComponent("separate-source-levels"))
+        try FileManager.default.createDirectory(at: take.folder, withIntermediateDirectories: true)
+        let micURL = take.folder.appendingPathComponent("mic.wav")
+        let systemURL = take.folder.appendingPathComponent("system.wav")
+        try audio(at: micURL)
+        try audio(at: systemURL, frequency: 660, amplitude: 0.1)
+        let screen = AVURLAsset(url: video)
+        let mic = AVURLAsset(url: micURL)
+        let system = AVURLAsset(url: systemURL)
+        let composition = AVMutableComposition()
+        let range = CMTimeRange(start: .zero, duration: CMTime(seconds: 3, preferredTimescale: 600))
+        let videoTrack = try await screen.loadTracks(withMediaType: .video)[0]
+        try composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)?
+            .insertTimeRange(range, of: videoTrack, at: .zero)
+        // Deliberately put system first: microphone identity must use metadata.
+        for asset in [system, mic] {
+            let track = try await asset.loadTracks(withMediaType: .audio)[0]
+            try composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)?
+                .insertTimeRange(range, of: track, at: .zero)
+        }
+        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
+            throw Failure(message: "Couldn't create separate source-level fixture")
+        }
+        try await session.export(to: take.screenURL, as: .mov)
+        try require(try await AVURLAsset(url: take.screenURL).loadTracks(withMediaType: .audio).count == 2,
+                    "Source-level fixture did not retain two separate audio tracks")
+        try TakeAudioTracks(tracks: [.system, .mic]).write(to: take.audioTracksURL)
+        var peaks: [String: Double] = [:]
+        for systemOnly in [true, false] {
+            let name = systemOnly ? "system" : "microphone"
+            try RecordedMix(voiceDB: systemOnly ? -60 : 0, systemDB: systemOnly ? 0 : -60).write(for: take)
+            let output = try await VideoExporter(take: take, preset: .hd720)
+                .run(to: root.appendingPathComponent("source-level-\(name).mp4")) { _ in }
+            let peak = try await audioPeak(AVURLAsset(url: output.url))
+            let expected = systemOnly ? 0.07...0.14 : 0.2...0.32
+            try require(expected.contains(peak), "Wrong source level/identity in \(name) export: \(peak)")
+            let editor = EditorModel(take: take)
+            await editor.loadIfNeeded()
+            defer { editor.close() }
+            guard let item = editor.player.currentItem else { throw Failure(message: "Separate-source preview missing") }
+            let preview = try await audioPeak(item.asset, mix: item.audioMix)
+            try require(abs(preview - peak) < 0.03, "Separate \(name) level differs between preview/export")
+            peaks[name + "Export"] = peak
+            peaks[name + "Preview"] = preview
+        }
+        return peaks
     }
 
     private static func verifyOtherOutputs(take: Take, silent: URL, in root: URL) async throws {
@@ -264,12 +315,12 @@ enum MediaVerification {
         await writer.finishWriting()
         try require(writer.status == .completed, "Fixture video failed")
     }
-    private static func audio(at url: URL) throws {
+    private static func audio(at url: URL, frequency: Double = 440, amplitude: Double = 0.25) throws {
         let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)!
         let file = try AVAudioFile(forWriting: url, settings: format.settings)
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 144_000)!
         buffer.frameLength = buffer.frameCapacity
-        for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = Float(sin(Double(i) * 2 * .pi * 440 / 48_000) * 0.25) }
+        for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = Float(sin(Double(i) * 2 * .pi * frequency / 48_000) * amplitude) }
         try file.write(from: buffer)
     }
     private static func audioPeak(_ asset: AVAsset, mix: AVAudioMix? = nil) async throws -> Double {
