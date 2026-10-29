@@ -121,14 +121,19 @@ enum WorkspaceVerification {
             var appearance = Appearance.standard
             appearance.mode = dark ? .dark : .light
             ThemeStore.shared.renderAppearance(appearance)
-            for state in ["new-task", "editor", "sound"] {
-                let model = HarnessModel(snapshot: snapshot, takes: [take], page: state == "new-task" ? .newTask : .task(task.id))
+            for state in ["new-task", "library", "library-filter-empty", "editor", "sound"] {
+                let model = HarnessModel(snapshot: snapshot, takes: [take], page: state == "new-task" ? .newTask : (state.hasPrefix("library") ? .library : .task(task.id)))
                 if let workspace = model.workspace { await workspace.load(); workspace.editor.seek(toSource: 0.5) }
                 if state == "editor" { model.mode = .editor }
                 if state == "sound" { model.mode = .sound }
                 let name = "\(state)-\(dark ? "dark" : "light")-minimum.png"
-                try await capture(HarnessView(model: model), size: CGSize(width: 760, height: 520),
-                                  to: root.appendingPathComponent(name), requiresFrame: state == "editor")
+                if state == "library-filter-empty" {
+                    try await capture(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }),
+                                      size: CGSize(width: 760, height: 520), to: root.appendingPathComponent(name))
+                } else {
+                    try await capture(HarnessView(model: model), size: CGSize(width: 760, height: 520),
+                                      to: root.appendingPathComponent(name), requiresFrame: state == "editor")
+                }
                 model.workspace?.close()
                 names.append(name)
             }

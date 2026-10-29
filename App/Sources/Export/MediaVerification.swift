@@ -118,6 +118,7 @@ enum MediaVerification {
         try await verifyRotatedImport(silent, in: root)
         try await verifyStoppedMic()
         let sourcePeaks = try await verifySeparateSourceLevels(video: silent, in: root)
+        try await CardVerification.run(in: root)
         try await verifyOwnedTemplateCard(source: take, in: root)
 
         let report: [String: Any] = [
@@ -125,7 +126,7 @@ enum MediaVerification {
             "separateSourcePeaks": sourcePeaks,
             "cameraGreenPixels": pixels.green, "brandYellowPixels": pixels.yellow,
             "captionWhitePixels": pixels.white, "earlyRedPixels": pixels.red, "laterBluePixels": laterPixels.blue, "decodedAudioPeak": exportedAudio, "previewAudioPeak": previewPeak,
-            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback", "square and 4:5 MP4 dimensions", "manual fixed framing", "fit framing", "silent import edit/undo/redo/export", "camera late-start gap", "rotated import matches native orientation", "independent microphone/system levels and preview/export agreement", "applied template owned HTML asset renders with timed captions and camera after intro"],
+            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback", "square and 4:5 MP4 dimensions", "manual fixed framing", "fit framing", "silent import edit/undo/redo/export", "camera late-start gap", "rotated import matches native orientation", "independent microphone/system levels and preview/export agreement", "applied template owned HTML asset renders with timed captions and camera after intro", "compiled WebKit offline rules with reachable loopback control and blocked subresource", "painted animated card retained with flat final frame"],
             "remaining": ["real capture and permissions", "native UI light/dark walkthrough", "human inspection of framing, caption placement and audible mix"]
         ]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
