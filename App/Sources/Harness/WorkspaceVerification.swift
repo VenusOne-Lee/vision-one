@@ -50,6 +50,7 @@ enum WorkspaceVerification {
         try verifyCaptionPaneUpdates(in: root)
         try await verifyTakeSwitch(source: take, in: root)
         try await TranscriptViewVerification.run(source: take, in: root)
+        try await WorkspaceUndoVerification.run(source: take, in: root)
         let transcriptFixtures = try TranscriptViewVerification.stateFixtures(source: take, in: root)
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }

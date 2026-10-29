@@ -239,9 +239,16 @@ struct EditorNotice: View {
 /// when one is. Made on demand, kept when closed, and its frame is saved.
 @MainActor
 final class EditorWindowController: NSObject, NSWindowDelegate {
-    static let shared = EditorWindowController()
-    private var window: NSWindow?
-    private var model: HarnessModel { HarnessModel.shared }
+    static let shared = EditorWindowController(model: .shared)
+    private(set) var window: NSWindow?
+    private let model: HarnessModel
+
+    init(model: HarnessModel) {
+        self.model = model
+        super.init()
+    }
+
+    var workspaceUndoManager: UndoManager? { model.undoManager }
 
     /// The take open in the editor, if any, for windows that act on it.
     var currentTake: Take? { model.workspace?.take }
@@ -311,7 +318,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         present()
     }
 
-    private func present() {
+    func present() {
         if window == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1320, height: 820),
