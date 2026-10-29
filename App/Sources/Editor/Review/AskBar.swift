@@ -24,46 +24,25 @@ final class AskModel: ObservableObject {
     func go(on editor: EditorModel) {
         let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty, !isRunning else { return }
-        let take = editor.take
-        // What it's for, as the Agents window picks it: the take's own
-        // plan, else the next purpose chosen, else a demo.
-        let next = UserDefaults.standard.string(forKey: "ai.nextPurpose").flatMap(Purpose.named) ?? .demo
-        let plan = TakePlan.load(for: take) ?? TakePlan(purpose: next)
-        let presetName = UserDefaults.standard.string(forKey: "ai.preset") ?? ""
-        let preset = PresetLibrary.standard.all().first { $0.name == presetName }
-        let brief = plan.purpose.brief(preset: preset)
-        // "/copy make a punchier version": try it in a copy, so the
-        // main cut stays safe, then ask for the rest there.
-        var ask = typed
-        if ask.lowercased().hasPrefix("/copy") {
-            let rest = String(ask.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
-            editor.versions.tryCopy(note: rest.isEmpty ? nil : rest)
-            guard !rest.isEmpty else {
-                text = ""
-                run = .done("Made \(editor.versions.main.name). The cut you had is kept as a copy; compare them from the version menu.")
-                return
-            }
-            ask = rest
-        }
-        if SilenceCut.isSilenceAsk(ask) {
+        if SilenceCut.isSilenceAsk(typed) {
             cutSilence(on: editor)
             return
         }
-        let goal = EditorAgent.Goal.parse(ask)
-        run = .running(goal.targetSeconds.map { "Cutting to about \(Timecode.short(from: $0))…" } ?? "Reading every sentence…")
-        let agent = EditorAgent(ladder: AIServices.shared.ladder())
-        Task { [weak self, weak editor] in
-            do {
-                let added = try await agent.run(on: take, brief: brief, goal: goal, energy: plan.energy)
-                editor?.pickUpOutsideCuts()
-                self?.run = .done(added.isEmpty
-                    ? "Every sentence earns its place, so there's nothing new to cut. To take out quiet parts, ask “cut the silence”."
-                    : "\(added.count) suggested \(added.count == 1 ? "cut" : "cuts"), dashed in Changes until you accept.")
-                if !added.isEmpty { self?.text = "" }
-            } catch {
-                self?.run = .failed(AgentsModel.message(for: error))
-            }
+        switch AskRouter.route(typed) {
+        case let .clarify(message):
+            run = .failed(message)
+        case .open:
+            HarnessModel.shared.open(editor.take, then: typed, mode: .editor)
+            text = ""
+            run = .done("Opened the requested tool for this task.")
+        case .plan:
+            // The task owns routing, plan approvals, retry/cancel, jobs and
+            // proposed results, including compound asks and alternate cuts.
+            HarnessModel.shared.open(editor.take, then: typed)
+            text = ""
+            run = .done("Review the plan and results in this task.")
         }
+
     }
 }
 

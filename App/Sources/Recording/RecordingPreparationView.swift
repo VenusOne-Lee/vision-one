@@ -99,6 +99,16 @@ struct RecordingPreparationView: View {
                 Task {
                     await inputs.stop()
                     Countdown.shared.length = countdown
+                    if let project = model.currentProject {
+                        let choice = recorder.choice
+                        let seconds = countdown.rawValue
+                        await AIServices.shared.desk.updateProject(project.id) {
+                            var defaults = $0.mediaDefaults ?? ProjectMediaDefaults()
+                            defaults.captureChoice = choice
+                            defaults.countdownSeconds = seconds
+                            $0.mediaDefaults = defaults
+                        }
+                    }
                     // Close first so preparation never sits over the source.
                     dismiss()
                     await recorder.record()
@@ -113,7 +123,13 @@ struct RecordingPreparationView: View {
                height: min(760, max(380, (NSScreen.main?.visibleFrame.height ?? 900) - 120)))
         .background(Theme.canvas).foregroundStyle(Theme.text).themed()
         .sheet(isPresented: $showingScript) { ScriptSheet(store: script) }
-        .task { access.refresh(); script.reload(); await inputs.preview(recorder.choice) }
+        .task {
+            if let saved = model.currentProject?.mediaDefaults {
+                if let choice = saved.captureChoice { recorder.choice = choice }
+                if let seconds = saved.countdownSeconds { countdown = CountdownLength(saved: seconds) }
+            }
+            access.refresh(); script.reload(); await inputs.preview(recorder.choice)
+        }
         .onChange(of: recorder.choice) { _, _ in
             inputs.cancel()
             Task { await inputs.preview(recorder.choice) }
@@ -141,13 +157,13 @@ final class RecordingInputCheck: ObservableObject {
     @Published private(set) var testing = false
     @Published private(set) var problem: String?
     private var probe: (any PreparationMicSession)?
-    private let microphoneID: (CaptureChoice) -> String?
-    private let hasMicrophoneAccess: () -> Bool
-    private let makeProbe: (@escaping @Sendable (Double) -> Void) -> any PreparationMicSession
+    private let microphoneID: @MainActor (CaptureChoice) -> String?
+    private let hasMicrophoneAccess: @MainActor () -> Bool
+    private let makeProbe: @MainActor (@escaping @Sendable (Double) -> Void) -> any PreparationMicSession
 
-    init(microphoneID: @escaping (CaptureChoice) -> String? = { Microphones.shared.resolved(for: $0)?.id },
-         hasAccess: @escaping () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
-         makeProbe: @escaping (@escaping @Sendable (Double) -> Void) -> any PreparationMicSession = { PreparationMicProbe(peak: $0) }) {
+    init(microphoneID: @escaping @MainActor (CaptureChoice) -> String? = { Microphones.shared.resolved(for: $0)?.id },
+         hasAccess: @escaping @MainActor () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
+         makeProbe: @escaping @MainActor (@escaping @Sendable (Double) -> Void) -> any PreparationMicSession = { PreparationMicProbe(peak: $0) }) {
         self.microphoneID = microphoneID
         self.hasMicrophoneAccess = hasAccess
         self.makeProbe = makeProbe

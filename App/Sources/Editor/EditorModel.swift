@@ -36,6 +36,8 @@ final class EditorModel: ObservableObject {
     }
     /// Music and sound effects, saved to sound.json.
     @Published private(set) var sound = SoundPlan()
+    @Published private(set) var recordedMix = RecordedMix()
+    private var microphoneTrackID: CMPersistentTrackID?
     /// Sentences said again, saved to redos.json.
     @Published private(set) var redos = RedoList()
     /// The voice tools' cleaned voice and AI word fixes (voice.json),
@@ -131,6 +133,7 @@ final class EditorModel: ObservableObject {
         knownCutIDs = Set(edits.cuts.map(\.id))
         outsideCutIDs = []
         sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
+        recordedMix = RecordedMix.load(for: take)
         redos = (try? RedoList.load(from: take.redosURL)) ?? RedoList()
         voiceEdits = VoiceEdits.load(from: take.voiceURL)
         effects.load(edits: edits)
@@ -164,6 +167,7 @@ final class EditorModel: ObservableObject {
             knownCutIDs = Set(edits.cuts.map(\.id))
             // A damaged sound.json shouldn't stop the take opening.
             sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
+        recordedMix = RecordedMix.load(for: take)
             redos = (try? RedoList.load(from: take.redosURL)) ?? RedoList()
             voiceEdits = VoiceEdits.load(from: take.voiceURL)
         } catch {
@@ -392,6 +396,19 @@ final class EditorModel: ObservableObject {
         scheduleRebuild()
     }
 
+    func applyRecordedMix(_ next: RecordedMix) {
+        let previous = recordedMix
+        guard previous != next else { return }
+        undoManager.registerUndo(withTarget: self) { model in
+            MainActor.assumeIsolated { model.applyRecordedMix(previous) }
+        }
+        undoManager.setActionName("Source Audio Levels")
+        recordedMix = next
+        do { try next.write(for: take); saveError = nil }
+        catch { saveError = "Couldn't save source levels: \(error.localizedDescription)" }
+        player.currentItem?.audioMix = previewAudioMix()
+    }
+
     /// Every redo change goes through here, like cuts through `apply`.
     func applyRedos(_ next: RedoList, actionName: String) {
         let previous = redos
@@ -481,7 +498,10 @@ final class EditorModel: ObservableObject {
         do {
             let composition = try await PreviewComposition.make(from: asset, keeping: edits.keptSpans, take: take)
             previewCamera = try await PreviewComposition.addCamera(for: take, keeping: edits.keptSpans, to: composition)
-            let voiceTracks = composition.tracks(withMediaType: .audio).map(\.trackID)
+            let recordedAudio = composition.tracks(withMediaType: .audio)
+            let voiceTracks = recordedAudio.map(\.trackID)
+            let micIndex = await MicTrack.micIndex(of: recordedAudio, take: take)
+            microphoneTrackID = micIndex.map { recordedAudio[$0].trackID }
             let timeline = ExportTimeline(keep: edits.keptSpans.map { $0.start..<$0.end },
                                           sourceDuration: edits.sourceDuration, frameRate: 0)
             let added = await SoundComposer.add(sound, timeline: timeline, words: wordSpans, to: composition)
@@ -559,14 +579,14 @@ extension EditorModel {
         } else {
             inputs += redoParameters
             inputs += fixParameters
-            if !redoMutes.isEmpty || !fixMutes.isEmpty {
-                for id in mixTracks[.voice] ?? [] {
-                    let parameters = AVMutableAudioMixInputParameters()
-                    parameters.trackID = id
-                    RedoComposer.mute(parameters, during: redoMutes)
-                    VoiceComposer.mute(fixMutes, on: parameters)
-                    inputs.append(parameters)
-                }
+            for id in mixTracks[.voice] ?? [] {
+                let gain = recordedMix.gain(isMicrophone: id == microphoneTrackID)
+                let parameters = AVMutableAudioMixInputParameters()
+                parameters.trackID = id
+                parameters.setVolume(gain, at: .zero)
+                RedoComposer.mute(parameters, during: redoMutes, gain: gain)
+                if id == microphoneTrackID { VoiceComposer.mute(fixMutes, on: parameters, gain: gain) }
+                inputs.append(parameters)
             }
         }
         guard !inputs.isEmpty else { return nil }

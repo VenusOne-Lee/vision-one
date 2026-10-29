@@ -5,10 +5,14 @@ public struct ProjectMediaDefaults: Codable, Equatable, Sendable {
     public var templateID: String?
     public var captions: Bool
     public var language: SALanguage?
+    public var captureChoice: CaptureChoice?
+    public var countdownSeconds: Int?
     public init(templateID: String? = nil, captions: Bool = true, language: SALanguage? = nil) {
         self.templateID = templateID
         self.captions = captions
         self.language = language
+        self.captureChoice = nil
+        self.countdownSeconds = nil
     }
 }
 
@@ -27,7 +31,7 @@ public enum AppliedTemplate {
             case .landscape: return .hd1080
             case .vertical: return .vertical
             case .square: return .square
-            case .portrait: return nil
+            case .portrait: return .portrait
             }
         }
         return values.isEmpty ? [.hd1080] : values

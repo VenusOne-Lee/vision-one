@@ -305,6 +305,8 @@ struct VideoExporter {
         case nil:
             cropAt = nil
         }
+        var split = false
+        if case let .follow(plan)? = crop { split = plan.mode == .split }
         var isFit = false
         if case let .fixed(rect)? = crop, rect == .full { isFit = true }
         instructions.append(FrameInstruction(timeRange: CMTimeRange(start: videoStart, end: videoEnd),
@@ -320,7 +322,7 @@ struct VideoExporter {
                                                                           timeline: timeline, ringColour: Self.cgColor(ring),
                                                                           background: BackgroundRenderer(
                                                                               background: CameraBackground.read(from: take.backgroundURL))) }
-                                             }))
+                                             }, split: split))
         if let outro = cards.outro, let range = plan.outro {
             // Cover the composition to its very end, whatever rounding did.
             let end = CMTimeMaximum(videoEnd + Self.time(range.upperBound - range.lowerBound), composition.duration)
@@ -349,16 +351,19 @@ struct VideoExporter {
         videoComposition.instructions = instructions
 
         let audioMix = AVMutableAudioMix()
+        let savedMix = RecordedMix.load(for: take)
         let recorded: [AVMutableAudioMixInputParameters] = audio.enumerated().map { index, track in
+            let gain = savedMix.gain(isMicrophone: index == micIndex)
             let parameters = AVMutableAudioMixInputParameters(track: track)
-            RedoComposer.mute(parameters, during: redone.mutes)
+            parameters.setVolume(gain, at: .zero)
+            RedoComposer.mute(parameters, during: redone.mutes, gain: gain)
             // Ramps can't overlap: a word fix inside a redone line is
             // already silent, and a join right beside a redone line or a
             // fixed word keeps their fades.
             let fixMutes = voiceFixes.mutes.filter { fix in
                 !redone.mutes.contains { $0.lowerBound - 0.2 < fix.end && fix.start < $0.upperBound + 0.2 }
             }
-            if index == micIndex { VoiceComposer.mute(fixMutes, on: parameters) }
+            if index == micIndex { VoiceComposer.mute(fixMutes, on: parameters, gain: gain) }
             let quiet = redone.mutes + fixMutes.map { $0.start..<max($0.start, $0.end) }
             let joins = timeline.joins.map { $0 + joinOffset }.filter { join in
                 !quiet.contains { ($0.lowerBound - 0.2)...($0.upperBound + 0.2) ~= join }
@@ -366,8 +371,8 @@ struct VideoExporter {
             for join in joins {
                 let fade = Self.time(Self.joinFade)
                 let t = Self.time(join)
-                parameters.setVolumeRamp(fromStartVolume: 1, toEndVolume: 0, timeRange: CMTimeRange(start: t - fade, duration: fade))
-                parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: 1, timeRange: CMTimeRange(start: t, duration: fade))
+                parameters.setVolumeRamp(fromStartVolume: gain, toEndVolume: 0, timeRange: CMTimeRange(start: t - fade, duration: fade))
+                parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: gain, timeRange: CMTimeRange(start: t, duration: fade))
             }
             return parameters
         }

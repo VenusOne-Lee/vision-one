@@ -138,7 +138,10 @@ final class HarnessModel: ObservableObject {
             snapshot = await desk.snapshot
             open(task.id, panel: panel)
             self.mode = mode
-            if let ask { await desk.submit(ask, to: task.id, mode: chosenAskMode) }
+            if let ask {
+                self.askMode = chosenAskMode
+                self.send(ask)
+            }
         }
     }
 

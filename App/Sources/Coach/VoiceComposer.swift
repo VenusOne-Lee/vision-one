@@ -52,14 +52,14 @@ enum VoiceComposer {
     }
 
     /// Silences the mic under each fixed word, with 10 ms edges so it doesn't click.
-    static func mute(_ spans: [TimeSpan], on parameters: AVMutableAudioMixInputParameters) {
+    static func mute(_ spans: [TimeSpan], on parameters: AVMutableAudioMixInputParameters, gain: Float = 1) {
         let edge = CMTime(seconds: 0.01, preferredTimescale: 600)
         for span in spans {
             let start = CMTime(seconds: span.start, preferredTimescale: 600)
             let end = CMTime(seconds: span.end, preferredTimescale: 600)
-            parameters.setVolumeRamp(fromStartVolume: 1, toEndVolume: 0, timeRange: CMTimeRange(start: start - edge, duration: edge))
+            parameters.setVolumeRamp(fromStartVolume: gain, toEndVolume: 0, timeRange: CMTimeRange(start: start - edge, duration: edge))
             parameters.setVolume(0, at: start)
-            parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: 1, timeRange: CMTimeRange(start: end, duration: edge))
+            parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: gain, timeRange: CMTimeRange(start: end, duration: edge))
         }
     }
 }

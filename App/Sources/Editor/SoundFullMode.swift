@@ -376,6 +376,11 @@ private struct MixSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
+            sourceLevel("VOICE LEVEL", value: model.recordedMix.voiceDB, isVoice: true)
+            sourceLevel("SYSTEM AUDIO LEVEL", value: model.recordedMix.systemDB, isVoice: false)
+            Text("Source levels are saved for preview and export. Voice clarity tools are available from Task tools → Voice tools.")
+                .textStyle(.caption).foregroundStyle(Theme.textMuted)
+            Divider().overlay(Theme.line)
             let bed = model.sound.music
             slider("MUSIC LEVEL", value: bed?.levelDB ?? MusicBed.defaultLevelDB, range: -30...(-6),
                    action: "Music Level", help: "How loud the music is while nobody is talking") { plan, value in
@@ -406,6 +411,18 @@ private struct MixSettings: View {
                     .foregroundStyle(Theme.error)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    private func sourceLevel(_ title: String, value: Double, isVoice: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack { sectionLabel(title); Spacer(); Text("\(Int(value)) dB").textStyle(.caption) }
+            Slider(value: Binding(get: { value }, set: { level in
+                var mix = model.recordedMix
+                if isVoice { mix.voiceDB = level } else { mix.systemDB = level }
+                model.applyRecordedMix(mix)
+            }), in: -60...6, step: 1)
+            .accessibilityLabel(title.capitalized)
         }
     }
 

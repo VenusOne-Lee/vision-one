@@ -32,11 +32,12 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     let background: CIColor
     /// camera.mov's track and where to draw it, when the take has one.
     let camera: CameraLayer?
+    let split: Bool
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], sourceTransform: CGAffineTransform = .identity, overlayTimeOffset: Double = 0,
          effects: FrameEffects? = nil,
          crop: (@Sendable (Double) -> NormalisedRect?)? = nil, background: CIColor = .black,
-         camera: CameraLayer? = nil) {
+         camera: CameraLayer? = nil, split: Bool = false) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
@@ -46,6 +47,7 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         self.crop = crop
         self.background = background
         self.camera = camera
+        self.split = split && camera != nil
         card = nil
         requiredSourceTrackIDs = [NSNumber(value: trackID)] + (camera.map { [NSNumber(value: $0.trackID)] } ?? [])
     }
@@ -60,6 +62,7 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         crop = nil
         background = .white
         camera = nil
+        split = false
         self.card = card
         requiredSourceTrackIDs = []
     }
@@ -118,12 +121,13 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         if let rect = instruction.crop?(request.compositionTime.seconds - instruction.overlayTimeOffset) {
             image = Self.crop(image, to: rect)
         }
-        let scale = min(size.width / image.extent.width, size.height / image.extent.height)
+        let contentHeight = instruction.split ? size.height * ReframePlan.splitScreenShare : size.height
+        let scale = min(size.width / image.extent.width, contentHeight / image.extent.height)
         let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         // Centre it; the shape matches in v0.1, so this only matters once
         // reframing to 9:16 and 1:1 arrives.
         let x = (size.width - scaled.extent.width) / 2
-        let y = (size.height - scaled.extent.height) / 2
+        let y = (contentHeight - scaled.extent.height) / 2 + (instruction.split ? size.height - contentHeight : 0)
         var placed = scaled
             .transformed(by: CGAffineTransform(translationX: x, y: y))
             .composited(over: CIImage(color: instruction.background).cropped(to: CGRect(origin: .zero, size: size)))
@@ -135,7 +139,14 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         if let camera = instruction.camera, let frame = request.sourceFrame(byTrackID: camera.trackID),
            let placement = camera.track.placement(atOutput: outputTime, timeline: camera.timeline) {
             let screen = CaptureRect(x: x, y: y, width: scaled.extent.width, height: scaled.extent.height)
-            let r = CameraTrack.outputRect(for: placement, in: screen)
+            let r: CaptureRect
+            if instruction.split {
+                let available = size.height - contentHeight
+                let side = min(size.width * 0.65, available * 0.9)
+                r = CaptureRect(x: (size.width - side) / 2, y: (available - side) / 2, width: side, height: side)
+            } else {
+                r = CameraTrack.outputRect(for: placement, in: screen)
+            }
             let rect = CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
             // The room behind the person, when the take has one.
             let face = camera.background?.render(frame, at: outputTime) ?? CIImage(cvPixelBuffer: frame)
