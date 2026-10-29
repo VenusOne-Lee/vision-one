@@ -59,7 +59,7 @@ struct TranscriptTextView: NSViewRepresentable {
         /// Character range of each word, by word position.
         private(set) var wordRanges: [NSRange] = []
         private var renderedEdits: EditList?
-        private var renderedWordCount = -1
+        private var renderedTranscriptRevision = -1
         private var renderedFixes: [VoiceEdits.WordFix]?
         private var underlined: Int?
 
@@ -74,7 +74,7 @@ struct TranscriptTextView: NSViewRepresentable {
             model = next
             wordRanges = []
             renderedEdits = nil
-            renderedWordCount = -1
+            renderedTranscriptRevision = -1
             renderedFixes = nil
             underlined = nil
             textView?.setSelectedRange(NSRange(location: 0, length: 0))
@@ -82,14 +82,14 @@ struct TranscriptTextView: NSViewRepresentable {
 
         func update() {
             guard let textView, let storage = textView.textStorage else { return }
-            if renderedEdits != model.edits || renderedWordCount != model.words.count
+            if renderedEdits != model.edits || renderedTranscriptRevision != model.transcriptRevision
                 || renderedFixes != model.voiceEdits.fixes {
                 let selection = textView.selectedRanges
                 let (text, ranges) = TranscriptRenderer.render(model: model)
                 storage.setAttributedString(text)
                 wordRanges = ranges
                 renderedEdits = model.edits
-                renderedWordCount = model.words.count
+                renderedTranscriptRevision = model.transcriptRevision
                 renderedFixes = model.voiceEdits.fixes
                 underlined = nil
                 let kept = selection.filter { $0.rangeValue.upperBound <= storage.length }

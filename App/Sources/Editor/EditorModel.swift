@@ -30,7 +30,11 @@ final class EditorModel: ObservableObject {
 
     @Published private(set) var phase: Phase = .loading
     @Published private(set) var transcriptState: TranscriptState = .loading
-    @Published private(set) var transcript: Transcript?
+    @Published private(set) var transcript: Transcript? {
+        didSet { transcriptRevision += 1 }
+    }
+    /// Changes only when word/timing data is replaced, never on playback ticks.
+    private(set) var transcriptRevision = 0
     @Published private(set) var edits = EditList(sourceDuration: 0) {
         didSet { if edits != oldValue { refreshMarks() } }
     }
@@ -184,7 +188,7 @@ final class EditorModel: ObservableObject {
         await rebuildPlayer()
         phase = .ready
         if let saved = try? LoudnessEnvelope.read(from: take.levelsURL) { levels = saved }
-        loadTranscript()
+        reloadTranscript()
         startWatching()
     }
 
@@ -196,7 +200,7 @@ final class EditorModel: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self, !Task.isCancelled else { return }
-                if self.transcriptState != .ready { self.loadTranscript() }
+                if self.transcriptState != .ready { self.reloadTranscript() }
                 if self.mergeOutsideCuts() { self.scheduleRebuild() }
                 self.pickUpVoiceEdits()
             }
@@ -239,7 +243,8 @@ final class EditorModel: ObservableObject {
         Transcriber.shared.retry(take)
     }
 
-    private func loadTranscript() {
+    /// Rereads transcript recovery output and invalidates native text/range caches.
+    func reloadTranscript() {
         let transcriber = Transcriber.shared
         if transcriber.isWorking(on: take) { transcriptState = .waiting; return }
         if let failure = try? TranscriptFailure.read(from: take.transcriptFailedURL) {

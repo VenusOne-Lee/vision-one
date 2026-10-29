@@ -88,10 +88,38 @@ enum TranscriptViewVerification {
             textView(in: host)?.coordinator?.model === a && textView(in: host)?.string.contains("Alpha") == true
         }
         try MediaVerification.require(textView(in: host)?.selectedRange().length == 0, "B's selection leaked back into A")
-        try JSONSerialization.data(withJSONObject: ["mountedTakeSwitch": true, "selectionReset": true,
+        let revision = a.transcriptRevision
+        let savedB = try Data(contentsOf: b.take.editsURL)
+        try Transcript(language: "en", engine: "same-model recovery fixture", duration: 3, segments: [.init(words: [
+            .init(id: 0, text: "Changed", start: 1, end: 1.2),
+            .init(id: 1, text: "timings.", start: 2, end: 2.3)
+        ])]).write(to: a.take.transcriptURL)
+        a.reloadTranscript()
+        try MediaVerification.require(a.words.count == 2 && a.transcriptRevision > revision,
+                                      "Equal-count transcript replacement did not advance revision")
+        try await wait("Equal-count transcript replacement kept stale native text") {
+            textView(in: host)?.string.contains("Changed") == true && textView(in: host)?.string.contains("Alpha") == false
+        }
+        guard let replaced = textView(in: host), let owner = replaced.coordinator, let firstRange = owner.wordRanges.first else {
+            throw MediaVerification.Failure(message: "Recovered transcript ranges missing")
+        }
+        try MediaVerification.require((replaced.string as NSString).substring(with: firstRange) == "Changed",
+                                      "Recovered transcript kept stale character ranges")
+        owner.clicked(character: firstRange.location)
+        try MediaVerification.require(abs(a.sourceTime - 1) < 0.0001, "Recovered transcript seek used stale timing")
+        replaced.setSelectedRange(firstRange)
+        a.undoManager.beginUndoGrouping()
+        owner.cutSelection()
+        a.undoManager.endUndoGrouping()
+        try MediaVerification.require(a.edits.cuts.count == 1 && abs((a.edits.cuts.first?.span.end ?? 0) - 1.6) < 0.0001,
+                                      "Recovered transcript cut used stale timing")
+        try MediaVerification.require(try Data(contentsOf: b.take.editsURL) == savedB,
+                                      "Recovered A transcript changed B's saved edits")
+        try JSONSerialization.data(withJSONObject: ["equalCountReplacement": true, "updatedRangesAndTiming": true,
+                                                  "mountedTakeSwitch": true, "selectionReset": true,
                                                   "currentTakeCutUndoRedo": true, "otherTakeBytesUnchanged": true],
                                    options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("transcript-view-switch.json"))
-        print("Native transcript take-switch/cut/undo/redo verification passed")
+        print("Native transcript take-switch/equal-count-replacement/cut/undo/redo verification passed")
     }
 }
