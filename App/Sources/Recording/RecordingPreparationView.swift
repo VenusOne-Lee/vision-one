@@ -92,12 +92,14 @@ struct RecordingPreparationView: View {
                     }
                 }
             }
+            .disabled(starting)
             Text("Saved on this Mac. The camera preview floats above your source when enabled. Recording adds a task with its original video and an on-device transcript when audio is available.")
                 .textStyle(.caption).foregroundStyle(Theme.textMuted).fixedSize(horizontal: false, vertical: true)
             Button(starting ? "Preparing…" : "Start recording") {
                 starting = true
                 Task {
                     await inputs.stop()
+                    guard starting else { return }
                     Countdown.shared.length = countdown
                     if let project = model.currentProject {
                         let choice = recorder.choice
@@ -109,7 +111,9 @@ struct RecordingPreparationView: View {
                             $0.mediaDefaults = defaults
                         }
                     }
+                    guard starting else { return }
                     // Close first so preparation never sits over the source.
+                    starting = false
                     dismiss()
                     await recorder.record()
                 }
@@ -135,7 +139,7 @@ struct RecordingPreparationView: View {
             Task { await inputs.preview(recorder.choice) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in access.refresh() }
-        .onDisappear { inputs.cancel(); inputs.cancelPreview() }
+        .onDisappear { starting = false; inputs.cancel(); inputs.cancelPreview() }
     }
 
     private var requiredAccess: [AccessKind] {
