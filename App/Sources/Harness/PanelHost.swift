@@ -178,6 +178,7 @@ struct PanelContent: View {
                 ChangesPanel(model: workspace.editor, effects: workspace.editor.effects)
             case .clips:
                 DeliveryPanel(workspace: workspace, model: model)
+                    .id(workspace.take.folder)
             case .sound:
                 SoundPanelContent(model: workspace.editor)
             case .post:

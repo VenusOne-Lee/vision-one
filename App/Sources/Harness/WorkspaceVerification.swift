@@ -16,6 +16,7 @@ extension EnvironmentValues {
 
 @MainActor
 enum WorkspaceRenderEvidence {
+    static weak var captionOwner: DeliveryCaptionControl?
     static var generation = 0
     static var frames = 0
     static var failures: [String] = []
@@ -44,6 +45,7 @@ enum WorkspaceVerification {
         }
         try Transcript(language: "en", engine: "workspace fixture", duration: 3, segments: [.init(words: words)]).write(to: take.transcriptURL)
         try verifyCaptionPaneUpdates(in: root)
+        try await verifyTakeSwitch(source: take, in: root)
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -134,6 +136,62 @@ enum WorkspaceVerification {
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("workspace-render.json"))
         print("Workspace renders saved: \(names.count)")
+    }
+
+    /// Mount the real HarnessView, retain it across a task switch with Clips
+    /// active, then operate the exact state owner used by the visible toggle.
+    private static func verifyTakeSwitch(source: Take, in root: URL) async throws {
+        let a = Take(folder: root.appendingPathComponent("switch-A"))
+        let b = Take(folder: root.appendingPathComponent("switch-B"))
+        for take in [a, b] {
+            if FileManager.default.fileExists(atPath: take.folder.path) { try FileManager.default.removeItem(at: take.folder) }
+            try FileManager.default.copyItem(at: source.folder, to: take.folder)
+            try ClipList(clips: [.init(title: "Switch fixture", span: TimeSpan(start: 0, end: 3), state: .accepted)])
+                .write(to: take.clipsURL)
+        }
+        try a.saveCaptionSettings(CaptionSettings(isOn: true, style: .subtitle, position: 0.25))
+        try b.saveCaptionSettings(CaptionSettings(isOn: false, style: .keyword, position: 0.4, language: .zulu))
+        let originalA = try Data(contentsOf: a.captionSettingsURL)
+        let project = DeskProject(name: "Take-switch verification")
+        let first = DeskTask(projectID: project.id, title: "A", takes: [a])
+        let second = DeskTask(projectID: project.id, title: "B", takes: [b])
+        let model = HarnessModel(snapshot: DeskSnapshot(projects: [project], tasks: [first, second]),
+                                 takes: [a, b], page: .task(first.id))
+        model.updateLayout { $0.show(.clips) }
+        await model.workspace?.load()
+        let host = NSHostingView(rootView: HarnessView(model: model)
+            .frame(width: 1512, height: 982).environment(\.workspaceRender, true))
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1512, height: 982),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFrontRegardless()
+        defer {
+            model.workspace?.close()
+            window.orderOut(nil); window.contentView = nil; window.close()
+        }
+        try await Task.sleep(for: .milliseconds(500))
+        try requireCaptionOwner(a)
+        model.page = .task(second.id)
+        await model.workspace?.load()
+        try await Task.sleep(for: .milliseconds(500))
+        try requireCaptionOwner(b)
+        guard let control = WorkspaceRenderEvidence.captionOwner else { throw MediaVerification.Failure(message: "B caption control missing") }
+        try MediaVerification.require(!control.isOn, "B did not show its own caption flag")
+        control.set(true)
+        try MediaVerification.require(b.loadCaptionSettings().isOn && b.loadCaptionSettings().language == .zulu,
+                                      "Switching to B did not toggle B's current settings")
+        try MediaVerification.require(try Data(contentsOf: a.captionSettingsURL) == originalA,
+                                      "Toggling B changed A's caption file")
+        model.page = .task(first.id)
+        await model.workspace?.load()
+        try await Task.sleep(for: .milliseconds(500))
+        try requireCaptionOwner(a)
+    }
+
+    private static func requireCaptionOwner(_ take: Take) throws {
+        try MediaVerification.require(WorkspaceRenderEvidence.captionOwner?.take.folder == take.folder,
+                                      "Mounted delivery caption control retained a different take")
     }
 
     private static func verifyCaptionPaneUpdates(in root: URL) throws {

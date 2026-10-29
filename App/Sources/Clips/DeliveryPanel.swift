@@ -8,6 +8,7 @@ struct DeliveryPanel: View {
     @ObservedObject var model: HarnessModel
     @ObservedObject private var clips: ClipsModel
     @StateObject private var captionControl: DeliveryCaptionControl
+    @Environment(\.workspaceRender) private var workspaceRender
 
     init(workspace: TaskWorkspace, model: HarnessModel) {
         self.workspace = workspace
@@ -52,7 +53,10 @@ struct DeliveryPanel: View {
                 }.padding(16)
             }
         }
-        .onAppear { captionControl.reload() }
+        .onAppear {
+            captionControl.reload()
+            if workspaceRender { WorkspaceRenderEvidence.captionOwner = captionControl }
+        }
     }
 
     @ViewBuilder private func deliveryState(_ clip: Clip) -> some View {
