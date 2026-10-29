@@ -51,17 +51,22 @@ final class CameraOnlyCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDel
     /// Starts the camera (and mic) so the preview is live during the
     /// countdown. Nothing is written until `startWriting`.
     func open(camera: AVCaptureDevice, microphone: AVCaptureDevice?) async throws {
+        // Devices aren't Sendable, so the session queue looks them up again.
+        let cameraID = camera.uniqueID
+        let microphoneID = microphone?.uniqueID
         try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, Error>) in
             sessionQueue.async { [self] in
                 session.beginConfiguration()
                 session.inputs.forEach(session.removeInput)
-                guard let cameraInput = try? AVCaptureDeviceInput(device: camera), session.canAddInput(cameraInput) else {
+                guard let camera = AVCaptureDevice(uniqueID: cameraID),
+                      let cameraInput = try? AVCaptureDeviceInput(device: camera), session.canAddInput(cameraInput) else {
                     session.commitConfiguration()
                     done.resume(throwing: CameraOnlyError.cameraUnavailable)
                     return
                 }
                 session.addInput(cameraInput)
-                if let microphone, let micInput = try? AVCaptureDeviceInput(device: microphone), session.canAddInput(micInput) {
+                if let microphoneID, let microphone = AVCaptureDevice(uniqueID: microphoneID),
+                   let micInput = try? AVCaptureDeviceInput(device: microphone), session.canAddInput(micInput) {
                     session.addInput(micInput)
                 }
                 if !session.outputs.contains(videoOutput), session.canAddOutput(videoOutput) { session.addOutput(videoOutput) }
