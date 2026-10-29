@@ -93,3 +93,26 @@ extension AppliedTemplateTests {
         XCTAssertEqual(AppliedTemplate.cardBrand(for: take, base: branded), branded)
     }
 }
+
+extension AppliedTemplateTests {
+    func testCustomTemplateSnapshotOwnsReferencedCardAssets() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let templates = root.appendingPathComponent("templates")
+        let source = templates.appendingPathComponent("custom")
+        let take = Take(folder: root.appendingPathComponent("take"))
+        try FileManager.default.createDirectory(at: source.appendingPathComponent("images"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: take.folder, withIntermediateDirectories: true)
+        var look = TemplateLook.builtIn(id: "demo")!
+        look.id = "custom"
+        look.intro = .file("intro.html")
+        try look.save(to: source)
+        try Data("<img src='images/logo.svg'>".utf8).write(to: source.appendingPathComponent("intro.html"))
+        let logo = Data("<svg xmlns='http://www.w3.org/2000/svg'/>".utf8)
+        try logo.write(to: source.appendingPathComponent("images/logo.svg"))
+        try AppliedTemplate.apply(id: "custom", to: take, root: templates)
+        try FileManager.default.removeItem(at: source)
+        XCTAssertEqual(try Data(contentsOf: AppliedTemplate.folder(for: take).appendingPathComponent("images/logo.svg")), logo)
+        XCTAssertEqual(AppliedTemplate.look(for: take)?.id, "custom")
+    }
+}

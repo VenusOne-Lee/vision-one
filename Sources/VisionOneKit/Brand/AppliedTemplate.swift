@@ -69,7 +69,10 @@ public enum AppliedTemplate {
             throw CocoaError(.fileReadNoSuchFile)
         }
         let destination = folder(for: take)
-        // Validate and snapshot the new manifest before changing take settings.
+        // Snapshot the whole custom folder, including local assets referenced
+        // by HTML cards. The transaction can restore the previous snapshot.
+        if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
+        if let custom { try FileManager.default.copyItem(at: custom.folder, to: destination) }
         try look.save(to: destination)
         let styleURL = destination.appendingPathComponent(CopiedStyle.fileName)
         if let style = custom?.style { try style.save(to: destination) }
