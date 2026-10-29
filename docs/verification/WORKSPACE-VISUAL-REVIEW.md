@@ -75,10 +75,27 @@ The next minimum-editor change uses a one-row compact transport and defaults the
 
 ## Compact editor and populated Library follow-up
 
-For `2b22376` / CI 40927817878, editor light/dark minimum and editor dark narrow/light wide were opened. At 760×520 the preview is now roughly 241px high, captions are readable, and playback, Details, Show timeline and Ask remain visible. The earlier ~80px viewport finding is resolved in static evidence. The user independently confirmed the minimum images from the later card-fixture run.
+For `2b22376` / CI 40927817878, editor light/dark minimum and editor dark narrow/light wide were opened. At 760×520 the preview is now roughly 241px high, captions are readable, and playback, Details, Show timeline and Ask remain visible. The earlier ~80px viewport finding is resolved in static evidence. The tracking assistant independently confirmed the minimum images from the later card-fixture run.
 
-For `27fafb9` / CI 40929007554, the user opened all four populated Library light/dark × wide/narrow images. Fixture rows/thumbnails, import, search/filter/sort were visible; no clipped actionable control was observed at 900×640 or 1512×982. The search placeholder truncates at 900px but remains usable. This does not verify empty recovery, rename failure, focus/hover menus or the 760×520 Library.
+For `27fafb9` / CI 40929007554, the tracking assistant opened all four populated Library light/dark × wide/narrow images. Fixture rows/thumbnails, import, search/filter/sort were visible; no clipped actionable control was observed at 900×640 or 1512×982. The search placeholder truncates at 900px but remains usable. This does not verify empty recovery, rename failure, focus/hover menus or the 760×520 Library.
 
-The connector recovery adds filtered-empty and minimum Library captures. Their generation and inspection remain pending. Reduce Motion has conditional source and native transaction checks; screenshots do not verify animation behavior.
+The connector recovery subsequently generated filtered-empty and minimum Library captures; the scoped completed reviews below supersede this checkpoint's pending state. Reduce Motion has conditional source and native transaction checks; screenshots do not verify animation behavior.
 
-For `1b5c2bf` / successful CI 40933978656, the user downloaded and inspected owned-template-intro.png and owned-template-body.png. The actual yellow/blue SVG fills the portrait output without black letterboxing, and the post-intro body retains a fully visible upper-right camera plus readable Producer caption. This accepts only the named synthetic template fixture, not general footage or interactive template application.
+For `1b5c2bf` / successful CI 40933978656, the tracking assistant downloaded and inspected owned-template-intro.png and owned-template-body.png. The actual yellow/blue SVG fills the portrait output without black letterboxing, and the post-intro body retains a fully visible upper-right camera plus readable Producer caption. This accepts only the named synthetic template fixture, not general footage or interactive template application.
+
+## Completed recovery review: 82dc58c through 9e1d8ed
+
+These artifact reviews were performed by the **tracking assistant in the originating session**, not the human user.
+
+- For aedd79f / CI 40934751902, card-safety.json reports compiledOfflineRules=true, unprotectedConnections=1, protectedConnections=0, paintedFirstFrame=true and flatFinalFrameRetained=true. Painted-first.png is blue/yellow; flat-last.png is yellow. Actual loopback control/enforcement and painted-to-flat animation passed. Wholly-flat odd-width rejection subsequently passed at 113be91 / CI 40937691328.
+- All four populated/filtered-empty minimum Library light/dark images were opened: import/search/filter/sort and recovery visible without clipped action. Populated captures include HarnessView; filtered-empty is standalone LibraryView.
+- All four filtered-empty wide/narrow combinations were opened, including the later aedd79f light-narrow and dark-wide review: search/filter/sort/import and recovery visible without overflow. This does not prove mounted Show every take interaction.
+- All twelve transcript recovery PNGs from 82dc58c / successful CI 40937119636 were opened: missing/corrupt/empty × light/dark × wide/narrow. Explanation text and Create/Retry actions were visible without clipping; preview/playback/export remained visible. No provider download/retry execution or keyboard/VoiceOver acceptance is inferred.
+- 9e1d8ed / CI 40939012727 passed 844 package tests, native build, media and 92 renders. Its transcript-view-switch.json has all seven flags true, including assigned first responder and synthetic Delete/Undo/Redo/Space events delivered to the app-owned window. This is a scoped native responder check, not global shortcut/focus-order/VoiceOver acceptance.
+- recording-light-minimum.png and recording-dark-minimum.png at 760×520 were opened. Header, source choices, preview, fixed footer and Start recording were visible. Refresh source preview is partly clipped at the internal scroll viewport bottom; actual scrolling/reachability remains unverified.
+
+The latest generated count is 92; this does not assert that every current file was independently reopened. Earlier all-66 review and the explicitly named later inspections retain their own provenance. The full twelve-row acceptance audit and concrete external gates are in [CLOUD-VERIFICATION.md](../CLOUD-VERIFICATION.md); [connector recovery evidence](connector-recovery.json) records scoped runtime/inspection data.
+
+## Interactive verification now authorized
+
+The human authorized local Mac verification after the static reviews above. The tracking assistant is building an isolated 9e1d8ed worktree for native QA. This adds no completed evidence yet and does not change the provenance or limits of the static reviews. Interactive findings and actual device/account coverage must be recorded separately.
