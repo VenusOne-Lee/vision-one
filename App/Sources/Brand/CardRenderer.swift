@@ -17,11 +17,13 @@ final class CardRenderer: NSObject, WKNavigationDelegate {
         case snapshot(Error?)
         case blank
         case timedOut
+        case networkRules(Error?)
 
         var errorDescription: String? {
             switch self {
             case let .load(error): return "Couldn't open the card. \(error?.localizedDescription ?? "")"
             case let .snapshot(error): return "Couldn't draw the card. \(error?.localizedDescription ?? "")"
+            case let .networkRules(error): return "Couldn’t enforce offline card rendering. \(error?.localizedDescription ?? "")"
             case .blank: return "The card came out blank."
             case .timedOut: return "The card took too long to draw."
             }
@@ -39,9 +41,7 @@ final class CardRenderer: NSObject, WKNavigationDelegate {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.suppressesIncrementalRendering = true
-        if let rules = await Self.blockNetwork() {
-            configuration.userContentController.add(rules)
-        }
+        configuration.userContentController.add(try await Self.offlineRules())
 
         let frame = CGRect(origin: .zero, size: size)
         let webView = WKWebView(frame: frame, configuration: configuration)
@@ -72,6 +72,7 @@ final class CardRenderer: NSObject, WKNavigationDelegate {
         var frames: [Data] = []
         var order: [Int] = []
         var lastPixels: Data?
+        var paint = CardPaintEvidence()
         let times = CardScript.frameTimes(duration: duration, frameRate: frameRate)
         for t in times {
             try Task.checkCancellation()
@@ -79,6 +80,7 @@ final class CardRenderer: NSObject, WKNavigationDelegate {
             let image = try await snapshot(webView, size: size)
             guard let encoded = Self.encode(image, size: size) else { throw Failure.snapshot(nil) }
             let (png, pixels) = encoded
+            paint.observe(pixels)
             if let lastPixels, lastPixels == pixels, !frames.isEmpty {
                 order.append(frames.count - 1)
             } else {
@@ -88,7 +90,7 @@ final class CardRenderer: NSObject, WKNavigationDelegate {
             lastPixels = pixels
         }
         // A web view that never painted gives one flat colour throughout.
-        if let lastPixels, Self.isFlat(lastPixels) { throw Failure.blank }
+        guard paint.hasPaint else { throw Failure.blank }
         return RenderedCard(frameRate: frameRate, frames: frames, order: order)
     }
 
@@ -124,14 +126,15 @@ final class CardRenderer: NSObject, WKNavigationDelegate {
 
     /// Blocks http(s) and sockets, so a card can't fetch anything and
     /// renders the same every time.
-    private static func blockNetwork() async -> WKContentRuleList? {
+    static func offlineRules() async throws -> WKContentRuleList {
         if let rules { return rules }
-        let compiled: WKContentRuleList? = await withCheckedContinuation { continuation in
+        let compiled = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<WKContentRuleList, Error>) in
             WKContentRuleListStore.default().compileContentRuleList(
-                forIdentifier: "VisionOneCardsOffline",
+                forIdentifier: "VisionOneCardsOfflineV2",
                 encodedContentRuleList: CardScript.blockNetworkRules
-            ) { list, _ in
-                continuation.resume(returning: list)
+            ) { list, error in
+                if let list { continuation.resume(returning: list) }
+                else { continuation.resume(throwing: Failure.networkRules(error)) }
             }
         }
         rules = compiled
@@ -179,20 +182,7 @@ final class CardRenderer: NSObject, WKNavigationDelegate {
         return (png as Data, pixels)
     }
 
-    /// True when every sampled pixel is the same colour.
-    private static func isFlat(_ pixels: Data) -> Bool {
-        guard pixels.count >= 4 else { return true }
-        let step = max(4, (pixels.count / 997) / 4 * 4)
-        return pixels.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) -> Bool in
-            let first = (bytes[0], bytes[1], bytes[2])
-            var i = 0
-            while i + 2 < bytes.count {
-                if (bytes[i], bytes[i + 1], bytes[i + 2]) != first { return false }
-                i += step
-            }
-            return true
-        }
-    }
+
 }
 
 /// Makes the intro and outro for one export: the template's HTML card,
