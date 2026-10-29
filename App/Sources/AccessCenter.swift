@@ -15,7 +15,6 @@ final class AccessCenter: ObservableObject {
 
     private var timer: Timer?
     private static let askedScreenKey = "askedForScreenRecording"
-    private static let reopenedForScreenKey = "reopenedForScreenRecording"
     /// ScreenCaptureKit said yes while CGPreflight still says no.
     private var screenLive = false
     private var probing = false
@@ -33,11 +32,7 @@ final class AccessCenter: ObservableObject {
         checklist.states[.screen] = screenLive ? .granted : Self.currentScreenState()
         checklist.states[.microphone] = Self.currentState(for: .audio)
         checklist.states[.camera] = Self.currentState(for: .video)
-        if checklist.state(of: .screen) == .granted {
-            UserDefaults.standard.removeObject(forKey: Self.reopenedForScreenKey)
-        } else {
-            probeScreen()
-        }
+        probeScreen()
     }
 
     /// CGPreflightScreenCaptureAccess keeps its first answer until the app
@@ -56,33 +51,19 @@ final class AccessCenter: ObservableObject {
             var states = checklist.states
             states[.screen] = .granted
             checklist = AccessChecklist(states: states, screenAtLaunch: .granted)
-            UserDefaults.standard.removeObject(forKey: Self.reopenedForScreenKey)
         }
     }
 
-    /// Vision One was reopened for Screen Recording and it's still off:
-    /// the entry in System Settings likely belongs to an older copy.
-    var reopenedForScreen: Bool {
-        UserDefaults.standard.bool(forKey: Self.reopenedForScreenKey)
-    }
-
-    /// Reopens so macOS hands over a switch it hasn't passed on yet.
-    func reopenForScreen() {
-        UserDefaults.standard.set(true, forKey: Self.reopenedForScreenKey)
-        relaunch()
-    }
-
     /// Clears Vision One's Screen Recording entry, which may point at an
-    /// older or differently signed copy, then adds this copy afresh and
-    /// opens System Settings on it.
-    func resetScreenAccess() {
-        UserDefaults.standard.removeObject(forKey: Self.reopenedForScreenKey)
+    /// older or differently signed copy (its switch then does nothing),
+    /// adds this copy afresh and opens System Settings on it, so the only
+    /// thing left is one switch.
+    private func resetScreenAccess() {
         if let id = Bundle.main.bundleIdentifier {
             let task = Process()
             task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
             task.arguments = ["reset", "ScreenCapture", id]
-            try? task.run()
-            task.waitUntilExit()
+            if (try? task.run()) != nil { task.waitUntilExit() }
         }
         CGRequestScreenCaptureAccess()
         openSettings(for: .screen)
@@ -125,6 +106,8 @@ final class AccessCenter: ObservableObject {
                     CaptureDevices.shared.refresh()
                 }
             }
+        case (.screen, .denied):
+            resetScreenAccess()
         case (_, .denied):
             openSettings(for: kind)
         }

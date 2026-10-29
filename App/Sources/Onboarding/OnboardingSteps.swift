@@ -68,7 +68,9 @@ struct AccessStep: View {
                 if state == .denied {
                     // Screen Recording reads as "denied" as soon as it's been
                     // asked, so it gets a calm note rather than an error.
-                    Text("Switch on Vision One in System Settings. This moves on by itself.")
+                    Text(kind == .screen
+                         ? "Press Open System Settings and switch on Vision One. This moves on by itself."
+                         : "Switch on Vision One in System Settings. This moves on by itself.")
                         .font(.system(size: 12))
                         .foregroundStyle(kind == .screen ? Theme.textMuted : Theme.error)
                         .fixedSize(horizontal: false, vertical: true)
@@ -77,7 +79,6 @@ struct AccessStep: View {
 
             if kind == .screen {
                 if state == .denied {
-                    DragHint()
                     ReopenHint(access: AccessCenter.shared)
                 }
                 Text("macOS asks again about once a month whether Vision One may still record. Choose Allow.")
@@ -122,28 +123,17 @@ struct AccessStep: View {
     }
 }
 
-/// For a switch that's on in System Settings but not seen yet: reopen
-/// first, and if that didn't do it, reset the entry and ask again.
+/// The rare switch that's on but not passed on yet: one reopen.
 private struct ReopenHint: View {
-    @ObservedObject var access: AccessCenter
+    let access: AccessCenter
 
     var body: some View {
         HStack(spacing: Theme.Space.sm) {
-            Text(access.reopenedForScreen
-                 ? "Still not moving? The entry may belong to an older copy of Vision One."
-                 : "Already switched on?")
+            Text("Switched on and still here?")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-            if access.reopenedForScreen {
-                Button("Reset and ask again") { access.resetScreenAccess() }
-                    .buttonStyle(PillButtonStyle(kind: .quiet))
-                    .help("Removes Vision One from the Screen Recording list, adds it again and opens System Settings")
-            } else {
-                Button("Reopen Vision One") { access.reopenForScreen() }
-                    .buttonStyle(PillButtonStyle(kind: .quiet))
-                    .help("macOS sometimes only passes the switch on after a reopen")
-            }
+            Button("Reopen Vision One") { access.relaunch() }
+                .buttonStyle(PillButtonStyle(kind: .quiet))
         }
     }
 }
