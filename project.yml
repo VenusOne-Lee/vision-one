@@ -22,10 +22,17 @@ targets:
   VisionOne:
     type: application
     platform: macOS
+    # XcodeGen has no `resources:` key, so App/Resources goes under
+    # sources: the icon catalog, fonts and brand cards land in the bundle.
     sources:
       - App/Sources
-    resources:
-      - App/Resources
+      - path: App/Resources
+        excludes:
+          - .gitkeep
+          - Fonts
+          - "Fonts/**"
+      - path: App/Resources/Fonts
+        type: folder
     dependencies:
       - package: VisionOneKit
       - package: FluidAudio

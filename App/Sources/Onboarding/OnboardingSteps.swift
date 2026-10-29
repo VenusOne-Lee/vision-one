@@ -78,6 +78,7 @@ struct AccessStep: View {
             if kind == .screen {
                 if state == .denied {
                     DragHint()
+                    ReopenHint(access: AccessCenter.shared)
                 }
                 Text("macOS asks again about once a month whether Vision One may still record. Choose Allow.")
                     .font(.system(size: 11))
@@ -117,6 +118,32 @@ struct AccessStep: View {
         case .screen: return "Let Vision One see your screen"
         case .microphone: return "Let Vision One hear you"
         case .camera: return "Show your face, if you like"
+        }
+    }
+}
+
+/// For a switch that's on in System Settings but not seen yet: reopen
+/// first, and if that didn't do it, reset the entry and ask again.
+private struct ReopenHint: View {
+    @ObservedObject var access: AccessCenter
+
+    var body: some View {
+        HStack(spacing: Theme.Space.sm) {
+            Text(access.reopenedForScreen
+                 ? "Still not moving? The entry may belong to an older copy of Vision One."
+                 : "Already switched on?")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            if access.reopenedForScreen {
+                Button("Reset and ask again") { access.resetScreenAccess() }
+                    .buttonStyle(PillButtonStyle(kind: .quiet))
+                    .help("Removes Vision One from the Screen Recording list, adds it again and opens System Settings")
+            } else {
+                Button("Reopen Vision One") { access.reopenForScreen() }
+                    .buttonStyle(PillButtonStyle(kind: .quiet))
+                    .help("macOS sometimes only passes the switch on after a reopen")
+            }
         }
     }
 }
