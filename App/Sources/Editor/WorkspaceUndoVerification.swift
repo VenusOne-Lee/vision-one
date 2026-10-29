@@ -10,7 +10,7 @@ enum WorkspaceUndoVerification {
         guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero,
             modifierFlags: redo ? [.command, .shift] : .command,
             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-            context: nil, characters: redo ? "Z" : "z", charactersIgnoringModifiers: redo ? "Z" : "z",
+            context: nil, characters: "z", charactersIgnoringModifiers: "z",
             isARepeat: false, keyCode: 6) else {
             throw MediaVerification.Failure(message: "Couldn't make workspace undo key")
         }
@@ -42,8 +42,7 @@ enum WorkspaceUndoVerification {
         controller.present()
         guard let window = controller.window else { throw MediaVerification.Failure(message: "Harness window missing") }
         defer { window.close() }
-        // A CLI fixture uses a CF run loop rather than NSApplication.run().
-        // Finish launching and wait for WindowServer activation before testing
+        // The workspace CLI runs NSApplication; wait for WindowServer activation before testing
         // the real key-window responder chain. Never skip the focus assertion.
         for _ in 0..<100 {
             if NSApp.isActive && window.isKeyWindow && NSApp.keyWindow === window { break }

@@ -16,7 +16,7 @@ enum AutopilotPreflightVerification {
         let id = service.run(file)
         var finished: AgentJob?
         for _ in 0..<500 {
-            if let job = await board.job(id), job.state == .failed, !service.isBusy {
+            if let job = await board.job(id), job.state == .failed {
                 finished = job
                 break
             }
