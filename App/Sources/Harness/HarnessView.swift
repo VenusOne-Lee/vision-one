@@ -21,6 +21,7 @@ struct HarnessView: View {
     /// Editor or Sound picked with no takes yet: their empty state shows.
     @State private var noTakesMode: HarnessMode?
     @State private var showingTemplate = false
+    @State private var showingTools = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,7 +44,7 @@ struct HarnessView: View {
             Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
             GeometryReader { outer in
             HStack(spacing: 0) {
-                if showSidebar && model.mode == .tasks && fullPanel == nil {
+                if showSidebar && model.mode != .editor && fullPanel == nil {
                     HarnessSidebar(model: model)
                         .frame(width: min(sidebarWidth, max(200, outer.size.width * 0.28)))
                     DragDivider(axis: .vertical, value: $sidebarWidth, range: 200...420)
@@ -58,11 +59,14 @@ struct HarnessView: View {
         .foregroundStyle(Theme.text)
         .themed()
         .background(shortcuts)
+        .sheet(isPresented: $showingTools) {
+            WorkspaceToolsSheet(model: model) { showingTools = false }
+        }
         .sheet(isPresented: $showingTemplate) {
             if let workspace = model.workspace { ApplyTemplateSheet(workspace: workspace) { showingTemplate = false } }
         }
         .sheet(isPresented: $model.preparingRecording) {
-            RecordingPreparationView(model: model)
+            RecordingPreparationView(model: model, availableHeight: NSApp.keyWindow?.contentLayoutRect.height)
         }
         .sheet(isPresented: $model.presentingExport) {
             if let workspace = model.workspace {
@@ -129,6 +133,8 @@ struct HarnessView: View {
 
     private var contextualTools: some View {
         Menu {
+            Button("All task tools…") { showingTools = true }
+            Divider()
             Button("Prepare a recording…") { model.preparingRecording = true }
             Button("Import a video…") { model.importVideo() }
             Divider()
@@ -230,9 +236,7 @@ struct HarnessView: View {
             }
         case .sound:
             if let workspace = model.workspace {
-                SoundFullMode(model: workspace.editor, onBack: { model.mode = .tasks }) {
-                    TaskRail(model: model) { model.mode = .tasks }
-                }
+                SoundFullMode(model: workspace.editor, onBack: { model.mode = .tasks })
                 .id(workspace.take.name)
                 .task(id: workspace.take.name) { await workspace.load() }
             }

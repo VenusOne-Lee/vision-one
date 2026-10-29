@@ -5,9 +5,22 @@ import VisionOneKit
 /// Captures the production SwiftUI surfaces with an isolated Desk snapshot.
 /// NSView caching captures our own window; it never requests screen recording,
 /// camera, microphone, provider access or a user's library.
+private struct WorkspaceRenderKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    var workspaceRender: Bool {
+        get { self[WorkspaceRenderKey.self] }
+        set { self[WorkspaceRenderKey.self] = newValue }
+    }
+}
+
 @MainActor
 enum WorkspaceVerification {
     static func run(take: Take, in root: URL) async throws {
+        let defaults = UserDefaults.standard
+        let arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defaults.setVolatileDomain(["script.text": "Introduce the launch. Show the new workspace. End with the next step.",
+                                    "mcp.enabled": false, "harness.aiNoticeDismissed": true], forName: UserDefaults.argumentDomain)
+        defer { defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain) }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
         BundledFont.registerAll()
@@ -27,13 +40,28 @@ enum WorkspaceVerification {
             ThemeStore.shared.renderAppearance(appearance)
             for narrow in [false, true] {
                 let size = narrow ? CGSize(width: 900, height: 640) : CGSize(width: 1512, height: 982)
-                for state in ["new-task", "task", "editor", "sound", "delivery"] {
+                for state in ["new-task", "task", "editor", "sound", "delivery", "pending", "error", "loading"] {
                     let page: HarnessPage = state == "new-task" ? .newTask : .task(task.id)
-                    let model = HarnessModel(snapshot: snapshot, takes: [take], page: page)
+                    var stateSnapshot = snapshot
+                    if state == "pending" {
+                        stateSnapshot.tasks[0].cells.append(TaskCell(.plan(DeskPlan(steps: [.init(agent: .editor, title: "Tighten the opening", action: .edit(ask: "Remove long pauses")), .init(agent: .clipper, title: "Prepare two clips", action: .clips(count: 2))])), at: date))
+                        stateSnapshot.tasks[0].cells.append(TaskCell(.approval(.plan("Review edits and two clip proposals. Nothing is posted.")), at: date))
+                    }
+                    if state == "error" {
+                        stateSnapshot.tasks[0].cells.append(TaskCell(.failed(.editor, "The provider is unavailable. Your original and saved changes are safe. Try again or choose an on-device provider."), at: date))
+                    }
+                    let model = HarnessModel(snapshot: stateSnapshot, takes: [take], page: page,
+                                             renderPhase: state == "loading" ? .loading : nil)
                     if let workspace = model.workspace {
                         await workspace.load()
                         if state == "delivery" {
+                            try ClipList().write(to: take.clipsURL)
+                            await workspace.clips.load()
                             workspace.clips.addAtPlayhead()
+                            if let clip = workspace.clips.selected {
+                                workspace.clips.export(clip)
+                                while workspace.clips.isExporting { try await Task.sleep(for: .milliseconds(50)) }
+                            }
                             model.updateLayout { $0.show(.clips) }
                         }
                     }
@@ -42,6 +70,22 @@ enum WorkspaceVerification {
                     let name = "\(state)-\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide").png"
                     try await capture(HarnessView(model: model), size: size, to: root.appendingPathComponent(name))
                     model.workspace?.close()
+                    names.append(name)
+                }
+                let model = HarnessModel(snapshot: snapshot, takes: [take], page: .task(task.id))
+                let suffix = "\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide")"
+                let tools: [(String, AnyView)] = [
+                    ("task-tools", AnyView(WorkspaceToolsSheet(model: model, close: {}))),
+                    ("recording", AnyView(RecordingPreparationView(model: model, availableHeight: size.height))),
+                    ("script-coach", AnyView(ScriptCoachView(model: ScriptCoachModel(learnPace: false)))),
+                    ("rehearse", AnyView(RehearseView(model: RehearseModel(), talk: CoachConversation()))),
+                    ("voice-tools", AnyView(VoiceToolsView(model: VoiceToolsModel(take: take)))),
+                    ("autopilot", AnyView(AutopilotView())),
+                    ("agents", AnyView(AgentsSettingsView(service: MCPService.shared)))
+                ]
+                for (tool, view) in tools {
+                    let name = "\(tool)-\(suffix).png"
+                    try await capture(view, size: size, to: root.appendingPathComponent(name))
                     names.append(name)
                 }
             }
@@ -55,7 +99,7 @@ enum WorkspaceVerification {
     }
 
     private static func capture<V: View>(_ view: V, size: CGSize, to url: URL) async throws {
-        let host = NSHostingView(rootView: view)
+        let host = NSHostingView(rootView: view.environment(\.workspaceRender, true))
         let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host

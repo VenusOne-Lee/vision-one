@@ -26,7 +26,10 @@ struct ClipsPane: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: Theme.Space.sm) {
+                    LazyVStack(spacing: Theme.Space.md) {
+                        if let selected = model.selected {
+                            ClipDeliveryPreview(model: model, clip: selected)
+                        }
                         ForEach(model.list.visible) { clip in
                             ClipCard(model: model, clip: clip, isSelected: clip.id == model.selectedID)
                         }
@@ -474,5 +477,59 @@ private struct RenderedClipPreview: View {
         }
         .padding(Theme.Space.md).frame(maxHeight: 700).background(Theme.canvas).themed()
         .onAppear { player.play() }.onDisappear { player.pause() }
+    }
+}
+
+/// Delivery shows the actual rendered file, with no substitute source crop.
+private struct ClipDeliveryPreview: View {
+    @ObservedObject var model: ClipsModel
+    let clip: Clip
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.sm) {
+            HStack {
+                Text("Clip preview").textStyle(.bodyStrong)
+                Spacer()
+                Text(clip.format.detail).textStyle(.caption).foregroundStyle(Theme.textMuted)
+            }
+            Group {
+                if case let .done(url, _) = model.exports[clip.id] {
+                    DeliveryMovie(url: url)
+                } else {
+                    VStack(spacing: Theme.Space.sm) {
+                        Image(systemName: "play.rectangle").font(.system(size: 28))
+                        Text(model.isExporting ? "Rendering the clip…" : "Render to check framing, camera and captions together.")
+                            .textStyle(.caption).multilineTextAlignment(.center)
+                    }
+                    .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .foregroundStyle(Theme.textMuted).background(Theme.canvas)
+                }
+            }
+            .frame(height: clip.format == .vertical ? 320 : 220)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+            HStack {
+                Text("Last rendered MP4").textStyle(.caption).foregroundStyle(Theme.textMuted)
+                Spacer()
+                Button("Render preview") { model.export(clip) }
+                    .buttonStyle(.secondary).disabled(model.isExporting)
+            }
+            Text("After changing a clip or its captions, render again to update this preview.")
+                .textStyle(.caption).foregroundStyle(Theme.textMuted)
+        }
+    }
+}
+
+private struct DeliveryMovie: View {
+    let url: URL
+    @State private var player: AVPlayer?
+    var body: some View {
+        Group {
+            if let player { VideoPlayer(player: player) }
+            else { ProgressView() }
+        }
+        .background(Color.black)
+        .task(id: url) { player = AVPlayer(url: url) }
+        .onDisappear { player?.pause(); player = nil }
     }
 }

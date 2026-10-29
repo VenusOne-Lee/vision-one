@@ -25,23 +25,29 @@ struct SoundFullMode<Rail: View>: View {
     private var aside: SoundAside { SoundAside(rawValue: asideRaw) ?? .mix }
 
     var body: some View {
-        GeometryReader { geometry in
-            if geometry.size.width < 760 {
-                VSplitView {
-                    main.frame(minHeight: 280)
-                    asidePanel.frame(minHeight: 160)
+        HStack(spacing: 0) {
+            rail()
+            VStack(spacing: 0) {
+                GeometryReader { geometry in
+                    if geometry.size.width < 760 {
+                        VSplitView {
+                            main.frame(minHeight: 180)
+                            asidePanel.frame(minHeight: 140)
+                        }
+                    } else {
+                        HStack(spacing: 0) {
+                            main.frame(minWidth: 380, maxWidth: .infinity).layoutPriority(1)
+                            SideResizeHandle(width: $asideWidth, range: 260...min(560, geometry.size.width * 0.45))
+                            asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 430)))
+                        }
+                    }
                 }
-            } else {
-            HStack(spacing: 0) {
-                main
-                    .frame(minWidth: 420, maxWidth: .infinity)
-                    .layoutPriority(1)
-                if geometry.size.width >= 760 {
-                    SideResizeHandle(width: $asideWidth, range: 260...min(560, geometry.size.width * 0.45))
-                    asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 500)))
+                if model.phase == .ready {
+                    Divider().overlay(Theme.line)
+                    ScrollView { MixLanes(model: model).padding(12) }
+                        .frame(height: 225)
+                    AskBar(model: model).padding(12)
                 }
-                rail()
-            }
             }
         }
         .background(Theme.canvas)
@@ -67,8 +73,7 @@ struct SoundFullMode<Rail: View>: View {
         case .ready:
             VStack(spacing: 0) {
                 HStack(spacing: Theme.Space.md) {
-                    sectionLabel("ENERGY")
-                    EnergyDial(energy: model.sound.energy) { model.setEnergy($0) }
+                    Text("Sound mix").textStyle(.bodyStrong)
                     Spacer(minLength: Theme.Space.sm)
                     LoudnessMeter(lufs: model.voiceLoudness)
                 }
@@ -80,7 +85,7 @@ struct SoundFullMode<Rail: View>: View {
                     .onTapGesture { model.togglePlay() }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     .frame(maxWidth: .infinity)
-                    .frame(height: videoHeight)
+                    .frame(minHeight: 100, maxHeight: .infinity)
                     .padding(.horizontal, 12)
                 TransportBar(model: model, zoom: .constant(1), showsZoom: false) {
                     if !model.laneMix.isDefault {
@@ -92,12 +97,7 @@ struct SoundFullMode<Rail: View>: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
-                TimelineResizeBar(height: Binding(get: { 520 - videoHeight }, set: { videoHeight = 520 - $0 }),
-                                  range: 160...420)
-                ScrollView {
-                    MixLanes(model: model)
-                        .padding([.horizontal, .bottom], 12)
-                }
+
             }
         }
     }
@@ -377,6 +377,17 @@ private struct MixSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
+            sectionLabel("ENERGY")
+            EnergyDial(energy: model.sound.energy) { model.setEnergy($0) }
+            Text("Calm suggests no effects; Lively suggests a few; Viral suggests more. Your accepted effects stay in place.")
+                .textStyle(.caption).foregroundStyle(Theme.textMuted)
+            Divider().overlay(Theme.line)
+            HStack {
+                Text("Voice clarity").textStyle(.bodyStrong)
+                Spacer()
+                Button("Open…") { VoiceToolsWindowController.shared.show(for: model.take) }
+                    .buttonStyle(.secondary)
+            }
             sourceLevel("VOICE LEVEL", value: model.recordedMix.voiceDB, isVoice: true)
             sourceLevel("SYSTEM AUDIO LEVEL", value: model.recordedMix.systemDB, isVoice: false)
             Text("Source levels are saved for preview and export. Voice clarity tools are available from Task tools → Voice tools.")

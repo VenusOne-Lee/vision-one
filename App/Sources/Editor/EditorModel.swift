@@ -111,9 +111,13 @@ final class EditorModel: ObservableObject {
     private var fixMutes: [TimeSpan] = []
     private var loadStarted = false
 
-    init(take: Take) {
+    init(take: Take, renderPhase: Phase? = nil) {
         self.take = take
         effects = EffectsModel(take: take, undoManager: undoManager)
+        if let renderPhase {
+            phase = renderPhase
+            loadStarted = true
+        }
     }
 
     // MARK: Loading

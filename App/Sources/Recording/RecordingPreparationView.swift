@@ -8,6 +8,7 @@ import VisionOneKit
 /// menu bar, so this never introduces a second set of recording choices.
 struct RecordingPreparationView: View {
     @ObservedObject var model: HarnessModel
+    var availableHeight: CGFloat? = nil
     @ObservedObject private var recorder = ScreenRecorder.shared
     @ObservedObject private var access = AccessCenter.shared
     @ObservedObject private var devices = CaptureDevices.shared
@@ -37,6 +38,15 @@ struct RecordingPreparationView: View {
                             .resizable().scaledToFit().frame(maxHeight: 260)
                             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                             .accessibilityLabel("Snapshot of the selected recording source")
+                    } else {
+                        VStack(spacing: Theme.Space.sm) {
+                            Image(systemName: "display").font(.system(size: 32))
+                            Text("Source preview").textStyle(.bodyStrong)
+                            Text(inputs.sourceStatus).textStyle(.caption).multilineTextAlignment(.center)
+                        }
+                        .foregroundStyle(Theme.textMuted).frame(maxWidth: .infinity)
+                        .frame(height: 160).background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.line))
                     }
                     HStack {
                         Text(inputs.sourceStatus).textStyle(.caption).foregroundStyle(Theme.textMuted)
@@ -124,10 +134,11 @@ struct RecordingPreparationView: View {
         }
         .padding(Theme.Space.lg)
         .frame(width: min(660, (NSScreen.main?.visibleFrame.width ?? 900) - 80),
-               height: min(760, max(380, (NSScreen.main?.visibleFrame.height ?? 900) - 120)))
+               height: min(760, max(380, availableHeight.map { $0 - 48 } ?? ((NSScreen.main?.visibleFrame.height ?? 900) - 120))))
         .background(Theme.canvas).foregroundStyle(Theme.text).themed()
         .sheet(isPresented: $showingScript) { ScriptSheet(store: script) }
         .task {
+            guard !model.isFixture else { return }
             if let saved = model.currentProject?.mediaDefaults {
                 if let choice = saved.captureChoice { recorder.choice = choice }
                 if let seconds = saved.countdownSeconds { countdown = CountdownLength(saved: seconds) }

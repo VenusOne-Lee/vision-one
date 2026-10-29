@@ -65,25 +65,26 @@ struct EditorFullMode<Rail: View>: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            if geometry.size.width < 760 {
-                // Narrow: the aside goes under the stage.
-                VSplitView {
-                    stage
-                    .frame(minHeight: 320)
-                    if showAside { asidePanel.frame(minHeight: 180) }
-                }
-            } else {
-                HStack(spacing: 0) {
-                    stage
-                        .frame(minWidth: 380, maxWidth: .infinity)
-                        .layoutPriority(1)
-                    if showAside {
-                        SideResizeHandle(width: $asideWidth, range: 260...min(640, geometry.size.width * 0.5))
-                        asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 470)))
+        HStack(spacing: 0) {
+            rail()
+            VStack(spacing: 0) {
+                GeometryReader { geometry in
+                    if geometry.size.width < 760 {
+                        VSplitView {
+                            stage.frame(minHeight: 220)
+                            if showAside { asidePanel.frame(minHeight: 140) }
+                        }
+                    } else {
+                        HStack(spacing: 0) {
+                            stage.frame(minWidth: 380, maxWidth: .infinity).layoutPriority(1)
+                            if showAside {
+                                SideResizeHandle(width: $asideWidth, range: 260...min(640, geometry.size.width * 0.5))
+                                asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 470)))
+                            }
+                        }
                     }
-                    rail()
                 }
+                if model.phase == .ready { editingFooter }
             }
         }
         .background(Theme.canvas)
@@ -151,14 +152,7 @@ struct EditorFullMode<Rail: View>: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
-                TimelineResizeBar(height: $timelineHeight)
-                EditorTimeline(model: model, effects: model.effects, filmstrip: filmstrip, zoom: $zoom,
-                               showWaveform: showWaveform, showEffects: showTracks, showSound: showTracks,
-                               cutsOnRelease: tool == .cut)
-                    .frame(height: timelineHeight)
-                    .padding(.horizontal, 12)
-                AskBar(model: model)
-                    .padding(12)
+
             }
             if let saveError = model.saveError {
                 EditorNotice(title: "Edits not saved", message: saveError, isError: true)
@@ -166,6 +160,19 @@ struct EditorFullMode<Rail: View>: View {
             }
         }
         .background(Theme.canvas)
+    }
+
+    private var editingFooter: some View {
+        VStack(spacing: 0) {
+                TimelineResizeBar(height: $timelineHeight)
+                EditorTimeline(model: model, effects: model.effects, filmstrip: filmstrip, zoom: $zoom,
+                               showWaveform: showWaveform, showEffects: showTracks, showSound: showTracks,
+                               cutsOnRelease: tool == .cut)
+                    .frame(height: min(timelineHeight, 220))
+                    .padding(.horizontal, 12)
+                AskBar(model: model)
+                    .padding(12)
+        }.background(Theme.canvas)
     }
 
     private var video: some View {

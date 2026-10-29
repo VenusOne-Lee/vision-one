@@ -14,9 +14,9 @@ final class ScriptCoachModel: ObservableObject {
     let player = SpeechPlayer()
     private var pending: Task<Void, Never>?
 
-    init() {
+    init(learnPace: Bool = true) {
         recheck()
-        coach.learnPace()
+        if learnPace { coach.learnPace() }
     }
 
     var flags: [ScriptFlag] { report.flags.filter { !dismissed.contains($0.id) } }
@@ -81,6 +81,7 @@ final class ScriptCoachModel: ObservableObject {
 /// read on the right. The divider drags; both sides fold to fit.
 struct ScriptCoachView: View {
     @ObservedObject var model: ScriptCoachModel
+    @Environment(\.workspaceRender) private var workspaceRender
     @ObservedObject private var coach = CoachServices.shared
     @ObservedObject private var player: SpeechPlayer
 
@@ -103,7 +104,7 @@ struct ScriptCoachView: View {
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
         .themed()
-        .task { await coach.refresh() }
+        .task { if !workspaceRender { await coach.refresh() } }
     }
 
     // MARK: Toolbar

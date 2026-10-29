@@ -41,9 +41,9 @@ final class TaskWorkspace: ObservableObject {
     let thumbnail: ThumbnailModel
     private var loaded = false
 
-    init(take: Take) {
+    init(take: Take, renderPhase: EditorModel.Phase? = nil) {
         self.take = take
-        editor = EditorModel(take: take)
+        editor = EditorModel(take: take, renderPhase: renderPhase)
         clips = ClipsModel(take: take, editor: editor)
         thumbnail = ThumbnailModel(take: take, editor: editor, clips: clips)
     }
@@ -98,7 +98,7 @@ final class HarnessModel: ObservableObject {
     /// Native render diagnostics use an isolated snapshot, never the live Desk.
     let isFixture: Bool
 
-    init(snapshot: DeskSnapshot, takes: [Take], page: HarnessPage) {
+    init(snapshot: DeskSnapshot, takes: [Take], page: HarnessPage, renderPhase: EditorModel.Phase? = nil) {
         isFixture = true
         panels = PanelLayoutBook()
         self.snapshot = snapshot
@@ -106,7 +106,7 @@ final class HarnessModel: ObservableObject {
         titles = Dictionary(uniqueKeysWithValues: takes.map { ($0.name, $0.displayTitle()) })
         self.page = page
         project = snapshot.projects.first?.id
-        workspace = snapshot.task(page.taskID ?? UUID())?.take.map(TaskWorkspace.init(take:))
+        workspace = snapshot.task(page.taskID ?? UUID())?.take.map { TaskWorkspace(take: $0, renderPhase: renderPhase) }
     }
 
     private init() {
@@ -442,7 +442,7 @@ final class HarnessModel: ObservableObject {
         let take = task?.take
         guard workspace?.take != take else { return }
         workspace?.close()
-        workspace = take.map(TaskWorkspace.init(take:))
+        workspace = take.map { TaskWorkspace(take: $0) }
         if workspace == nil, mode != .tasks { mode = .tasks }
     }
 
