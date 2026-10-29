@@ -29,6 +29,7 @@ enum PostDraftVerification {
 
     static func run(in root: URL) async throws {
         let parent = root.appendingPathComponent("post-draft-regression")
+        if FileManager.default.fileExists(atPath: parent.path) { try FileManager.default.removeItem(at: parent) }
         let a = Take(folder: parent.appendingPathComponent("A"))
         let b = Take(folder: parent.appendingPathComponent("B"))
         for take in [a, b] { try FileManager.default.createDirectory(at: take.folder, withIntermediateDirectories: true) }

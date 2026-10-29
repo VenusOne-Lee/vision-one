@@ -9,13 +9,14 @@ final class PostDraftTests: XCTestCase {
         let b = Take(folder: root.appendingPathComponent("B"))
         for take in [a, b] { try FileManager.default.createDirectory(at: take.folder, withIntermediateDirectories: true) }
         try PostDrafts.save("A LinkedIn", destination: "linkedin", for: a)
+        try PostDrafts.save("A launch", destination: "versionone", for: a)
         let originalA = try Data(contentsOf: PostDrafts.url(for: a))
         try PostDrafts.save("B LinkedIn", destination: "linkedin", for: b)
         try PostDrafts.save("B X", destination: "x", for: b)
         try PostDrafts.save("", destination: "linkedin", for: b)
         XCTAssertEqual(try Data(contentsOf: PostDrafts.url(for: a)), originalA)
         // Recreate Take values, as after navigation/relaunch.
-        XCTAssertEqual(try PostDrafts.read(for: Take(folder: a.folder)), ["linkedin": "A LinkedIn"])
+        XCTAssertEqual(try PostDrafts.read(for: Take(folder: a.folder)), ["linkedin": "A LinkedIn", "versionone": "A launch"])
         XCTAssertEqual(try PostDrafts.read(for: Take(folder: b.folder)), ["linkedin": "", "x": "B X"])
         XCTAssertFalse(FileManager.default.fileExists(atPath: a.shareURL.path))
     }

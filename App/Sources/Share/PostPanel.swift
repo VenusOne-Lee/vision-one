@@ -111,7 +111,7 @@ private struct PostPanelContent: View {
                 .foregroundStyle(Theme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
             RunStatus(run: agents.sharerRun)
-            Button("Draft with Sharer") { agents.runSharer(launch: true) }
+            Button("Draft with Sharer") { if canDraftWithSharer { agents.runSharer(launch: true) } }
                 .buttonStyle(PillButtonStyle(kind: .primary))
                 .disabled(!canDraftWithSharer || agents.sharerRun.isRunning)
         }
@@ -142,17 +142,22 @@ private struct VersionOneCard: View {
     private static let host = "versionone.co.za"
 
     @State private var editing = false
-    @State private var asking = false
-    @State private var posted = false
-    @State private var text = ""
+    @StateObject private var draftCopy: PostDraftControl
+
+    init(take: Take, agents: AgentsModel, rules: PostRulesStore) {
+        self.take = take
+        self.agents = agents
+        self.rules = rules
+        _draftCopy = StateObject(wrappedValue: PostDraftControl(take: take, destination: "versionone"))
+    }
 
     private var draft: String { agents.share?.launch?.postText ?? "" }
-    private var words: String { text.isEmpty ? draft : text }
+    private var words: String { draftCopy.manualText ?? draft }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             HStack {
-                Text("VERSION ONE · \(posted ? "COPIED" : "DRAFT")")
+                Text("VERSION ONE · \(draftCopy.posted ? "COPIED" : "DRAFT")")
                     .textStyle(.caption)
                     .tracking(0.6)
                     .foregroundStyle(Theme.textMuted)
@@ -165,7 +170,7 @@ private struct VersionOneCard: View {
             }
             if let launch = agents.share?.launch {
                 if editing {
-                    TextEditor(text: $text)
+                    TextEditor(text: Binding(get: { words }, set: { draftCopy.edit($0) }))
                         .textStyle(.body)
                         .scrollContentBackground(.hidden)
                         .padding(6)
@@ -173,20 +178,21 @@ private struct VersionOneCard: View {
                         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
                         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md)
                             .strokeBorder(Theme.lineStrong, lineWidth: Theme.Stroke.hairline))
+                        .disabled(!draftCopy.loaded)
                 } else {
-                    Text(text.isEmpty ? launch.name : (text.split(separator: "\n").first.map(String.init) ?? launch.name))
+                    Text(draftCopy.manualText == nil ? launch.name : (words.split(separator: "\n").first.map(String.init) ?? "Post copy is empty"))
                         .textStyle(.headline)
                         .foregroundStyle(Theme.text)
-                    Text(text.isEmpty ? launch.oneLine : text.split(separator: "\n").dropFirst().joined(separator: "\n"))
+                    Text(draftCopy.manualText == nil ? launch.oneLine : words.split(separator: "\n").dropFirst().joined(separator: "\n"))
                         .textStyle(.body)
                         .foregroundStyle(Theme.text)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if asking {
+                if draftCopy.asking {
                     ApprovalCard(agent: "Sharer", question: PostApprovalText.question(to: "Version One"),
                                  quote: words, options: PostApprovalText.options(scope: rules.scope),
-                                 onAnswer: answer, onLater: { asking = false })
-                } else if posted {
+                                 onAnswer: answer, onLater: { draftCopy.asking = false })
+                } else if draftCopy.posted {
                     Text("Copied. Version One is open in your browser: paste it into your launch and post.")
                         .textStyle(.caption)
                         .foregroundStyle(Theme.textMuted)
@@ -201,9 +207,9 @@ private struct VersionOneCard: View {
                     HStack(spacing: Theme.Space.sm) {
                         Button("Copy and open Version One") { approve() }
                             .buttonStyle(PillButtonStyle(kind: .primary, size: .small))
-                            .disabled(words.isEmpty)
+                            .disabled(words.isEmpty || !draftCopy.loaded)
                         Button(editing ? "Done" : "Edit") {
-                            if !editing, text.isEmpty { text = draft }
+                            if !editing, draftCopy.manualText == nil { draftCopy.edit(draft) }
                             editing.toggle()
                         }
                         .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
@@ -213,30 +219,37 @@ private struct VersionOneCard: View {
                 Text("The Sharer's draft has no Version One launch yet.")
                     .textStyle(.body)
                     .foregroundStyle(Theme.textMuted)
-                Button("Write a launch") { agents.runSharer(launch: true) }
+                Button("Write a launch") { if PostCopy.canDraft(for: take) { agents.runSharer(launch: true) } }
                     .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
-                    .disabled(agents.sharerRun.isRunning)
+                    .disabled(!PostCopy.canDraft(for: take) || agents.sharerRun.isRunning)
+            }
+            if let problem = draftCopy.problem {
+                Text(problem).textStyle(.caption).foregroundStyle(Theme.error)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(draftCopy.loaded ? "Retry saving copy" : "Retry loading copy") {
+                    if draftCopy.loaded { draftCopy.save() } else { draftCopy.reload() }
+                }.buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
             }
             RunStatus(run: agents.sharerRun)
         }
         .padding(Theme.Space.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
-        .statusOutline(posted ? .accepted : .proposed, cornerRadius: Theme.Radius.lg)
+        .statusOutline(draftCopy.posted ? .accepted : .proposed, cornerRadius: Theme.Radius.lg)
         .onChange(of: agents.share) { _, _ in
-            // A fresh draft replaces your edits and asks again.
-            text = ""
-            posted = false
+            // Generated copy never discards an explicit manual edit.
+            draftCopy.asking = false
+            draftCopy.posted = false
         }
     }
 
     private func approve() {
         editing = false
-        if rules.allows(Self.host) { post() } else { asking = true }
+        if rules.allows(Self.host) { post() } else { draftCopy.asking = true }
     }
 
     private func answer(_ answer: ApprovalAnswer) {
-        asking = false
+        draftCopy.asking = false
         switch answer {
         case .yes: post()
         case .yesAlways:
@@ -258,7 +271,7 @@ private struct VersionOneCard: View {
         }
         copy(words)
         open()
-        posted = true
+        draftCopy.posted = true
     }
 
     private func copy(_ words: String) {
