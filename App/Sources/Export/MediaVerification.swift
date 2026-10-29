@@ -329,7 +329,10 @@ enum MediaVerification {
         await editor.loadIfNeeded()
         defer { editor.close() }
         try require(editor.phase == .ready, "Silent imported video could not open in the editor")
-        guard case .failed = editor.transcriptState else { throw Failure(message: "Silent import did not explain its missing transcript") }
+        try require(editor.transcriptState == .noAudio && !editor.canRetryTranscript,
+                    "Silent import did not offer permanent no-audio recovery")
+        try require(try TranscriptFailure.read(from: imported.transcriptFailedURL).reason == .noAudio,
+                    "Silent import lost its typed no-audio reason")
         editor.selection = TimeSpan(start: 0.5, end: 1)
         editor.cutSelection()
         try require(abs(editor.edits.outputDuration - 2.5) < 0.1 && editor.undoManager.canUndo, "Silent import timeline editing failed")
