@@ -112,11 +112,17 @@ public struct AgentRunner: Sendable {
             let transcript = try Transcript.read(from: take.transcriptURL)
             let edits = try EditList.load(from: take.editsURL, sourceDuration: transcript.duration)
             await board.step(id, 1)
-            let pack = try await SharerAgent(ladder: ladder)
-                .draft(transcript: transcript, edits: edits, brief: brief, product: product, launch: launch)
-            await board.step(id, 2)
-            try pack.write(for: take)
-            return (AgentReceipt.share(pack), [AgentJob.Change.sharePack])
+            do {
+                let pack = try await SharerAgent(ladder: ladder)
+                    .draft(transcript: transcript, edits: edits, brief: brief, product: product, launch: launch)
+                await board.step(id, 2)
+                try pack.write(for: take)
+                return (AgentReceipt.share(pack), [AgentJob.Change.sharePack])
+            } catch let reason as SharerAgent.TooLittleSaid {
+                // A successful recording with no/short speech is not a failed
+                // AI job. Preserve any existing drafts and offer manual copy.
+                return (reason.recoveryMessage, [])
+            }
         }
     }
 

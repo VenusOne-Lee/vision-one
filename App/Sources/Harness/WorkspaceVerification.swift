@@ -52,6 +52,19 @@ enum WorkspaceVerification {
         try await TranscriptViewVerification.run(source: take, in: root)
         try await WorkspaceUndoVerification.run(source: take, in: root)
         let transcriptFixtures = try TranscriptViewVerification.stateFixtures(source: take, in: root)
+        guard let emptyPostTake = transcriptFixtures.first(where: { $0.0 == "transcript-empty" })?.1 else {
+            throw MediaVerification.Failure(message: "No-speech post fixture missing")
+        }
+        let postModel = AgentsModel(take: emptyPostTake)
+        postModel.runSharer()
+        for _ in 0..<200 {
+            if !postModel.sharerRun.isRunning { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard case let .done(message) = postModel.sharerRun, message.contains("write your own copy"), postModel.share == nil else {
+            throw MediaVerification.Failure(message: "No-speech post copy appeared as a failed run")
+        }
+        print("Native no-speech post-copy recovery verification passed")
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -109,6 +122,7 @@ enum WorkspaceVerification {
                 let suffix = "\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide")"
                 let tools: [(String, AnyView)] = [
                     ("library-filter-empty", AnyView(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }))),
+                    ("post-no-speech", AnyView(PostPanel(take: emptyPostTake))),
                     ("task-tools", AnyView(WorkspaceToolsSheet(model: model, close: {}))),
                     ("recording", AnyView(RecordingPreparationView(model: model, availableHeight: size.height))),
                     ("script-coach", AnyView(ScriptCoachView(model: ScriptCoachModel(learnPace: false)))),

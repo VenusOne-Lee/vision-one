@@ -82,23 +82,29 @@ struct PostPanel: View {
         FileManager.default.fileExists(atPath: take.transcriptURL.path)
     }
 
+    private var canDraftWithSharer: Bool {
+        guard let transcript = try? Transcript.read(from: take.transcriptURL),
+              let edits = try? EditList.load(from: take.editsURL, sourceDuration: transcript.duration) else { return false }
+        return transcript.sentences(keeping: edits).reduce(0) { $0 + $1.wordIDs.count } >= SharerAgent.minimumWords
+    }
+
     /// Before the Sharer has written anything: one button, or a wait for
     /// the transcript it reads.
     private var draftFirst: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            Text("Nothing drafted yet")
+            Text(canDraftWithSharer ? "Nothing drafted yet" : "Write your own post copy")
                 .textStyle(.headline)
                 .foregroundStyle(Theme.text)
-            Text(hasTranscript
+            Text(canDraftWithSharer
                  ? "The Sharer writes a title, chapters, a Version One launch and a post for each network from what you said."
-                 : "Waiting for the transcript. The Sharer writes your posts from what you said.")
+                 : "Automatic drafts need at least \(SharerAgent.minimumWords) kept words. Your video is ready to edit and export. Expand a network below to write your own copy.")
                 .textStyle(.body)
                 .foregroundStyle(Theme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
             RunStatus(run: agents.sharerRun)
             Button("Draft with Sharer") { agents.runSharer(launch: true) }
                 .buttonStyle(PillButtonStyle(kind: .primary))
-                .disabled(!hasTranscript || agents.sharerRun.isRunning)
+                .disabled(!canDraftWithSharer || agents.sharerRun.isRunning)
         }
         .padding(Theme.Space.md)
         .frame(maxWidth: .infinity, alignment: .leading)
