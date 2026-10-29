@@ -20,7 +20,6 @@ struct HarnessView: View {
     @AppStorage("harness.stageFraction") private var stageFraction = 0.58
     /// Editor or Sound picked with no takes yet: their empty state shows.
     @State private var noTakesMode: HarnessMode?
-    @State private var showingExport = false
     @State private var showingTemplate = false
 
     var body: some View {
@@ -65,9 +64,9 @@ struct HarnessView: View {
         .sheet(isPresented: $model.preparingRecording) {
             RecordingPreparationView(model: model)
         }
-        .sheet(isPresented: $showingExport) {
+        .sheet(isPresented: $model.presentingExport) {
             if let workspace = model.workspace {
-                ExportSheet(take: workspace.take, keep: nil) { showingExport = false }
+                ExportSheet(take: workspace.take, keep: nil) { model.presentingExport = false }
             }
         }
         .onReceive(recorder.$lastTake) { _ in model.refreshTakes() }
@@ -79,12 +78,13 @@ struct HarnessView: View {
             noTakesMode = nil
         }
         .onChange(of: model.takes.isEmpty) { _, empty in if !empty { noTakesMode = nil } }
-        .alert("Something went wrong", isPresented: Binding(get: { model.problem != nil },
-                                                           set: { if !$0 { model.problem = nil } })) {
-            Button("OK") { model.problem = nil }
-        } message: {
-            Text(model.problem ?? "")
-        }
+        .alert(model.clarification == nil ? "Something went wrong" : "Clarify request",
+               isPresented: Binding(get: { model.problem != nil || model.clarification != nil }, set: {
+                   if !$0 { model.problem = nil; model.clarification = nil }
+               })) {
+            Button("OK") { model.problem = nil; model.clarification = nil }
+        } message: { Text(model.clarification ?? model.problem ?? "") }
+
     }
 
     // MARK: Top bar
@@ -101,7 +101,7 @@ struct HarnessView: View {
                 .help("Tasks shows the thread; Editor and Sound fill the window. Esc comes back.")
             Spacer(minLength: Theme.Space.sm)
             if model.workspace != nil {
-                Button("Export…") { showingExport = true }
+                Button("Export…") { model.presentingExport = true }
                     .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
             }
             contextualTools

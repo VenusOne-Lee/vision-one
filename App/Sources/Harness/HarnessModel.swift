@@ -82,6 +82,8 @@ final class HarnessModel: ObservableObject {
     @Published private(set) var panels: PanelLayoutBook
     @Published var problem: String?
     @Published var preparingRecording = false
+    @Published var presentingExport = false
+    @Published var clarification: String?
     /// What's typed in the composer.
     @Published var draft = ""
     /// Bumped to put the cursor in the composer.
@@ -191,6 +193,15 @@ final class HarnessModel: ObservableObject {
         Task { await desk.archive(taskID) }
     }
 
+    func restore(_ taskID: UUID) {
+        let desk = self.desk
+        Task {
+            await desk.archive(taskID, false)
+            snapshot = await desk.snapshot
+            open(taskID)
+        }
+    }
+
     // MARK: Panels
 
     var layout: PanelLayout {
@@ -221,7 +232,7 @@ final class HarnessModel: ObservableObject {
         let route = AskRouter.route(text)
         if case let .clarify(message) = route {
             draft = raw
-            problem = message
+            clarification = message
             return
         }
         if case let .open(name) = route {
@@ -260,7 +271,13 @@ final class HarnessModel: ObservableObject {
     }
 
     private func openCommand(_ name: String, rest: String) {
+        if ["edit", "sound", "review", "captions", "music", "export"].contains(name), workspace == nil {
+            problem = "Open a task with a video, or import or record one first."
+            return
+        }
         switch name {
+        case "export": presentingExport = true
+        case "library": page = .library; mode = .tasks
         case "record":
             if ScreenRecorder.shared.phase.isLive {
                 Task { await ScreenRecorder.shared.toggle() }

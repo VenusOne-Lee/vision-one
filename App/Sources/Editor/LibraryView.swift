@@ -23,6 +23,7 @@ struct LibraryView: View {
     @FocusState private var searchFocused: Bool
     /// The last take moved to the Trash, for Undo.
     @State private var trashed: Trashed?
+    @State private var fileProblem: String?
     @AppStorage("library.sort") private var sort = LibrarySort.newest
 
     private var query: LibraryQuery { LibraryQuery(search: search, filter: filter, sort: sort) }
@@ -34,6 +35,9 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity)
         }
         .overlay(alignment: .bottom) { trashToast }
+        .alert("Library action failed", isPresented: Binding(get: { fileProblem != nil }, set: { if !$0 { fileProblem = nil } })) {
+            Button("OK") { fileProblem = nil }
+        } message: { Text(fileProblem ?? "") }
         .frame(minWidth: 480, minHeight: 420)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
@@ -214,7 +218,7 @@ struct LibraryView: View {
         do {
             try FileManager.default.trashItem(at: item.take.folder, resultingItemURL: &resulting)
         } catch {
-            NSSound.beep()
+            fileProblem = "Couldn't move this video to the Trash: \(error.localizedDescription)"
             return
         }
         if let inTrash = resulting as URL? {
@@ -225,9 +229,13 @@ struct LibraryView: View {
 
     private func undoTrash() {
         guard let trashed else { return }
-        try? FileManager.default.moveItem(at: trashed.inTrash, to: trashed.original)
-        withAnimation { self.trashed = nil }
-        refresh()
+        do {
+            try FileManager.default.moveItem(at: trashed.inTrash, to: trashed.original)
+            withAnimation { self.trashed = nil }
+            refresh()
+        } catch {
+            fileProblem = "Couldn't restore this video. It remains in the Trash: \(error.localizedDescription)"
+        }
     }
 
     @ViewBuilder
@@ -253,6 +261,7 @@ struct LibraryView: View {
             .task(id: trashed) {
                 // A newer trash restarts the wait; only a full wait hides it.
                 guard (try? await Task.sleep(for: .seconds(8))) != nil else { return }
+                guard fileProblem == nil else { return }
                 withAnimation { self.trashed = nil }
             }
         }

@@ -10,6 +10,8 @@ public struct SlashCommand: Equatable, Sendable {
     public static let all: [SlashCommand] = [
         SlashCommand(name: "record", summary: "Record your screen, camera and mic", runsAgents: false),
         SlashCommand(name: "import", summary: "Import a video into an editable task", runsAgents: false),
+        SlashCommand(name: "export", summary: "Open delivery and export options", runsAgents: false),
+        SlashCommand(name: "library", summary: "Find and resume a video", runsAgents: false),
         SlashCommand(name: "cut", summary: "Cut ums, pauses and retakes", runsAgents: true),
         SlashCommand(name: "captions", summary: "Add or restyle captions", runsAgents: false),
         SlashCommand(name: "clips", summary: "Make short clips for Reels and TikTok", runsAgents: true),
@@ -69,10 +71,16 @@ public enum AskRouter {
             "add captions": "captions", "show captions": "captions",
             "review changes": "review", "show changes": "review",
             "copy a style": "style", "choose music": "music",
-            "import a video": "import", "import video": "import"
+            "import a video": "import", "import video": "import",
+            "export": "export", "open export": "export", "export video": "export",
+            "library": "library", "open library": "library", "prepare recording": "record"
         ]
         if let command = navigation[text.lowercased().trimmingCharacters(in: .punctuationCharacters)] {
             return .open(command)
+        }
+        let lower = text.lowercased()
+        if ["what is ", "what are ", "how does ", "how do ", "why ", "where "].contains(where: lower.hasPrefix) {
+            return .clarify("Are you asking for instructions or a change to this video? Choose a tool with /, or describe the edit you want applied.")
         }
         let plan = plan(for: text)
         guard !plan.steps.isEmpty else {

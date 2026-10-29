@@ -82,6 +82,16 @@ struct HarnessSidebar: View {
                 IconButton("Settings", systemImage: "gearshape", shortcut: "⌘,") {
                     SettingsWindowController.shared.show()
                 }
+                let archived = model.snapshot.tasks.filter(\.archived)
+                if !archived.isEmpty {
+                    Menu {
+                        ForEach(archived) { task in
+                            Button("Restore \(task.title)") { model.restore(task.id) }
+                        }
+                    } label: { Image(systemName: "archivebox") }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .accessibilityLabel("Archived tasks")
+                }
                 Spacer()
                 let waiting = model.snapshot.needsYou.count
                 if waiting > 0 {

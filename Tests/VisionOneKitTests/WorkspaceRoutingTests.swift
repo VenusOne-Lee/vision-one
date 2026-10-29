@@ -24,3 +24,13 @@ extension WorkspaceRoutingTests {
         XCTAssertEqual(AskRouter.route("Import a video"), .open("import"))
     }
 }
+
+extension WorkspaceRoutingTests {
+    func testQuestionsDoNotExecuteEditsAndDeliveryNavigationOpensTools() {
+        for ask in ["How do I cut pauses?", "What are the export options?", "Why is this 30 seconds?"] {
+            guard case .clarify = AskRouter.route(ask) else { return XCTFail("Executed a question: \(ask)") }
+        }
+        XCTAssertEqual(AskRouter.route("Open export"), .open("export"))
+        XCTAssertEqual(AskRouter.route("Open library"), .open("library"))
+    }
+}
