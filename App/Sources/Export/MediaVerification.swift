@@ -25,19 +25,23 @@ enum MediaVerification {
         try await movie(at: take.cameraURL, green: true)
         let tone = root.appendingPathComponent("tone.wav")
         try audio(at: tone)
+        print("Media check: fixture tracks generated; preparing source composition")
         let composition = AVMutableComposition()
         let sourceAsset = AVURLAsset(url: silent)
         let video = try await sourceAsset.loadTracks(withMediaType: .video)[0]
-        let voice = try await AVURLAsset(url: tone).loadTracks(withMediaType: .audio)[0]
+        let voiceAsset = AVURLAsset(url: tone)
+        let voice = try await voiceAsset.loadTracks(withMediaType: .audio)[0]
         let duration = CMTime(seconds: 3, preferredTimescale: 600)
         try composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)?
             .insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: video, at: .zero)
         try composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)?
             .insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: voice, at: .zero)
-        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
+        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
             throw Failure(message: "Couldn't create the fixture export session")
         }
+        print("Media check: exporting source fixture with audio")
         try await session.export(to: take.screenURL, as: .mov)
+        print("Media check: source fixture ready; preparing caption/camera export")
         try CameraTrack(cameraName: "Synthetic green camera", startOffset: 0,
                         placements: [.init(t: 0, x: 0.75, y: 0.1, size: 0.2)]).write(to: take.cameraInfoURL)
         try Transcript(language: "en", engine: "fixture", duration: 3,
@@ -57,9 +61,11 @@ enum MediaVerification {
         exporter.clip = (.vertical, .follow)
         exporter.captionRingHex = 0x0000FF
         exporter.overlays = [VerificationOverlay()]
+        print("Media check: rendering portrait MP4")
         let output = try await exporter.run(to: root.appendingPathComponent("portrait-with-captions.mp4")) { _ in }
         let warning = CaptionExport.writeFiles(for: take, video: output.url, timeline: output.timeline, offset: output.videoStart)
         try require(warning == nil, warning ?? "Subtitle writing failed")
+        print("Media check: decoding rendered MP4 and sidecars")
         let asset = AVURLAsset(url: output.url)
         let size = try await asset.loadTracks(withMediaType: .video)[0].load(.naturalSize)
         let length = try await asset.load(.duration).seconds

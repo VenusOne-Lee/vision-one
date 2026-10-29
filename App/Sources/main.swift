@@ -31,7 +31,10 @@ if CommandLine.arguments.contains("--mcp") {
     Task { @MainActor in
         do { try await MediaVerification.run(in: output); exit(0) }
         catch {
-            FileHandle.standardError.write(Data("Media verification failed: \(error.localizedDescription)\n".utf8))
+            let nsError = error as NSError
+            let details = "Media verification failed: \(nsError.domain) \(nsError.code): \(error.localizedDescription) · \(nsError.userInfo)\n"
+            FileHandle.standardError.write(Data(details.utf8))
+            try? Data(details.utf8).write(to: output.appendingPathComponent("failure.txt"))
             exit(1)
         }
     }
