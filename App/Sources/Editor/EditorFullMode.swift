@@ -477,8 +477,13 @@ struct TranscriptPane: View {
                              isError: false)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case let .failed(message):
-                EditorNotice(title: "Transcript unavailable", message: message, isError: true)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: Theme.Space.md) {
+                    EditorNotice(title: "Transcript unavailable", message: message, isError: true)
+                    Button("Retry this transcript") { model.retryTranscript() }.buttonStyle(.secondary)
+                    Text("Playback, timeline edits and export remain available.")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
                 if model.words.isEmpty {
                     EditorNotice(title: "No words found",

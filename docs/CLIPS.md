@@ -28,7 +28,7 @@ The best five that don't overlap are added as dashed suggestions. The Clipper ag
 
 **Formats.** Vertical 1080 × 1920, square 1080 × 1080, wide 1920 × 1080, at up to 30 fps.
 
-**Framing.** `ClipFrame.rect` is the largest window of the format's shape that fits the screen, centred where asked and slid back inside the frame. `follow` centres on where the cursor spent the clip (median position, clicks count three times); `fixed` stays where you dragged it on the video; `fit` shows the whole screen on the canvas colour. A moving follow-the-cursor window comes from the shared reframe planner (brand kit work).
+**Framing.** `ClipFrame.rect` is the largest window of the format's shape that fits the screen, centred where asked and slid back inside the frame. `follow` uses the shared `ReframePlanner` on source time, including smoothing and look-ahead. Preview and render use the same plan; rendered output maps its edited clock back through the kept spans. `fixed` stays where you dragged it; `fit` shows the whole screen. Switching from follow to fixed freezes a steady cursor-centred window.
 
 **Export.** `VideoExporter` with the clip's kept spans and a crop. `FrameCompositor` cuts the window out of each frame (after blur and zoom) and scales it to the format. Files sit in the take folder: `Vision One 2026-10-27 at 10.53.12 - Ship your first beta (vertical).mp4`.
 
@@ -48,10 +48,9 @@ The best five that don't overlap are added as dashed suggestions. The Clipper ag
 
 ## Export consistency update — 29 October 2026
 
-Clip export now passes the take’s caption settings and brand overlays, writes timed subtitle sidecars, and includes the separate camera track. The camera is composed after cropping and clamped within the output frame. Native build and logic tests pass; a rendered clip with a separate camera track still needs a media-level check.
+Clip export now passes the take’s caption settings and brand overlays, writes timed subtitle sidecars, and includes the separate camera track. The camera is composed after cropping and clamped within the output frame. `ClipsModel` shows subtitle-write warnings, queued/cancelled clips and an actual rendered-MP4 preview. The macOS CI media check renders and decodes a synthetic camera/caption clip; see `CLOUD-VERIFICATION.md` for commit-specific evidence and remaining real-media checks.
 
 ## Not yet
 
-- A window that moves with the cursor during the clip (`ReframePlan`)
 - Brand kit fonts and ring colour (`ThumbnailStyle(brandKit:)`)
 - AI-made covers with your own OpenAI key

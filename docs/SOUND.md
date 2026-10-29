@@ -54,3 +54,11 @@ Turning the dial replaces only the suggestions; accepted, rejected and hand-plac
 ```
 
 A file bed has `filePath` instead of `libraryID`. If the file has moved, the editor says so and the rest of the sound still plays.
+
+## Producer Workspace source levels
+
+`recorded-mix.json` stores recorded microphone and system-audio levels separately (`RecordedMix`). The Sound mix pane saves them with undo/redo and previews them without waiting for a media rebuild. Export applies the same gains, including the gain restored after cut/word-replacement fades. Existing Mute/Solo controls in `LaneMix` remain temporary listening controls and are labelled accordingly.
+
+Energy changes effect suggestions, not vocal delivery or loudness. Voice cleanup, re-saying a line and provider-dependent voice tools remain available through Task tools → Voice tools. Small windows show mixer controls below the video instead of hiding them.
+
+CI's synthetic audio check compares decoded preview and exported signal peaks. This does not replace listening to real voice, music, ducking and replacement audio; see `CLOUD-VERIFICATION.md`.

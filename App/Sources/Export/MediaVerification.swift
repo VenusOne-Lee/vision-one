@@ -52,6 +52,7 @@ enum MediaVerification {
         ])
         try log.write(to: take.eventsURL)
 
+        try RecordedMix(voiceDB: -6, systemDB: -12).write(for: take)
         var exporter = VideoExporter(take: take, preset: .hd1080)
         exporter.clip = (.vertical, .follow)
         exporter.captionRingHex = 0x0000FF
@@ -68,7 +69,13 @@ enum MediaVerification {
         let decodedAudio = try await TakeAudio.read(Take(folder: take.folder))
         try require(decodedAudio.samples.contains { abs($0) > 0.05 }, "Fixture audio is silent")
         let exportedAudio = try await audioPeak(asset)
-        try require(exportedAudio > 0.05, "Decoded exported audio is silent")
+        try require(exportedAudio > 0.08 && exportedAudio < 0.18, "Saved microphone level did not reach the rendered audio")
+        let editor = EditorModel(take: take)
+        await editor.loadIfNeeded()
+        defer { editor.close() }
+        guard let preview = editor.player.currentItem else { throw Failure(message: "Editor preview missing") }
+        let previewPeak = try await audioPeak(preview.asset, mix: preview.audioMix)
+        try require(abs(previewPeak - exportedAudio) < 0.03, "Saved source mix differs between preview and export")
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
@@ -97,7 +104,7 @@ enum MediaVerification {
         let report: [String: Any] = [
             "dimensions": [Int(size.width), Int(size.height)], "duration": length,
             "cameraGreenPixels": pixels.green, "brandYellowPixels": pixels.yellow,
-            "captionWhitePixels": pixels.white, "decodedAudioPeak": exportedAudio,
+            "captionWhitePixels": pixels.white, "decodedAudioPeak": exportedAudio, "previewAudioPeak": previewPeak,
             "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback"],
             "remaining": ["real capture and permissions", "native UI light/dark walkthrough", "human inspection of framing, caption placement and audible mix"]
         ]
@@ -150,12 +157,13 @@ enum MediaVerification {
         for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = Float(sin(Double(i) * 2 * .pi * 440 / 48_000) * 0.25) }
         try file.write(from: buffer)
     }
-    private static func audioPeak(_ asset: AVAsset) async throws -> Double {
-        let track = try await asset.loadTracks(withMediaType: .audio)[0]
+    private static func audioPeak(_ asset: AVAsset, mix: AVAudioMix? = nil) async throws -> Double {
+        let tracks = try await asset.loadTracks(withMediaType: .audio)
         let reader = try AVAssetReader(asset: asset)
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+        let output = AVAssetReaderAudioMixOutput(audioTracks: tracks, audioSettings: [
             AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMIsFloatKey: true, AVLinearPCMBitDepthKey: 32
         ])
+        output.audioMix = mix
         reader.add(output)
         try require(reader.startReading(), "Couldn't decode exported audio")
         var peak = 0.0
@@ -165,19 +173,22 @@ enum MediaVerification {
     }
     private static func analyse(_ image: CGImage) throws -> (green: Int, yellow: Int, white: Int) {
         var data = [UInt8](repeating: 0, count: image.width * image.height * 4)
-        guard let context = CGContext(data: &data, width: image.width, height: image.height, bitsPerComponent: 8,
+        return try data.withUnsafeMutableBytes { raw in
+        guard let context = CGContext(data: raw.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8,
             bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             throw Failure(message: "Couldn't decode frame pixels")
         }
         context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
         var green = 0, yellow = 0, white = 0
-        for p in stride(from: 0, to: data.count, by: 4) {
-            let r = Int(data[p]), g = Int(data[p + 1]), b = Int(data[p + 2])
+        let bytes = raw.bindMemory(to: UInt8.self)
+        for p in stride(from: 0, to: raw.count, by: 4) {
+            let r = Int(bytes[p]), g = Int(bytes[p + 1]), b = Int(bytes[p + 2])
             if g > 140 && g > r + 50 && g > b + 50 { green += 1 }
             if r > 180 && g > 180 && b < 80 { yellow += 1 }
             if r > 220 && g > 220 && b > 220 { white += 1 }
         }
         return (green, yellow, white)
+        }
     }
     private static func save(_ image: CGImage, to url: URL) throws {
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {

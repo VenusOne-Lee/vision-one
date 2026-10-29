@@ -15,3 +15,12 @@ final class RecordedMixTests: XCTestCase {
         XCTAssertEqual(RecordedMix.load(for: take), mix)
     }
 }
+
+extension RecordedMixTests {
+    func testPortraitOutputKeepsFourByFiveTemplateShape() throws {
+        let settings = try ExportPlanner.settings(for: .portrait,
+            source: ExportSource(width: 1920, height: 1080, frameRate: 30), duration: 3)
+        XCTAssertEqual(settings.width, 1080)
+        XCTAssertEqual(settings.height, 1350)
+    }
+}

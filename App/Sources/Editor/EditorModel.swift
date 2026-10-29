@@ -192,7 +192,7 @@ final class EditorModel: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self, !Task.isCancelled else { return }
-                if self.transcriptState == .waiting { self.loadTranscript() }
+                if self.transcriptState != .ready { self.loadTranscript() }
                 if self.mergeOutsideCuts() { self.scheduleRebuild() }
                 self.pickUpVoiceEdits()
             }
@@ -230,7 +230,22 @@ final class EditorModel: ObservableObject {
         if mergeOutsideCuts() { scheduleRebuild() }
     }
 
+    func retryTranscript() {
+        transcriptState = .waiting
+        Transcriber.shared.retry(take)
+    }
+
     private func loadTranscript() {
+        let transcriber = Transcriber.shared
+        if transcriber.isWorking(on: take) { transcriptState = .waiting; return }
+        if let failure = try? TranscriptFailure.read(from: take.transcriptFailedURL) {
+            transcriptState = .failed(failure.message)
+            return
+        }
+        if let message = transcriber.failures[take.name] {
+            transcriptState = .failed(message)
+            return
+        }
         guard FileManager.default.fileExists(atPath: take.transcriptURL.path) else {
             transcriptState = .waiting
             return
@@ -396,8 +411,13 @@ final class EditorModel: ObservableObject {
         scheduleRebuild()
     }
 
-    func applyRecordedMix(_ next: RecordedMix) {
-        let previous = recordedMix
+    func previewRecordedMix(_ next: RecordedMix) {
+        recordedMix = next
+        player.currentItem?.audioMix = previewAudioMix()
+    }
+
+    func applyRecordedMix(_ next: RecordedMix, from start: RecordedMix? = nil) {
+        let previous = start ?? recordedMix
         guard previous != next else { return }
         undoManager.registerUndo(withTarget: self) { model in
             MainActor.assumeIsolated { model.applyRecordedMix(previous) }

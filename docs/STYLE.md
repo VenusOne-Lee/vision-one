@@ -32,7 +32,9 @@ fast-talking-short/
 
 Anything unticked comes from the built-in look for the same purpose. `CopiedStyle` gives the rest of the app `energy`, `targetSeconds`, `zoomsPerMinute`, `keptPause`, `wantsMusic` and `cardColours`.
 
-On Home, saved templates sit after **Just record**. Picking one sets `ai.nextPurpose` to its purpose and `ai.nextTemplate` to its id.
+Project settings offers built-in and saved reusable styles through `TemplatePicker`. New recordings/imports receive a once-only snapshot in their `template/` folder. Task tools → Apply a reusable style explicitly restyles an existing video. `AppliedTemplate` applies caption style, purpose/Energy, target length and export shapes; the transcriber reads the copied cleanup rhythm. Export uses the snapshotted intro/outro/watermark choices. Existing caption size, placement and language survive explicit restyling. A missing asset or settings-write failure rolls the operation back.
+
+Copied palettes and zoom-frequency analysis are still reference metadata; music audio is never copied from a reference. The UI states these limits. Source levels and manually selected music/effects remain independently editable.
 
 ## Links
 
@@ -51,6 +53,6 @@ The scan needs no AI. `StyleNamer` asks the AI ladder (task `style.name`) for a 
 
 ## Still to do
 
-- Template picker in the editor reading `ai.nextTemplate`, and the Editor, zooms and music using `CopiedStyle`'s numbers
+- Apply copied palette and zoom-frequency choices beyond reference metadata; preserve explicit brand and manual zoom overrides
 - Font guess with Apple's on-device model once it reads images (macOS 27)
 - Check on a Mac: scan speed for a 3 minute video, SoundAnalysis labels on real music, whether ScreenCaptureKit hears the web view's sound with a window filter (if not, links read without music and say so), the crop on YouTube and TikTok pages

@@ -33,6 +33,9 @@ final class Transcriber: ObservableObject {
     private let engine = ParakeetEngine()
     private var queue: [Take] = []
     private var running = false
+    @Published private(set) var activeTakeName: String?
+
+    func isWorking(on take: Take) -> Bool { activeTakeName == take.name || queue.contains(take) }
 
     /// A few seconds said while holding Space in the editor, as text.
     /// Uses the same on-device model as transcripts; loads it if needed.
@@ -47,7 +50,7 @@ final class Transcriber: ObservableObject {
     }
 
     func transcribe(_ take: Take) {
-        guard !queue.contains(take) else { return }
+        guard !queue.contains(take), activeTakeName != take.name else { return }
         queue.append(take)
         runQueue()
     }
@@ -64,6 +67,10 @@ final class Transcriber: ObservableObject {
         guard let latest = failures.latest else { return }
         let take = failedTakes[latest.takeName]
             ?? Take(folder: TakeLibrary.standard.folder.appendingPathComponent(latest.takeName, isDirectory: true))
+        retry(take)
+    }
+
+    func retry(_ take: Take) {
         try? FileManager.default.removeItem(at: take.transcriptFailedURL)
         failures.clear(take.name)
         failedTakes[take.name] = nil
@@ -74,6 +81,7 @@ final class Transcriber: ObservableObject {
         guard !running, !queue.isEmpty else { return }
         running = true
         let take = queue.removeFirst()
+        activeTakeName = take.name
         Task {
             await run(take)
             running = false
@@ -82,6 +90,8 @@ final class Transcriber: ObservableObject {
     }
 
     private func run(_ take: Take) async {
+        activeTakeName = take.name
+        defer { activeTakeName = nil }
         failures.clear(take.name)
         failedTakes[take.name] = nil
         activity = .transcribing(takeName: take.name)

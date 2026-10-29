@@ -373,6 +373,7 @@ struct LoudnessMeter: View {
 private struct MixSettings: View {
     @ObservedObject var model: EditorModel
     @State private var sliderStart: SoundPlan?
+    @State private var sourceStart: RecordedMix?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
@@ -420,8 +421,11 @@ private struct MixSettings: View {
             Slider(value: Binding(get: { value }, set: { level in
                 var mix = model.recordedMix
                 if isVoice { mix.voiceDB = level } else { mix.systemDB = level }
-                model.applyRecordedMix(mix)
-            }), in: -60...6, step: 1)
+                model.previewRecordedMix(mix)
+            }), in: -60...6, step: 1, onEditingChanged: { editing in
+                if editing { sourceStart = model.recordedMix }
+                else { model.applyRecordedMix(model.recordedMix, from: sourceStart); sourceStart = nil }
+            })
             .accessibilityLabel(title.capitalized)
         }
     }
