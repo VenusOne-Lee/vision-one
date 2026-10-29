@@ -10,7 +10,7 @@ enum WorkspaceUndoVerification {
         guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero,
             modifierFlags: redo ? [.command, .shift] : .command,
             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-            context: nil, characters: "z", charactersIgnoringModifiers: "z",
+            context: nil, characters: redo ? "Z" : "z", charactersIgnoringModifiers: redo ? "Z" : "z",
             isARepeat: false, keyCode: 6) else {
             throw MediaVerification.Failure(message: "Couldn't make workspace undo key")
         }
@@ -61,8 +61,11 @@ enum WorkspaceUndoVerification {
         let undo = NSMenuItem(title: "Undo", action: #selector(WorkspaceUndoActions.undo(_:)), keyEquivalent: "z")
         undo.keyEquivalentModifierMask = .command
         undo.target = actions
-        let redo = NSMenuItem(title: "Redo", action: #selector(WorkspaceUndoActions.redo(_:)), keyEquivalent: "z")
-        redo.keyEquivalentModifierMask = [.command, .shift]
+        let redo = NSMenuItem(title: "Redo", action: #selector(WorkspaceUndoActions.redo(_:)), keyEquivalent: "Z")
+        // AppKit treats uppercase Z + Command as Command-Shift-z. Match
+        // the shifted event character rather than dispatching Undo again.
+        // https://developer.apple.com/documentation/appkit/nsmenuitem/keyequivalentmodifiermask
+        redo.keyEquivalentModifierMask = .command
         redo.target = actions
         menu.addItem(undo); menu.addItem(redo)
 
