@@ -112,6 +112,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
         }
         await start()
         if !phase.isLive {
+            destinationTaskID = nil
+            destinationProjectID = nil
             Teleprompter.shared.hide()
             closeCameraOnly()
             MainWindowStepAside.restore()
@@ -124,6 +126,11 @@ final class ScreenRecorder: NSObject, ObservableObject {
     func start(choosing override: CaptureChoice? = nil) async {
         guard !phase.isBusy, !phase.isLive else { return }
         let choice = override ?? self.choice
+        if override != nil {
+            // Programmatic/agent capture owns its destination separately.
+            destinationTaskID = nil
+            destinationProjectID = nil
+        }
 
         if choice.mode == .camera {
             await startCameraOnly(choice)
@@ -391,6 +398,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
             // pick). Both wait for the transcript.
             ReadyToShareWindowController.shared.afterStop(take)
         } else {
+            destinationTaskID = nil
+            destinationProjectID = nil
             phase = .failed(message: writerError?.localizedDescription
                 ?? (choice.mode == .camera
                     ? "Nothing was recorded. Try again, and check the camera is connected."
