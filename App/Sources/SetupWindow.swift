@@ -15,10 +15,11 @@ struct SetupView: View {
     /// Set once the welcome's Get started is pressed.
     static let welcomeSeenKey = "onboarding.welcomeSeen"
 
-    init(access: AccessCenter) {
+    init(access: AccessCenter, askScreen: Bool) {
         _access = ObservedObject(wrappedValue: access)
         let welcomeSeen = UserDefaults.standard.bool(forKey: Self.welcomeSeenKey)
-        _flow = State(initialValue: OnboardingFlow(checklist: access.checklist, welcomeSeen: welcomeSeen))
+        _flow = State(initialValue: OnboardingFlow(checklist: access.checklist, welcomeSeen: welcomeSeen,
+                                                   askScreen: askScreen))
     }
 
     var body: some View {
@@ -80,7 +81,7 @@ struct SetupView: View {
                 if kind.isOptional { moveOn() } else { SetupWindowController.shared.close() }
             }
         case .finish:
-            if access.checklist.needsRestart || access.checklist.canRecord {
+            if access.checklist.needsRestart || flow.isReady(access.checklist) {
                 FinishStep(access: access)
             } else {
                 // Access was turned off again on the way: show it all.
@@ -134,7 +135,8 @@ struct AccessOverview: View {
                     AccessRow(kind: kind, state: access.checklist.state(of: kind)) {
                         access.request(kind)
                     } openSettings: {
-                        access.openSettings(for: kind)
+                        // Screen Recording resets a stale entry first.
+                        if kind == .screen { access.request(kind) } else { access.openSettings(for: kind) }
                     }
                 }
             }
@@ -272,9 +274,16 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     /// allowed opens the main window on New task, so first run never
     /// ends on nothing.
     var opensHarnessWhenDone = false
+    /// False at first run: Screen Recording waits for the first screen
+    /// recording. Recording without it opens setup with the screen step.
+    private var askScreen = true
 
-    func show() {
+    func show(askScreen: Bool = true) {
         AccessCenter.shared.startWatching()
+        if self.askScreen != askScreen, window?.isVisible == true {
+            window?.contentViewController = nil
+        }
+        self.askScreen = askScreen
         if window == nil {
             let window = NSWindow(
                 contentRect: .zero,
@@ -288,7 +297,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
             self.window = window
             window.contentViewController = makeContent()
             window.center()
-        } else if window?.isVisible == false {
+        } else if window?.isVisible == false || window?.contentViewController == nil {
             // Reopened later (the Access… menu): start a fresh flow so it
             // lands on whatever is missing now.
             window?.contentViewController = makeContent()
@@ -299,7 +308,7 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
 
     /// Fixed width; the window's height follows each step's content.
     private func makeContent() -> NSViewController {
-        let hosting = NSHostingController(rootView: SetupView(access: AccessCenter.shared))
+        let hosting = NSHostingController(rootView: SetupView(access: AccessCenter.shared, askScreen: askScreen))
         hosting.sizingOptions = [.minSize, .intrinsicContentSize, .maxSize, .preferredContentSize]
         return hosting
     }
@@ -320,9 +329,9 @@ final class SetupWindowController: NSObject, NSWindowDelegate {
     nonisolated func windowWillClose(_ notification: Notification) {
         MainActor.assumeIsolated {
             AccessCenter.shared.stopWatching()
-            // Closed with the window's own button after the first run's
-            // access was granted: land on New task anyway.
-            if opensHarnessWhenDone, AccessCenter.shared.checklist.canRecord {
+            // First run closed with the window's own button or Later:
+            // land on New task anyway, never on nothing.
+            if opensHarnessWhenDone {
                 opensHarnessWhenDone = false
                 Task { @MainActor in EditorWindowController.shared.showNewTask() }
             }
