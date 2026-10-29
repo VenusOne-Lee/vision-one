@@ -24,6 +24,11 @@ struct HarnessView: View {
     @State private var showingTools = false
     @State private var compactPane = "Review"
 
+    init(model: HarnessModel, compactPane: String = "Review") {
+        self.model = model
+        _compactPane = State(initialValue: compactPane)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             topBar
@@ -77,6 +82,9 @@ struct HarnessView: View {
         .onReceive(recorder.$lastTake) { _ in model.refreshTakes() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             model.refreshTakes()
+        }
+        .onChange(of: model.task?.openApprovals.count) { _, count in
+            if let count, count > 0 { compactPane = "Task" }
         }
         .onChange(of: model.page) { _, _ in
             fullPanel = nil

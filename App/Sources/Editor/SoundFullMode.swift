@@ -14,7 +14,7 @@ struct SoundFullMode<Rail: View>: View {
 
     @AppStorage("sound.asideWidth") private var asideWidth = 320.0
     @AppStorage("sound.aside") private var asideRaw = SoundAside.mix.rawValue
-    @AppStorage("sound.videoHeight") private var videoHeight = 240.0
+    @State private var compactPane = "Mix"
 
     init(model: EditorModel, onBack: @escaping () -> Void, @ViewBuilder rail: @escaping () -> Rail) {
         self.model = model
@@ -30,9 +30,13 @@ struct SoundFullMode<Rail: View>: View {
             VStack(spacing: 0) {
                 GeometryReader { geometry in
                     if geometry.size.width < 760 {
-                        VSplitView {
-                            main.frame(minHeight: 180)
-                            asidePanel.frame(minHeight: 140)
+                        VStack(spacing: 0) {
+                            HStack {
+                                SegmentedTabs(selection: $compactPane, options: ["Preview", "Mix"]) { $0 }
+                                Spacer()
+                            }.padding(8).background(Theme.paper)
+                            if compactPane == "Preview" { main }
+                            else { asidePanel }
                         }
                     } else {
                         HStack(spacing: 0) {

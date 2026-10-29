@@ -175,7 +175,18 @@ struct AutopilotView: View {
     @ObservedObject private var recorder = StepRecorder.shared
 
     var body: some View {
-        HSplitView {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Autopilot demos").textStyle(.title)
+                    Text("Review each demo before running. Capture needs Screen Recording and Accessibility access.")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                Spacer()
+                Button("Permissions…") { SettingsWindowController.shared.show(.access) }.buttonStyle(.secondary)
+            }.padding(16).background(Theme.paper)
+            Divider().overlay(Theme.line)
+            HSplitView {
             sidebar
                 .frame(minWidth: 180, idealWidth: 220, maxWidth: 320)
             Group {
@@ -188,6 +199,7 @@ struct AutopilotView: View {
                 }
             }
             .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+        }
         }
         .frame(minWidth: 720, minHeight: 520)
         .background(Theme.canvas)

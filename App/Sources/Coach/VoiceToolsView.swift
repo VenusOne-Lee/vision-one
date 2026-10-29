@@ -140,15 +140,15 @@ struct VoiceToolsView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Dub to another language").textStyle(.headline)
-                Text("isiZulu, Afrikaans, Sesotho and more, in your voice. Coming later.").textStyle(.caption).foregroundStyle(Theme.textMuted)
+                Text("Open Languages to review translation and optional dubbing. Provider setup and sends remain explicit.").textStyle(.caption).foregroundStyle(Theme.textMuted)
             }
             Spacer()
-            StateChip(.proposed, "Later")
+            Button("Languages…") { LanguagesWindowController.shared.show(for: model.take) }
+                .buttonStyle(.secondary)
         }
         .padding(Theme.Space.md)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.lg).fill(Theme.paper))
         .statusOutline(.proposed, cornerRadius: Theme.Radius.lg, lineWidth: Theme.Stroke.hairline)
-        .opacity(0.7)
     }
 
     // MARK: Consent

@@ -73,7 +73,10 @@ final class ScriptCoachModel: ObservableObject {
         player.stop()
         UserDefaults.standard.set(coach.scriptText, forKey: CoachServices.scriptKey)
         ScriptCoachWindowController.shared.close()
-        Task { await ScreenRecorder.shared.record() }
+        ScriptStore.shared.reload()
+        ScriptStore.shared.showsPrompter = true
+        EditorWindowController.shared.show()
+        HarnessModel.shared.preparingRecording = true
     }
 }
 
@@ -125,7 +128,7 @@ struct ScriptCoachView: View {
             Button("Record with the script") { model.record() }
                 .buttonStyle(.primary)
                 .disabled(coach.script.isEmpty)
-                .help("Shows the prompter and starts recording")
+                .help("Checks source and audio before recording with the prompter")
         }
         .padding(.horizontal, Theme.Space.md)
         .frame(height: Theme.Size.toolbar)

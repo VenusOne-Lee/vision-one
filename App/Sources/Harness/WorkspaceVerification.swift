@@ -4,7 +4,8 @@ import VisionOneKit
 
 /// Captures the production SwiftUI surfaces with an isolated Desk snapshot.
 /// NSView caching captures our own window; it never requests screen recording,
-/// camera, microphone, provider access or a user's library.
+/// camera, microphone or provider access. Run in a clean CI account; advanced
+/// tools read that account's empty settings/library without starting services.
 private struct WorkspaceRenderKey: EnvironmentKey { static let defaultValue = false }
 extension EnvironmentValues {
     var workspaceRender: Bool {
@@ -15,16 +16,26 @@ extension EnvironmentValues {
 
 @MainActor
 enum WorkspaceVerification {
-    static func run(take: Take, in root: URL) async throws {
+    static func run(take source: Take, in root: URL) async throws {
         let defaults = UserDefaults.standard
         let arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
         defaults.setVolatileDomain(["script.text": "Introduce the launch. Show the new workspace. End with the next step.",
-                                    "mcp.enabled": false, "harness.aiNoticeDismissed": true], forName: UserDefaults.argumentDomain)
+                                    "mcp.enabled": true, "harness.aiNoticeDismissed": true], forName: UserDefaults.argumentDomain)
         defer { defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain) }
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
         BundledFont.registerAll()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let folder = root.appendingPathComponent("fixture-take")
+        if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
+        try FileManager.default.copyItem(at: source.folder, to: folder)
+        let take = Take(folder: folder)
+        try take.setTitle("Launch walkthrough")
+        let text = "Welcome to the producer workspace. Start a recording or import a video, then review every proposed change beside the transcript. Keep your original, prepare a vertical clip, and check captions before sharing."
+        let words = text.split(separator: " ").enumerated().map { index, word in
+            TranscriptWord(id: index, text: String(word), start: Double(index) * 0.075, end: Double(index + 1) * 0.075)
+        }
+        try Transcript(language: "en", engine: "workspace fixture", duration: 3, segments: [.init(words: words)]).write(to: take.transcriptURL)
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -65,10 +76,11 @@ enum WorkspaceVerification {
                             model.updateLayout { $0.show(.clips) }
                         }
                     }
+                    model.workspace?.editor.seek(toSource: 0.5)
                     if state == "editor" { model.mode = .editor }
                     if state == "sound" { model.mode = .sound }
                     let name = "\(state)-\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide").png"
-                    try await capture(HarnessView(model: model), size: size, to: root.appendingPathComponent(name))
+                    try await capture(HarnessView(model: model, compactPane: ["pending", "error"].contains(state) ? "Task" : "Review"), size: size, to: root.appendingPathComponent(name))
                     model.workspace?.close()
                     names.append(name)
                 }
@@ -99,7 +111,10 @@ enum WorkspaceVerification {
     }
 
     private static func capture<V: View>(_ view: V, size: CGSize, to url: URL) async throws {
-        let host = NSHostingView(rootView: view.environment(\.workspaceRender, true))
+        let host = NSHostingView(rootView: view
+            .frame(width: size.width, height: size.height)
+            .background(Theme.canvas).foregroundStyle(Theme.text).themed()
+            .environment(\.workspaceRender, true))
         let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
