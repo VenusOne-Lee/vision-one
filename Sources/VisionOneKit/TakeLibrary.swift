@@ -18,6 +18,7 @@ import Foundation
 ///       thumbnails/      thumbnail.json and the saved thumbnail images
 ///       camera.mov    camera from the bubble, when the camera was on
 ///       camera.json   how camera.mov lines up, and where the bubble sat
+///       background.json  what was drawn behind the person (camera.mov stays clean)
 ///       phone.mov     iPhone screen + sound over USB, when one was recorded
 ///       plan.json     what it's for (Home's pick, saved when recording stops)
 ///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports

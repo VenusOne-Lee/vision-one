@@ -133,7 +133,9 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
             let screen = CaptureRect(x: x, y: y, width: scaled.extent.width, height: scaled.extent.height)
             let r = CameraTrack.outputRect(for: placement, in: screen)
             let rect = CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
-            placed = Self.bubble(CIImage(cvPixelBuffer: frame), in: rect).composited(over: placed)
+            // The room behind the person, when the take has one.
+            let face = camera.background?.render(frame, at: outputTime) ?? CIImage(cvPixelBuffer: frame)
+            placed = Self.bubble(face, in: rect).composited(over: placed)
             ring = (rect, camera)
         }
         context.render(placed, to: output, bounds: CGRect(origin: .zero, size: size), colorSpace: colorSpace)
@@ -235,6 +237,8 @@ struct CameraLayer: @unchecked Sendable {
     let track: CameraTrack
     let timeline: ExportTimeline
     let ringColour: CGColor
+    /// Draws background.json's room behind the person; nil for none.
+    var background: BackgroundRenderer?
 }
 
 /// Draws nothing; the compositor's paper shows.
