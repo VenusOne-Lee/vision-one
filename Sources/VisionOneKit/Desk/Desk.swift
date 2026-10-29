@@ -523,6 +523,7 @@ public actor Desk {
             return text.prefix(1).uppercased() + text.dropFirst()
         }
         guard let take = takes.last else { return "New task" }
+        if let title = take.customTitle() { return title }
         let purpose = TakePlan.load(for: take)?.purpose.title ?? "Recording"
         return "\(purpose) · \(take.name)"
     }
