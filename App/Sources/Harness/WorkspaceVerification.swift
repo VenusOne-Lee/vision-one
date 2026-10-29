@@ -51,6 +51,7 @@ enum WorkspaceVerification {
         try await verifyTakeSwitch(source: take, in: root)
         try await TranscriptViewVerification.run(source: take, in: root)
         try await WorkspaceUndoVerification.run(source: take, in: root)
+        try await AutopilotPreflightVerification.run(in: root)
         let transcriptFixtures = try TranscriptViewVerification.stateFixtures(source: take, in: root)
         guard let emptyPostTake = transcriptFixtures.first(where: { $0.0 == "transcript-empty" })?.1 else {
             throw MediaVerification.Failure(message: "No-speech post fixture missing")
@@ -129,6 +130,7 @@ enum WorkspaceVerification {
                     ("rehearse", AnyView(RehearseView(model: RehearseModel(), talk: CoachConversation()))),
                     ("voice-tools", AnyView(VoiceToolsView(model: VoiceToolsModel(take: take)))),
                     ("autopilot", AnyView(AutopilotView())),
+                    ("autopilot-start-error", AnyView(AutopilotStartProblemView(message: StopReason.noAccess.message))),
                     ("agents", AnyView(AgentsSettingsView(service: MCPService.shared)))
                 ]
                 for (tool, view) in tools {

@@ -17,6 +17,11 @@ final class AutopilotService: ObservableObject {
     /// The run in progress, updated step by step.
     @Published private(set) var running: AutopilotRun?
     @Published private(set) var isBusy = false
+    @Published private(set) var startProblems: [String: String] = [:]
+    private let injectedBoard: AgentJobBoard?
+    private let accessibilityTrusted: @MainActor () -> Bool
+    private let requestAccessibility: @MainActor () -> Bool
+    private var board: AgentJobBoard { injectedBoard ?? AIServices.shared.jobs }
     /// Folders with demos besides Vision One's own (repo roots).
     @Published var linkedFolders: [URL] {
         didSet { UserDefaults.standard.set(linkedFolders.map(\.path), forKey: Self.linkedKey) }
@@ -35,7 +40,12 @@ final class AutopilotService: ObservableObject {
     /// doesn't ask again every hour.
     private var tried: Set<String> = []
 
-    private init() {
+    init(board: AgentJobBoard? = nil,
+         accessibilityTrusted: @escaping @MainActor () -> Bool = { AXReader.isTrusted },
+         requestAccessibility: @escaping @MainActor () -> Bool = { AXReader.askForAccess() }) {
+        injectedBoard = board
+        self.accessibilityTrusted = accessibilityTrusted
+        self.requestAccessibility = requestAccessibility
         linkedFolders = (UserDefaults.standard.stringArray(forKey: Self.linkedKey) ?? []).map { URL(fileURLWithPath: $0) }
         state = AutopilotState.load()
     }
@@ -47,11 +57,14 @@ final class AutopilotService: ObservableObject {
         state[demo].lastTakeFolder.flatMap { AutopilotRun.load(for: Take(folder: $0)) }
     }
 
+    func startProblem(for demo: DemoScript) -> String? { startProblems[demo.slug] }
+
     // MARK: Starting
 
     /// The person pressed Run Autopilot.
-    func run(_ file: DemoFile) {
-        _ = start(file, release: nil, requestedBy: nil, requestID: nil, personIsHere: true)
+    @discardableResult
+    func run(_ file: DemoFile) -> UUID {
+        start(file, release: nil, requestedBy: nil, requestID: nil, personIsHere: true)
     }
 
     /// For the MCP server and links: re-records the demo called `name`
@@ -101,7 +114,7 @@ final class AutopilotService: ObservableObject {
         var job = AgentJob(agent: .autopilot, title: title, ask: requestedBy.map { "From \($0)" },
                            steps: demo.steps.map { StepWords.line(for: $0) })
         job.requestedBy = requestedBy
-        let board = AIServices.shared.jobs
+        let board = self.board
         let ask = !personIsHere && !state.mayRunAlone(demo)
         Task {
             await board.add(job)
@@ -115,13 +128,14 @@ final class AutopilotService: ObservableObject {
 
     private func perform(_ demo: DemoScript, release: String?, requestedBy: String?, requestID: UUID?,
                          jobID: UUID, ask: Bool, unattended: Bool) async {
-        let board = AIServices.shared.jobs
+        let board = self.board
         func status(_ s: RerecordStatus.State, _ receipt: String? = nil, take: Take? = nil) {
             guard let requestID else { return }
             try? RerecordStatus(id: requestID, demo: demo.name, release: release, state: s, receipt: receipt,
                                 takeFolder: take?.folder.path).write()
         }
         func give(up reason: StopReason) async {
+            startProblems[demo.slug] = reason.message
             await board.fail(jobID, reason.message)
             status(.stopped, reason.message)
         }
@@ -130,8 +144,10 @@ final class AutopilotService: ObservableObject {
         while isBusy { try? await Task.sleep(nanoseconds: 1_000_000_000) }
         isBusy = true
         defer { isBusy = false }
+        startProblems[demo.slug] = nil
 
         if let problem = demo.problems(policy: policy).first {
+            startProblems[demo.slug] = problem
             await board.fail(jobID, problem)
             status(.stopped, problem)
             return
@@ -149,7 +165,7 @@ final class AutopilotService: ObservableObject {
                 approve(demo)
             }
         }
-        guard AXReader.isTrusted || AXReader.askForAccess() else {
+        guard accessibilityTrusted() || requestAccessibility() else {
             await give(up: .noAccess)
             return
         }

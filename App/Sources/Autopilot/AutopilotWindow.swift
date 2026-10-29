@@ -186,6 +186,10 @@ struct AutopilotView: View {
                 Button("Permissions…") { SettingsWindowController.shared.show(.access) }.buttonStyle(.secondary)
             }.padding(16).background(Theme.paper)
             Divider().overlay(Theme.line)
+            AutopilotAccessibilityPanel().padding(.horizontal, 16).padding(.vertical, 8)
+            if let demo = model.current?.demo, let problem = service.startProblem(for: demo) {
+                AutopilotStartProblemView(message: problem).padding(.horizontal, 16).padding(.bottom, 8)
+            }
             HSplitView {
             sidebar
                 .frame(minWidth: 180, idealWidth: 220, maxWidth: 320)
@@ -291,7 +295,7 @@ struct AutopilotView: View {
                 }
                 .panelStyle()
 
-                if let run = service.running ?? model.lastRun {
+                if let run = service.running ?? model.current.flatMap({ service.lastRun(of: $0.demo) }) ?? model.lastRun {
                     lastRunPanel(run, live: service.running != nil)
                 }
 
@@ -360,6 +364,43 @@ struct AutopilotView: View {
             }
         }
         .panelStyle()
+    }
+}
+
+
+/// Optional automation permission, separate from recording onboarding.
+struct AutopilotAccessibilityPanel: View {
+    @State private var trusted = AXReader.isTrusted
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Space.sm) {
+            Image(systemName: trusted ? "checkmark.circle" : "exclamationmark.circle").accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Accessibility for Autopilot").textStyle(.bodyStrong)
+                Text(trusted ? "Allowed for this app." : "Required to read and operate the demo app. Enable this copy of Vision One in System Settings, then return here.")
+                    .textStyle(.caption).foregroundStyle(Theme.textMuted).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button("Accessibility Settings…") { AXReader.openSettings() }.buttonStyle(.secondary)
+        }
+        .panelStyle()
+        .onAppear { trusted = AXReader.isTrusted }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            trusted = AXReader.isTrusted
+        }
+    }
+}
+
+struct AutopilotStartProblemView: View {
+    let message: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Autopilot couldn't start").textStyle(.bodyStrong)
+            Text(message).textStyle(.caption).fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(Theme.error)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Space.md)
+        .background(Theme.errorSoft, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
     }
 }
 
