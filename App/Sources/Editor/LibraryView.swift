@@ -8,6 +8,7 @@ import VisionOneKit
 /// Move to Trash can be undone. Starting new work lives on New task, so
 /// the Library is only for finding takes. Clicking a row opens its task.
 struct LibraryView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var recorder = ScreenRecorder.shared
     let open: (Take) -> Void
     private let library: TakeLibrary
@@ -27,10 +28,12 @@ struct LibraryView: View {
     @State private var fileProblem: String?
     @AppStorage("library.sort") private var sort = LibrarySort.newest
 
-    init(library: TakeLibrary = .standard, open: @escaping (Take) -> Void) {
+    init(library: TakeLibrary = .standard, initialQuery: LibraryQuery = LibraryQuery(), open: @escaping (Take) -> Void) {
         self.library = library
         self.open = open
         _takes = State(initialValue: library.takes())
+        _search = State(initialValue: initialQuery.search)
+        _filter = State(initialValue: initialQuery.filter)
     }
 
     private var query: LibraryQuery { LibraryQuery(search: search, filter: filter, sort: sort) }
@@ -107,13 +110,13 @@ struct LibraryView: View {
                     LazyVStack(spacing: Theme.Space.sm) {
                         ForEach(shown, id: \.take.folder) { item in
                             LibraryRow(item: item, generation: generation,
-                                       isBusy: recorder.phase.isLive && item.take == takes.first) {
-                                open(item.take)
-                            } rename: { title in
-                                rename(item.take, to: title)
-                            } trash: {
-                                moveToTrash(item)
-                            }
+                                       isBusy: recorder.phase.isLive && item.take == takes.first,
+                                       open: { open(item.take) },
+                                       rename: { title in try rename(item.take, to: title) },
+                                       trash: { moveToTrash(item) },
+                                       onRenameFailure: { error in
+                                           fileProblem = "Couldn't rename this video: \(error.localizedDescription). Your draft is kept; choose Retry rename."
+                                       })
                         }
                     }
                 }
@@ -199,10 +202,15 @@ struct LibraryView: View {
 
     private var noMatches: some View {
         VStack(spacing: Theme.Space.sm) {
-            Text("Nothing matches “\(search)”.")
+            Text(query.emptyMessage)
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.textMuted)
-            Button("Show every take") { search = "" }
+            Button("Show every take") {
+                var reset = query
+                reset.showEveryTake()
+                search = reset.search
+                filter = reset.filter
+            }
                 .buttonStyle(PillButtonStyle(kind: .secondary))
         }
         .frame(maxWidth: .infinity)
@@ -211,8 +219,8 @@ struct LibraryView: View {
 
     // MARK: Rename and Trash
 
-    private func rename(_ take: Take, to title: String) {
-        try? take.setTitle(title)
+    private func rename(_ take: Take, to title: String) throws {
+        try take.setTitle(title)
         generation += 1
     }
 
@@ -232,7 +240,7 @@ struct LibraryView: View {
             return
         }
         if let inTrash = resulting as URL? {
-            withAnimation { trashed = Trashed(title: item.title, original: item.take.folder, inTrash: inTrash) }
+            WorkspaceMotion.perform(reduced: reduceMotion) { trashed = Trashed(title: item.title, original: item.take.folder, inTrash: inTrash) }
         }
         refresh()
     }
@@ -241,7 +249,7 @@ struct LibraryView: View {
         guard let trashed else { return }
         do {
             try FileManager.default.moveItem(at: trashed.inTrash, to: trashed.original)
-            withAnimation { self.trashed = nil }
+            WorkspaceMotion.perform(reduced: reduceMotion) { self.trashed = nil }
             refresh()
         } catch {
             fileProblem = "Couldn't restore this video. It remains in the Trash: \(error.localizedDescription)"
@@ -272,7 +280,7 @@ struct LibraryView: View {
                 // A newer trash restarts the wait; only a full wait hides it.
                 guard (try? await Task.sleep(for: .seconds(8))) != nil else { return }
                 guard fileProblem == nil else { return }
-                withAnimation { self.trashed = nil }
+                WorkspaceMotion.perform(reduced: reduceMotion) { self.trashed = nil }
             }
         }
     }
@@ -289,14 +297,15 @@ private struct LibraryRow: View {
     /// The newest take while recording is still being saved.
     let isBusy: Bool
     let open: () -> Void
-    let rename: (String) -> Void
+    let rename: (String) throws -> Void
     let trash: () -> Void
+    let onRenameFailure: (Error) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var frame: CGImage?
     @State private var loaded = false
     @State private var isHovering = false
-    @State private var isRenaming = false
-    @State private var draft = ""
+    @State private var renameDraft = LibraryRenameDraft()
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -308,6 +317,9 @@ private struct LibraryRow: View {
                 HStack(spacing: 6) {
                     ring
                     name
+                    if renameDraft.needsRetry {
+                        Button("Retry rename", action: startRenaming).buttonStyle(.plain)
+                    }
                 }
                 // The name keeps double-click for renaming; the lines
                 // under it open the take like the frame does.
@@ -351,7 +363,7 @@ private struct LibraryRow: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.lg))
         .onHover { isHovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovering)
         .contextMenu { actions }
         .task(id: generation) {
             frame = await LibraryPreviews.shared.firstFrame(for: item.take)
@@ -394,15 +406,15 @@ private struct LibraryRow: View {
 
     @ViewBuilder
     private var name: some View {
-        if isRenaming {
-            TextField("Name", text: $draft)
+        if renameDraft.isEditing {
+            TextField("Name", text: $renameDraft.text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13, weight: .semibold))
                 .focused($nameFocused)
                 .onSubmit(finishRenaming)
-                .onExitCommand { isRenaming = false }
+                .onExitCommand { renameDraft.cancel() }
                 .onChange(of: nameFocused) { _, focused in
-                    if !focused && isRenaming { finishRenaming() }
+                    if !focused && renameDraft.isEditing { finishRenaming() }
                 }
         } else {
             Text(item.title)
@@ -444,16 +456,15 @@ private struct LibraryRow: View {
     }
 
     private func startRenaming() {
-        draft = item.take.customTitle() ?? ""
-        isRenaming = true
+        renameDraft.begin(title: item.take.customTitle() ?? "")
         // The field only exists from the next pass.
         DispatchQueue.main.async { nameFocused = true }
     }
 
     private func finishRenaming() {
-        guard isRenaming else { return }
-        isRenaming = false
-        rename(draft)
+        guard renameDraft.isEditing else { return }
+        do { try renameDraft.finish(save: rename) }
+        catch { onRenameFailure(error) }
     }
 }
 

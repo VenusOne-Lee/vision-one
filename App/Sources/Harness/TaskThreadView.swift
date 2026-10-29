@@ -6,6 +6,7 @@ import VisionOneKit
 /// receipts and approvals, the live status line and the queue, with the
 /// composer at the bottom.
 struct TaskThreadView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var model: HarnessModel
     let task: DeskTask
     @State private var showActivity = false
@@ -56,7 +57,7 @@ struct TaskThreadView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: task.cells.count) { _, _ in
-                    withAnimation(Theme.Motion.enter) { proxy.scrollTo("end", anchor: .bottom) }
+                    WorkspaceMotion.perform(reduced: reduceMotion) { proxy.scrollTo("end", anchor: .bottom) }
                 }
                 .onAppear { proxy.scrollTo("end", anchor: .bottom) }
             }

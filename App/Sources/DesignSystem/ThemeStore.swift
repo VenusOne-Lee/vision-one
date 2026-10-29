@@ -117,6 +117,7 @@ final class ThemeStore: ObservableObject {
 
 @MainActor
 private struct ThemedModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var store = ThemeStore.shared
 
     func body(content: Content) -> some View {
@@ -126,6 +127,7 @@ private struct ThemedModifier: ViewModifier {
             .id(store.revision)
             .environment(\.colorScheme, store.colorScheme)
             .tint(Theme.selection)
+            .transaction { WorkspaceMotion.constrain(&$0, reduced: reduceMotion) }
     }
 }
 
