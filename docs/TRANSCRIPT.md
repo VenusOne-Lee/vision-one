@@ -1,6 +1,6 @@
 # The transcript format
 
-Every take gets a `transcript.json` next to `screen.mov`. It is made on the Mac, from the mic track, after you stop recording. The editor, filler and pause removal, and captions all read it. The Swift types are in `Sources/VisionOneKit/Transcript.swift`.
+A take with transcribable audio gets `transcript.json` next to `screen.mov`. It is made on the Mac after recording or import. Silent sources retain an editable video and a typed no-audio recovery state instead of a transcript. The editor, filler and pause removal, and captions all read it. The Swift types are in `Sources/VisionOneKit/Transcript.swift`.
 
 ## Rules
 
@@ -86,4 +86,4 @@ Native CI mounts the production view, switches A→B→A, checks current-take cu
 
 A permanent `TranscriptFailure.reason.noAudio` becomes the editor's typed `noAudio` state. It offers importing a source with audio or opening recording preparation, rather than retrying an immutable silent file. Genuine transient/corrupt failures retain Retry; a valid empty transcript retains No words found and editing/export. The native silent-source regression passed at 208cb79, and the tracking assistant independently exercised these actions' visible recovery state locally.
 
-The Harness Edit commands resolve the current window/editor undo manager at invocation. An editable native text/field editor retains its own typing history. Real local 7869fb6 canvas Cmd-Z/Cmd-Shift-Z and focused Ask typing undo/redo passed. The whole-Harness synthetic task-switch/key fixture has a separate current CI redo-dispatch correction pending; the older transcript-only synthetic test never established full canvas shortcut acceptance.
+The Harness Edit commands resolve the current window/editor undo manager at invocation. An editable native text/field editor retains its own typing history. Real local 7869fb6 canvas Cmd-Z/Cmd-Shift-Z and focused Ask typing undo/redo passed. The whole-Harness synthetic task-switch/key/field fixture passed at 5f0fbab / CI40953770394; the older transcript-only synthetic test never established full canvas shortcut acceptance.

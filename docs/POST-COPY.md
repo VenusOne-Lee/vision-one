@@ -8,4 +8,4 @@ The production Post panel scopes its state and AgentsModel to the take folder. N
 
 Copy and open remains an explicit approved handoff. It copies words, shows the exported video and opens the destination composer; the person publishes there. Persisting or testing a draft never invokes that handoff.
 
-The tracking assistant reproduced the old cross-take text leak and secondary no-speech Draft bug at 9243cea. Focused cloud source/package/mounted native regressions address both; current CI and local retest remain acceptance gates. See [CLOUD-VERIFICATION.md](CLOUD-VERIFICATION.md) and [local QA provenance](verification/local-qa.json).
+The tracking assistant reproduced the old cross-take text leak and secondary no-speech Draft bug at 9243cea. Focused cloud source/package/mounted native regressions address both; 851 package tests and mounted native take-switch/persistence/approval/read-write recovery passed in complete green CI40953770394 at 5f0fbab. Actual local Post interaction/relaunch and secondary-button retest remain acceptance gates. See [CLOUD-VERIFICATION.md](CLOUD-VERIFICATION.md) and [local QA provenance](verification/local-qa.json).

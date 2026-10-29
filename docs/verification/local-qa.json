@@ -90,11 +90,43 @@
     }
   ],
   "remaining": [
-    "Current-head full CI including native Harness redo and mounted Post switching",
+    "Documentation follow-up CI has its own status; 5f0fbab full source suite passed",
+    "Individual inspection of newly generated no-audio/Post/Autopilot PNGs",
     "Actual Post A-to-B-to-A/relaunch and secondary no-speech Draft retest",
     "Representative audible/media/framing quality",
     "Provider/model-backed requests, transcription retry/download, voice/languages and external handoffs",
     "VoiceOver, focus order, OS reduced motion, scrolling/resizing and auxiliary dialogs",
     "Complex automation, device/permission transitions and File-menu pause-label observation"
-  ]
+  ],
+  "cloudFollowup": {
+    "commit": "084234a",
+    "run": 40953600794,
+    "packageTests": 851,
+    "nativeBuild": "passed",
+    "media": "passed",
+    "workspaceStep": "failed only workspaceUndo (older redo fixture)",
+    "nativeChecksPassed": [
+      "mounted Post A-to-B-to-A identity and manual-copy persistence",
+      "approval-state reset and other-take bytes unchanged",
+      "explicit empty copy and unreadable file preservation",
+      "save failure retains draft and retry saves",
+      "Autopilot denied preflight board/error feedback",
+      "no-speech Post recovery"
+    ],
+    "generatedImages": 104,
+    "visualReview": "New images not yet independently inspected",
+    "remainingLocalPostRetest": true,
+    "latestComplete": {
+      "commit": "5f0fbab",
+      "run": 40953770394,
+      "allJobs": "success",
+      "tests": 851,
+      "generatedImages": 104,
+      "artifact": 12932493730,
+      "artifactSHA256": "5f1419b506ee64936306ba21901ae16c8cf9f6c06e51cf6a96a742bdcff450b1",
+      "nativeHarnessCanvasMenuKeyTaskSwitchFieldUndoRedo": "passed",
+      "postAutopilotNoSpeech": "passed",
+      "newImageInspection": "pending"
+    }
+  }
 }
