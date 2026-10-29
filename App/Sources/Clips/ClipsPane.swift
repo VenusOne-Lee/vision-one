@@ -1,4 +1,5 @@
 import AppKit
+import AVKit
 import SwiftUI
 import VisionOneKit
 
@@ -81,6 +82,7 @@ struct ClipCard: View {
     let isSelected: Bool
 
     @State private var title = ""
+    @State private var previewing = false
     @FocusState private var editingTitle: Bool
 
     var body: some View {
@@ -211,9 +213,12 @@ struct ClipCard: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textMuted)
             }
-        case let .done(_, bytes):
+        case let .done(url, bytes):
             HStack(spacing: 6) {
                 ExportRing(progress: 1)
+                Button("Preview MP4") { previewing = true }
+                    .buttonStyle(.secondary)
+                    .sheet(isPresented: $previewing) { RenderedClipPreview(url: url) }
                 Button("Show · \(ExportPhase.size(bytes))") { model.reveal(clip.id) }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
@@ -454,5 +459,20 @@ struct ClipWindowOverlay: View {
         }
         let h = size.width / a
         return CGRect(x: 0, y: (size.height - h) / 2, width: size.width, height: h)
+    }
+}
+
+private struct RenderedClipPreview: View {
+    @State private var player: AVPlayer
+    @Environment(\.dismiss) private var dismiss
+    init(url: URL) { _player = State(initialValue: AVPlayer(url: url)) }
+    var body: some View {
+        VStack(spacing: Theme.Space.md) {
+            Text("Rendered clip").textStyle(.title)
+            VideoPlayer(player: player).frame(minWidth: 400, minHeight: 360)
+            Button("Done") { dismiss() }.buttonStyle(.primary)
+        }
+        .padding(Theme.Space.md).frame(maxHeight: 700).background(Theme.canvas).themed()
+        .onAppear { player.play() }.onDisappear { player.pause() }
     }
 }

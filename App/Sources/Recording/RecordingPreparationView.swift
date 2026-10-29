@@ -140,7 +140,18 @@ final class RecordingInputCheck: ObservableObject {
     @Published private(set) var level = 0.0
     @Published private(set) var testing = false
     @Published private(set) var problem: String?
-    private var probe: PreparationMicProbe?
+    private var probe: (any PreparationMicSession)?
+    private let microphoneID: (CaptureChoice) -> String?
+    private let hasMicrophoneAccess: () -> Bool
+    private let makeProbe: (@escaping @Sendable (Double) -> Void) -> any PreparationMicSession
+
+    init(microphoneID: @escaping (CaptureChoice) -> String? = { Microphones.shared.resolved(for: $0)?.id },
+         hasAccess: @escaping () -> Bool = { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized },
+         makeProbe: @escaping (@escaping @Sendable (Double) -> Void) -> any PreparationMicSession = { PreparationMicProbe(peak: $0) }) {
+        self.microphoneID = microphoneID
+        self.hasMicrophoneAccess = hasAccess
+        self.makeProbe = makeProbe
+    }
     private var previewGeneration = 0
     private var micGeneration = 0
 
@@ -186,12 +197,11 @@ final class RecordingInputCheck: ObservableObject {
         guard generation == micGeneration else { return }
         problem = nil
         guard choice.includeMicrophone else { problem = "Turn on Microphone to test it."; return }
-        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+        guard hasMicrophoneAccess() else {
             problem = "Allow Microphone access below, then test again."; return
         }
-        let mic = Microphones.shared.resolved(for: choice)
-        guard let id = mic?.id else { problem = "No microphone is connected."; return }
-        let next = PreparationMicProbe { [weak self] peak in
+        guard let id = microphoneID(choice) else { problem = "No microphone is connected."; return }
+        let next = makeProbe { [weak self] peak in
             Task { @MainActor in
                 guard let self, generation == self.micGeneration, self.testing else { return }
                 self.level = min(1, max(0, (MicLevelMeter.decibels(peak) + 60) / 60))
@@ -232,7 +242,12 @@ final class RecordingInputCheck: ObservableObject {
 }
 
 /// All session work stays off the main queue. Nothing is recorded to disk.
-private final class PreparationMicProbe: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
+protocol PreparationMicSession: AnyObject {
+    func start(_ id: String) async throws
+    func stop() async
+}
+
+final class PreparationMicProbe: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, PreparationMicSession, @unchecked Sendable {
     private let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "VisionOne.preparation-mic")
     private let peak: @Sendable (Double) -> Void

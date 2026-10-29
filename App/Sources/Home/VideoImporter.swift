@@ -37,13 +37,7 @@ final class VideoImporter: ObservableObject {
                 work = nil
             }
             do {
-                let asset = AVURLAsset(url: url)
-                let duration = try await asset.load(.duration).seconds
-                let tracks = try await asset.loadTracks(withMediaType: .video)
-                guard duration.isFinite, duration > 0, !tracks.isEmpty,
-                      try await asset.load(.isReadable) else {
-                    throw ImportError.invalidVideo
-                }
+                try await Self.validate(url)
                 try Task.checkCancellation()
                 // Cancellation is forwarded to the file transaction, including large files.
                 let copy = Task.detached(priority: .userInitiated) {
@@ -61,6 +55,14 @@ final class VideoImporter: ObservableObject {
                 problem = "Couldn't import this video. \(error.localizedDescription)"
             }
         }
+    }
+
+    static func validate(_ url: URL) async throws {
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration).seconds
+        let tracks = try await asset.loadTracks(withMediaType: .video)
+        guard duration.isFinite, duration > 0, !tracks.isEmpty,
+              try await asset.load(.isReadable) else { throw ImportError.invalidVideo }
     }
 
     func cancel() { work?.cancel() }

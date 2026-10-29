@@ -26,6 +26,16 @@ if CommandLine.arguments.contains("--mcp") {
         }
     })
     exit(code)
+} else if let index = CommandLine.arguments.firstIndex(of: "--verify-media"), index + 1 < CommandLine.arguments.count {
+    let output = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
+    Task { @MainActor in
+        do { try await MediaVerification.run(in: output); exit(0) }
+        catch {
+            FileHandle.standardError.write(Data("Media verification failed: \(error.localizedDescription)\n".utf8))
+            exit(1)
+        }
+    }
+    RunLoop.main.run()
 } else {
     MainActor.assumeIsolated {
         // Opened by an agent: no Dock icon until the person opens a window.
