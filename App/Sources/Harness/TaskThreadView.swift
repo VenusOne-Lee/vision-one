@@ -8,13 +8,35 @@ import VisionOneKit
 struct TaskThreadView: View {
     @ObservedObject var model: HarnessModel
     let task: DeskTask
+    @State private var showActivity = false
+
+    private func isActivity(_ cell: TaskCell) -> Bool {
+        switch cell.kind {
+        case .log: return true
+        case let .receipt(id, _, _):
+            guard let job = model.snapshot.jobs.first(where: { $0.id == id }) else { return false }
+            return job.state == .done || job.state == .undone
+        case let .approval(card): return !card.isOpen
+        default: return false
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Theme.Space.md) {
-                        ForEach(task.cells) { cell in
+                        let activity = task.cells.filter { isActivity($0) }
+                        if !activity.isEmpty {
+                            DisclosureGroup("\(activity.count) completed updates", isExpanded: $showActivity) {
+                                ForEach(activity) { cell in
+                                    ThreadCellView(cell: cell, task: task, model: model)
+                                }
+                            }
+                            .textStyle(.caption)
+                            .foregroundStyle(Theme.textMuted)
+                        }
+                        ForEach(task.cells.filter { !isActivity($0) }) { cell in
                             ThreadCellView(cell: cell, task: task, model: model)
                                 .id(cell.id)
                         }
@@ -41,7 +63,7 @@ struct TaskThreadView: View {
                 .padding(.bottom, Theme.Space.md)
                 .frame(maxWidth: .infinity)
         }
-        .background(Theme.canvas)
+        .background(Theme.paper)
     }
 
     /// Before any agent has run: the asks most people start with, dashed
@@ -116,11 +138,13 @@ struct NewTaskView: View {
                 .minimumScaleFactor(0.7)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-            if model.takes.isEmpty, !recorder.phase.isLive {
+            Text("Record, refine and share — one task at a time.")
+                .textStyle(.body).foregroundStyle(Theme.textMuted)
+            if !recorder.phase.isLive {
                 firstRecording
             }
-            FlowChips(chips: ["/record", "Clips from my last video", "Cut my last video to 60 seconds",
-                              "/style", "Write this week's update"]) { chip in
+            FlowChips(chips: ["Clips from my last video", "Cut my last video to 60 seconds",
+                              "Copy a style", "Write this week's update"]) { chip in
                 start(chip)
             }
             if model.takes.isEmpty, clipsNeededTake {
@@ -170,6 +194,8 @@ struct NewTaskView: View {
 
     private func start(_ chip: String) {
         switch chip {
+        case "Copy a style":
+            model.send("/style")
         case "Clips from my last video":
             guard let newest = model.takes.first else {
                 clipsNeededTake = true

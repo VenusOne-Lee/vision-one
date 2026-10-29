@@ -10,13 +10,16 @@ import VisionOneKit
 struct HarnessView: View {
     @ObservedObject var model: HarnessModel
     @ObservedObject private var recorder = ScreenRecorder.shared
+    @ObservedObject private var theme = ThemeStore.shared
 
     @AppStorage("harness.showSidebar") private var showSidebar = true
     @AppStorage("harness.sidebarWidth") private var sidebarWidth = 248.0
     /// A component filling the window (⤢), with the task rail beside it.
     @State private var fullPanel: PanelKind?
+    @AppStorage("harness.stageFraction") private var stageFraction = 0.58
     /// Editor or Sound picked with no takes yet: their empty state shows.
     @State private var noTakesMode: HarnessMode?
+    @State private var showingExport = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +40,11 @@ struct HarnessView: View {
         .foregroundStyle(Theme.text)
         .themed()
         .background(shortcuts)
+        .sheet(isPresented: $showingExport) {
+            if let workspace = model.workspace {
+                ExportSheet(take: workspace.take, keep: nil) { showingExport = false }
+            }
+        }
         .onReceive(recorder.$lastTake) { _ in model.refreshTakes() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             model.refreshTakes()
@@ -67,6 +75,14 @@ struct HarnessView: View {
             SegmentedTabs(selection: modeBinding, options: HarnessMode.allCases) { $0.title }
                 .help("Tasks shows the thread; Editor and Sound fill the window. Esc comes back.")
             Spacer(minLength: Theme.Space.sm)
+            if model.workspace != nil {
+                Button("Export…") { showingExport = true }
+                    .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
+            }
+            IconButton(theme.palette.isDark ? "Use light appearance" : "Use dark appearance",
+                       systemImage: theme.palette.isDark ? "sun.max" : "moon") {
+                theme.apply(theme.palette.isDark ? .paper : .studio)
+            }
             if recorder.phase.isLive {
                 HStack(spacing: 6) {
                     LiveDot()
@@ -182,18 +198,28 @@ struct HarnessView: View {
             LibraryView { model.open($0) }
         case .task:
             if let task = model.task {
-                HStack(spacing: 0) {
+                GeometryReader { geometry in
+                let narrow = geometry.size.width < 720
+                let stageWidth = min(max(geometry.size.width * stageFraction, 320), max(320, geometry.size.width - 340))
+                let layout = narrow ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
+                layout {
                     TaskThreadView(model: model, task: task)
                         .frame(minWidth: 340, maxWidth: .infinity)
                     // The panel needs a take; a task that's still a plan
                     // or a script is just its thread.
                     if let workspace = model.workspace, !model.layout.isHidden {
-                        DragDivider(axis: .vertical, value: panelWidth, range: PanelLayout.minWidth...PanelLayout.maxWidth,
-                                    inverted: true)
+                        if !narrow {
+                        DragDivider(axis: .vertical, value: Binding(
+                            get: { Double(stageWidth) },
+                            set: { stageFraction = $0 / max(1, geometry.size.width) }),
+                            range: 320...max(320, Double(geometry.size.width - 340)), inverted: true)
+                        }
                         PanelHost(model: model, workspace: workspace) { fullPanel = $0 }
-                            .frame(width: model.layout.width)
+                            .frame(width: narrow ? nil : stageWidth)
+                            .frame(minHeight: narrow ? 240 : nil)
                             .task(id: workspace.take.name) { await workspace.load() }
                     }
+                }
                 }
             }
         }

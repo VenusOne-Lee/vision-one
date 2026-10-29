@@ -252,6 +252,9 @@ final class ClipsModel: ObservableObject {
         }
         var exporter = VideoExporter(take: take, keep: keep, preset: .hd1080)
         exporter.clip = (clip.format, ClipFrame.resolved(clip, events: events))
+        exporter.captionRingHex = BrandStore.shared.kit.ring.hex
+        exporter.ring = BrandStore.shared.kit.ring
+        exporter.overlays = BrandStore.shared.overlays()
         exports[id] = .exporting(0)
         do {
             let output = try await exporter.run(to: take.clipURL(for: clip)) { progress in
@@ -260,6 +263,7 @@ final class ClipsModel: ObservableObject {
                     self.exports[id] = .exporting(progress)
                 }
             }
+            CaptionExport.writeFiles(for: take, video: output.url, timeline: output.timeline, offset: output.videoStart)
             exports[id] = .done(output.url, output.bytes)
         } catch is CancellationError {
             exports[id] = nil

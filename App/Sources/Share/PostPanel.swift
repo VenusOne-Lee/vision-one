@@ -184,7 +184,7 @@ private struct VersionOneCard: View {
                     }
                 } else {
                     HStack(spacing: Theme.Space.sm) {
-                        Button("Approve and post") { approve() }
+                        Button("Copy and open Version One") { approve() }
                             .buttonStyle(PillButtonStyle(kind: .primary, size: .small))
                             .disabled(words.isEmpty)
                         Button(editing ? "Done" : "Edit") {
@@ -372,7 +372,7 @@ private struct NetworkRow: View {
             }
         } else {
             HStack(spacing: Theme.Space.sm) {
-                Button(posted ? "Open \(target.title) again" : "Post to \(target.title)") {
+                Button(posted ? "Open \(target.title) again" : "Copy and open \(target.title)") {
                     if posted || rules.allows(target.destination) { post() } else { asking = true }
                 }
                 .buttonStyle(PillButtonStyle(kind: .primary, size: .small))

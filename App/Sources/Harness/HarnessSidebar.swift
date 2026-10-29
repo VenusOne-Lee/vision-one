@@ -16,6 +16,12 @@ struct HarnessSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Theme.Space.sm) {
+                Image(systemName: "record.circle").foregroundStyle(Theme.text)
+                Text("Vision One").textStyle(.headline)
+            }
+            .padding(Theme.Space.md)
+
             VStack(alignment: .leading, spacing: 2) {
                 SidebarButton("New task", systemImage: "square.and.pencil", isSelected: model.page == .newTask,
                               shortcut: "⌘N") {
@@ -51,7 +57,7 @@ struct HarnessSidebar: View {
                             }
                             ForEach(tasks) { task in
                                 TaskRow(title: task.title, status: model.snapshot.status(of: task),
-                                        line: model.snapshot.statusLine(of: task)
+                                        line: sidebarStatus(task)
                                             + (task.requestedBy.map { " · from \($0)" } ?? ""),
                                         isSelected: model.page.taskID == task.id)
                                     .onTapGesture { model.open(task.id) }
@@ -90,6 +96,16 @@ struct HarnessSidebar: View {
         .background(Theme.canvas)
         .sheet(item: $settingsProject) { project in
             ProjectSettingsSheet(project: project) { settingsProject = nil }
+        }
+    }
+
+    private func sidebarStatus(_ task: DeskTask) -> String {
+        switch model.snapshot.status(of: task) {
+        case .ready: return "Needs review"
+        case .done:
+            let receipt = model.snapshot.statusLine(of: task)
+            return receipt.hasPrefix("Exported ") ? "Exported" : "Up to date"
+        default: return model.snapshot.statusLine(of: task)
         }
     }
 

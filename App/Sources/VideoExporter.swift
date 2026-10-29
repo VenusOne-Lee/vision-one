@@ -235,8 +235,8 @@ struct VideoExporter {
         audioSources = await VoiceComposer.sources(audioSources, take: take)
 
         // The camera, on its own track, cut the same way as the screen.
-        // Clips skip it for now: their crop would cut the bubble in half.
-        let camera = clip == nil ? await Self.camera(for: take) : nil
+        // The compositor places the bubble after cropping, in output coordinates.
+        let camera = await Self.camera(for: take)
         var cameraTrack: AVMutableCompositionTrack?
         if camera != nil {
             cameraTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)

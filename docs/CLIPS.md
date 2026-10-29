@@ -46,9 +46,12 @@ The best five that don't overlap are added as dashed suggestions. The Clipper ag
 | Cover | 1080 × 1920 | thumbnail-cover.png |
 | Square | 1080 × 1080 | thumbnail-square.png |
 
+## Export consistency update — 29 October 2026
+
+Clip export now passes the take’s caption settings and brand overlays, writes timed subtitle sidecars, and includes the separate camera track. The camera is composed after cropping and clamped within the output frame. Native build and logic tests pass; a rendered clip with a separate camera track still needs a media-level check.
+
 ## Not yet
 
-- Burned-in captions on clips (once captions land, pass the caption overlay)
 - A window that moves with the cursor during the clip (`ReframePlan`)
 - Brand kit fonts and ring colour (`ThumbnailStyle(brandKit:)`)
 - AI-made covers with your own OpenAI key

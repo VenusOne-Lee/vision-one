@@ -19,12 +19,13 @@ struct LibraryView: View {
     /// (a transcript or an export may have landed meanwhile).
     @State private var generation = 0
     @State private var search = ""
+    @State private var filter: LibraryFilter = .all
     @FocusState private var searchFocused: Bool
     /// The last take moved to the Trash, for Undo.
     @State private var trashed: Trashed?
     @AppStorage("library.sort") private var sort = LibrarySort.newest
 
-    private var query: LibraryQuery { LibraryQuery(search: search, filter: .all, sort: sort) }
+    private var query: LibraryQuery { LibraryQuery(search: search, filter: filter, sort: sort) }
 
     var body: some View {
         ScrollView {
@@ -120,6 +121,13 @@ struct LibraryView: View {
                 .foregroundStyle(Theme.textMuted)
             Spacer(minLength: Theme.Space.sm)
             searchField
+            Menu {
+                Picker("Show", selection: $filter) {
+                    ForEach(LibraryFilter.allCases, id: \.self) { value in
+                        Text(value.label).tag(value)
+                    }
+                }
+            } label: { Label(filter.label, systemImage: "line.3.horizontal.decrease") }
             sortMenu
         }
     }

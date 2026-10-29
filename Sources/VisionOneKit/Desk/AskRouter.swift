@@ -59,6 +59,17 @@ public enum AskRouter {
             default: return .open(name)
             }
         }
+        // Exact navigation requests should never accidentally start an edit job.
+        let navigation: [String: String] = [
+            "record": "record", "start recording": "record",
+            "open editor": "edit", "open sound": "sound", "open mixer": "sound",
+            "add captions": "captions", "show captions": "captions",
+            "review changes": "review", "show changes": "review",
+            "copy a style": "style", "choose music": "music"
+        ]
+        if let command = navigation[text.lowercased().trimmingCharacters(in: .punctuationCharacters)] {
+            return .open(command)
+        }
         return .plan(plan(for: text))
     }
 

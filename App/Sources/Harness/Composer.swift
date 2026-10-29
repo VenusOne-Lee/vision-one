@@ -31,13 +31,24 @@ struct Composer: View {
                     .onKeyPress(.tab) { acceptHighlighted() }
                     .onChange(of: model.draft) { _, _ in highlighted = 0 }
                     .accessibilityLabel("Ask Vision One")
-                HStack(spacing: Theme.Space.xs) {
-                    autonomyMenu
-                    whereMenu
-                    Spacer(minLength: Theme.Space.sm)
-                    modeMenu
-                    recordButton
-                    sendButton
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Theme.Space.xs) {
+                        autonomyMenu
+                        whereMenu
+                        Spacer(minLength: Theme.Space.sm)
+                        modeMenu
+                        recordButton
+                        sendButton
+                    }
+                    VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                        HStack(spacing: Theme.Space.xs) { autonomyMenu; whereMenu }
+                        HStack(spacing: Theme.Space.xs) {
+                            modeMenu
+                            Spacer(minLength: 0)
+                            recordButton
+                            sendButton
+                        }
+                    }
                 }
             }
             .padding(Theme.Space.sm + 4)
