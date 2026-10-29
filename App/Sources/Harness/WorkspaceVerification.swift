@@ -128,13 +128,16 @@ enum WorkspaceVerification {
             var appearance = Appearance.standard
             appearance.mode = dark ? .dark : .light
             ThemeStore.shared.renderAppearance(appearance)
-            for state in ["new-task", "library", "library-filter-empty", "editor", "sound"] {
+            for state in ["new-task", "library", "library-filter-empty", "recording", "editor", "sound"] {
                 let model = HarnessModel(snapshot: snapshot, takes: [take], page: state == "new-task" ? .newTask : (state.hasPrefix("library") ? .library : .task(task.id)))
                 if let workspace = model.workspace { await workspace.load(); workspace.editor.seek(toSource: 0.5) }
                 if state == "editor" { model.mode = .editor }
                 if state == "sound" { model.mode = .sound }
                 let name = "\(state)-\(dark ? "dark" : "light")-minimum.png"
-                if state == "library-filter-empty" {
+                if state == "recording" {
+                    try await capture(RecordingPreparationView(model: model, availableHeight: 520),
+                                      size: CGSize(width: 760, height: 520), to: root.appendingPathComponent(name))
+                } else if state == "library-filter-empty" {
                     try await capture(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }),
                                       size: CGSize(width: 760, height: 520), to: root.appendingPathComponent(name))
                 } else {

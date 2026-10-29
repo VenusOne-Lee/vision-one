@@ -28,6 +28,21 @@ enum TranscriptViewVerification {
         throw MediaVerification.Failure(message: message)
     }
 
+    private static func key(_ view: TranscriptNSTextView, window: NSWindow, code: UInt16,
+                            characters: String, modifiers: NSEvent.ModifierFlags = []) throws {
+        try MediaVerification.require(window.makeFirstResponder(view) && window.firstResponder === view,
+                                      "Transcript did not accept native first responder")
+        guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
+                                          timestamp: ProcessInfo.processInfo.systemUptime,
+                                          windowNumber: window.windowNumber, context: nil,
+                                          characters: characters, charactersIgnoringModifiers: characters,
+                                          isARepeat: false, keyCode: code) else {
+            throw MediaVerification.Failure(message: "Could not create native transcript key event")
+        }
+        // App-owned event delivery avoids global input/accessibility permissions.
+        window.sendEvent(event)
+    }
+
     static func stateFixtures(source: Take, in root: URL) throws -> [(String, Take)] {
         let parent = root.appendingPathComponent("transcript-state-fixtures")
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
@@ -105,14 +120,18 @@ enum TranscriptViewVerification {
         // Exercise the same coordinator entry point used by Delete/context menu.
         current.setSelectedRange(word)
         b.undoManager.beginUndoGrouping()
-        coordinator.cutSelection()
+        try key(current, window: window, code: 51, characters: "\u{7F}")
         b.undoManager.endUndoGrouping()
         try MediaVerification.require(b.edits != originalB && a.edits == beforeA, "Transcript cut targeted another take")
-        b.undoManager.undo()
+        try key(current, window: window, code: 6, characters: "z", modifiers: .command)
         try MediaVerification.require(b.edits == originalB, "B transcript cut did not undo")
-        b.undoManager.redo()
+        try key(current, window: window, code: 6, characters: "z", modifiers: [.command, .shift])
         try MediaVerification.require(b.edits != originalB, "B transcript cut did not redo")
         try MediaVerification.require(try Data(contentsOf: a.take.editsURL) == originalA, "B transcript action changed A's saved edits")
+        try key(current, window: window, code: 49, characters: " ")
+        try MediaVerification.require(b.isPlaying, "Transcript Space key did not play the current take")
+        try key(current, window: window, code: 49, characters: " ")
+        try MediaVerification.require(!b.isPlaying, "Transcript Space key did not pause the current take")
         fixture.editor = a
         try await wait("Transcript did not return to A") {
             textView(in: host)?.coordinator?.model === a && textView(in: host)?.string.contains("Alpha") == true
@@ -145,11 +164,11 @@ enum TranscriptViewVerification {
                                       "Recovered transcript cut used stale timing")
         try MediaVerification.require(try Data(contentsOf: b.take.editsURL) == savedB,
                                       "Recovered A transcript changed B's saved edits")
-        try JSONSerialization.data(withJSONObject: ["equalCountReplacement": true, "updatedRangesAndTiming": true,
+        try JSONSerialization.data(withJSONObject: ["nativeFirstResponderAndSyntheticKeys": true, "equalCountReplacement": true, "updatedRangesAndTiming": true,
                                                   "mountedTakeSwitch": true, "selectionReset": true,
                                                   "currentTakeCutUndoRedo": true, "otherTakeBytesUnchanged": true],
                                    options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("transcript-view-switch.json"))
-        print("Native transcript take-switch/equal-count-replacement/cut/undo/redo verification passed")
+        print("Native transcript first-responder/keys/take-switch/equal-count-replacement/cut/undo/redo verification passed")
     }
 }
