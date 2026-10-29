@@ -46,6 +46,7 @@ enum WorkspaceVerification {
         try Transcript(language: "en", engine: "workspace fixture", duration: 3, segments: [.init(words: words)]).write(to: take.transcriptURL)
         try WorkspaceMotion.verify()
         try await ExportControllerVerification.run(in: root)
+        try await ExportControllerVerification.verifyQueue(in: root)
         try verifyCaptionPaneUpdates(in: root)
         try await verifyTakeSwitch(source: take, in: root)
         let original = ThemeStore.shared.appearance

@@ -6,7 +6,7 @@ import VisionOneKit
 /// another take runs. Jobs read the take's saved settings when they start.
 @MainActor
 final class ExportQueue: ObservableObject {
-    static let shared = ExportQueue()
+    static let shared = ExportQueue(controller: .shared)
 
     struct Request: Identifiable {
         let id = UUID()
@@ -26,8 +26,8 @@ final class ExportQueue: ObservableObject {
     private var watching: AnyCancellable?
     private var requests: [URL: Request] = [:]
 
-    private init() {
-        controller = ExportController.shared
+    init(controller: ExportController) {
+        self.controller = controller
         watching = controller.$phase.receive(on: DispatchQueue.main).sink { [weak self] phase in
             MainActor.assumeIsolated { self?.follow(phase) }
         }
