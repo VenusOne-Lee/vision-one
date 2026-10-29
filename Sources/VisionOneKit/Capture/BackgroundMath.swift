@@ -150,7 +150,7 @@ public enum DepthLayers {
         let range = max(hi - lo, 1e-4)
         let k = 1 / max(softness, 1e-3)
         let scale = k / range
-        let bias = -k * (threshold - lo) / range + 0.5
+        let bias = -k * threshold / range + 0.5
         return (scale, bias)
     }
 }
