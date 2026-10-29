@@ -68,6 +68,19 @@ public struct SharerAgent: Sendable {
         self.ladder = ladder
     }
 
+    /// Fewer kept words than this (about 15 seconds of talk) gives a
+    /// model nothing true to say, and it invents a product demo instead.
+    public static let minimumWords = 40
+
+    /// The take has too little speech to write posts from.
+    public struct TooLittleSaid: LocalizedError, Equatable, Sendable {
+        public let words: Int
+
+        public var errorDescription: String? {
+            "Too little was said to write posts (\(words) word\(words == 1 ? "" : "s")). Talk through what you're showing for at least 15 seconds, or write the title yourself."
+        }
+    }
+
     struct Reply: Decodable {
         struct Chapter: Decodable {
             var sentence: Int
@@ -91,7 +104,7 @@ public struct SharerAgent: Sendable {
 
     static let shape = #"""
     {"title": "...", "description": "two or three sentences",
-     "chapters": [{"sentence": 1, "title": "Intro"}, {"sentence": 7, "title": "..."}],
+     "chapters": [{"sentence": 1, "title": "..."}, {"sentence": 7, "title": "..."}],
      "posts": [{"network": "x", "text": "..."}, {"network": "linkedin", "text": "..."}, {"network": "whatsapp", "text": "..."}],
      "launch": {"name": "...", "oneLine": "under 140 characters", "whoItsFor": "..."}}
     """#
@@ -105,7 +118,9 @@ public struct SharerAgent: Sendable {
     public func draft(transcript: Transcript, edits: EditList, brief: AgentBrief,
                       product: String? = nil, launch: Bool = false) async throws -> SharePack {
         let sentences = transcript.sentences(keeping: edits)
-        var lead = "You write what goes with a screen recording when it's shared: a title, a short description, chapters for longer videos, and one post per network. Use only what the transcript says. South African English, plain and specific, no hype or emoji walls."
+        let words = sentences.reduce(0) { $0 + $1.wordIDs.count }
+        guard words >= Self.minimumWords else { throw TooLittleSaid(words: words) }
+        var lead = "You write what goes with a screen recording when it's shared: a title, a short description, chapters for longer videos, and one post per network. Use only what the transcript says: every claim must come from it. Never invent a product, feature or demo the speaker didn't mention. A placeholder still in braces, like {product}, means that detail is unknown: leave it out rather than guess. South African English, plain and specific, no hype or emoji walls."
         if launch { lead += " Also fill the Version One launch fields." }
         if let product { lead += " The product is \(product)." }
         let reply = try await ladder.complete(AIRequest(

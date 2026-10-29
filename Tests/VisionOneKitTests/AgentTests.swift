@@ -167,6 +167,21 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(pack.launch?.name, "Thing")
     }
 
+    func testSharerWontWriteFromSmallTalk() async throws {
+        let t = transcript(["Hi there.", "Is this on?", "Okay, cool, thanks."])
+        let sharer = SharerAgent(ladder: ladder { _ in
+            #"{"title":"Intro","description":"This is a demo of the product."}"#
+        })
+        do {
+            _ = try await sharer.draft(transcript: t, edits: EditList(sourceDuration: t.duration),
+                                       brief: Purpose.demo.brief())
+            XCTFail("drafted posts from small talk")
+        } catch let error as SharerAgent.TooLittleSaid {
+            XCTAssertLessThan(error.words, SharerAgent.minimumWords)
+            XCTAssertTrue(AgentRunner.message(for: error).hasPrefix("Too little was said"))
+        }
+    }
+
     // MARK: Purposes and energy
 
     func testPurposeIDsMatchTemplateLooks() {
