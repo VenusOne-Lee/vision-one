@@ -7,15 +7,14 @@ struct DeliveryPanel: View {
     @ObservedObject var workspace: TaskWorkspace
     @ObservedObject var model: HarnessModel
     @ObservedObject private var clips: ClipsModel
+    @StateObject private var captionControl: DeliveryCaptionControl
 
     init(workspace: TaskWorkspace, model: HarnessModel) {
         self.workspace = workspace
         self.model = model
         self.clips = workspace.clips
+        _captionControl = StateObject(wrappedValue: DeliveryCaptionControl(take: workspace.take))
     }
-
-    @State private var captions = CaptionSettings()
-    @State private var problem: String?
 
     var body: some View {
         GeometryReader { geometry in
@@ -30,7 +29,7 @@ struct DeliveryPanel: View {
                         }
                         HStack(spacing: 12) {
                             Text("1080p").textStyle(.label)
-                            Toggle("Captions", isOn: $captions.isOn).toggleStyle(.ink)
+                            Toggle("Captions", isOn: Binding(get: { captionControl.isOn }, set: { captionControl.set($0) })).toggleStyle(.ink)
                             Spacer(minLength: 0)
                             if clip.state == .proposed {
                                 Button("Keep clip") { clips.accept(clip.id) }.buttonStyle(.primary)
@@ -40,7 +39,7 @@ struct DeliveryPanel: View {
                             }
                         }
                         deliveryState(clip)
-                        if let problem { Text(problem).textStyle(.caption).foregroundStyle(Theme.error) }
+                        if let problem = captionControl.problem { Text(problem).textStyle(.caption).foregroundStyle(Theme.error) }
                         DisclosureGroup("Trim, framing and clip details") {
                             ClipCard(model: clips, clip: clip, isSelected: true).padding(.top, 8)
                         }.textStyle(.label)
@@ -53,14 +52,7 @@ struct DeliveryPanel: View {
                 }.padding(16)
             }
         }
-        .task { captions = workspace.take.loadCaptionSettings() }
-        .onChange(of: captions) { _, value in
-            do {
-                try workspace.take.saveCaptionSettings(value)
-                problem = nil
-                NotificationCenter.default.post(name: .takeStyleChanged, object: workspace.take.folder)
-            } catch { problem = "Couldn't save captions: \(error.localizedDescription)" }
-        }
+        .onAppear { captionControl.reload() }
     }
 
     @ViewBuilder private func deliveryState(_ clip: Clip) -> some View {
@@ -126,6 +118,42 @@ struct DeliveryReview: View {
             }
             Text("Post copy").textStyle(.headline)
             PostPanel(take: workspace.take).frame(height: 360)
+        }
+    }
+}
+
+/// The production toggle's small state owner also receives editor/template
+/// notifications. Reload is read-only, so our own notification cannot loop.
+@MainActor
+final class DeliveryCaptionControl: ObservableObject {
+    let take: Take
+    @Published private(set) var isOn = true
+    @Published private(set) var problem: String?
+    private var observer: NSObjectProtocol?
+
+    init(take: Take) {
+        self.take = take
+        reload()
+        observer = NotificationCenter.default.addObserver(forName: .takeStyleChanged, object: nil, queue: .main) { [weak self] note in
+            MainActor.assumeIsolated {
+                guard let self, note.object as? URL == self.take.folder else { return }
+                self.reload()
+            }
+        }
+    }
+
+    deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+
+    func reload() { isOn = take.loadCaptionSettings().isOn }
+
+    func set(_ value: Bool) {
+        do {
+            isOn = try take.setCaptionVisibility(value).isOn
+            problem = nil
+            NotificationCenter.default.post(name: .takeStyleChanged, object: take.folder)
+        } catch {
+            reload()
+            problem = "Couldn't save captions: \(error.localizedDescription)"
         }
     }
 }

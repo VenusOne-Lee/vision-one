@@ -30,3 +30,15 @@ Inspected findings so far:
 - Narrow Sound's stacked preview/mixer leaves too little usable mixer height. Switch Preview/Mix instead of squeezing both.
 
 Every later revision needs its own build/render results and image inspection. Interactive resizing, focus, shortcuts, reduced motion, real captures and permissions, external provider gates, audible mix and real share handoffs remain unfinished.
+
+## Finishing layout: bf66a8d / CI 40920814329
+
+Native build, media and 60-render steps passed. Inspected new-task-light-narrow, editor-dark-narrow, sound-dark-wide, delivery-light-wide and task-dark-wide. Composer is now above suggestions at 900×640; transport shows the complete version label on its own row; full-width editor timeline and left task rail are present. Delivery has a large selected render and direct labeled output controls, candidates/post tools at left and related finishing actions below. The AVPlayerItem fixture fallback produces visible composition frames.
+
+The delivery screenshot still sampled the first keyframe, omitting the later camera/caption. Independently decoded its actual clip MP4 at 0.5 seconds with FFmpeg: camera and caption are present and correctly placed. The screenshot fallback was changed to zero time tolerance and a required decoded-frame check; it must not pass if a required fixture frame is missing.
+
+## Context refinement: ec8dae2 / CI 40921775137
+
+Package/native/media/render steps passed. Inspected agents-dark-narrow, recording-light-narrow, sound-light-narrow, pending-dark-narrow, task-light-wide and autopilot-dark-wide. The agent capture now has an opaque themed background and real setup controls without starting MCP. Recording header/footer remain within the requested 900×640 capture with internal scrolling. Narrow mixer and pending approval are reachable at full pane width. Transcript paragraphs, accepted cuts and captions now use a richer isolated fixture; Autopilot displays prerequisites and an Access settings route.
+
+These are named inspected states, not an assertion that all 60 images or every advanced interaction are accepted. The exact-frame follow-up and later code require their own current evidence.

@@ -35,6 +35,7 @@ struct EditorFullMode<Rail: View>: View {
     /// Space is down; a hold past `holdToTalk` starts listening.
     @State private var spaceDown = false
     @State private var comparing = false
+    @State private var compactPane = "Canvas"
 
     static var holdToTalk: Duration { .milliseconds(350) }
 
@@ -65,14 +66,21 @@ struct EditorFullMode<Rail: View>: View {
     }
 
     var body: some View {
+        GeometryReader { outer in
         HStack(spacing: 0) {
             rail()
             VStack(spacing: 0) {
                 GeometryReader { geometry in
                     if geometry.size.width < 760 {
-                        VSplitView {
-                            stage.frame(minHeight: 220)
-                            if showAside { asidePanel.frame(minHeight: 140) }
+                        VStack(spacing: 0) {
+                            if showAside {
+                                HStack {
+                                    SegmentedTabs(selection: $compactPane, options: ["Canvas", "Transcript & changes"]) { $0 }
+                                    Spacer()
+                                }.padding(8).background(Theme.paper)
+                            }
+                            if !showAside || compactPane == "Canvas" { stage }
+                            else { asidePanel }
                         }
                     } else {
                         HStack(spacing: 0) {
@@ -84,8 +92,9 @@ struct EditorFullMode<Rail: View>: View {
                         }
                     }
                 }
-                if model.phase == .ready { editingFooter }
+                if model.phase == .ready { editingFooter(height: outer.size.height) }
             }
+        }
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
@@ -162,13 +171,13 @@ struct EditorFullMode<Rail: View>: View {
         .background(Theme.canvas)
     }
 
-    private var editingFooter: some View {
+    private func editingFooter(height: CGFloat) -> some View {
         VStack(spacing: 0) {
                 TimelineResizeBar(height: $timelineHeight)
                 EditorTimeline(model: model, effects: model.effects, filmstrip: filmstrip, zoom: $zoom,
                                showWaveform: showWaveform, showEffects: showTracks, showSound: showTracks,
                                cutsOnRelease: tool == .cut)
-                    .frame(height: min(timelineHeight, 220))
+                    .frame(height: min(timelineHeight, max(80, height * 0.22)))
                     .padding(.horizontal, 12)
                 AskBar(model: model)
                     .padding(12)
@@ -196,7 +205,7 @@ struct EditorFullMode<Rail: View>: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .frame(minHeight: 160)
+            .frame(minHeight: 60)
             .layoutPriority(1)
     }
 

@@ -52,7 +52,7 @@ struct VoiceToolsView: View {
                 Spacer()
                 Tag("ElevenLabs voice isolator")
             }
-            Text("Takes out wind, hooters and the room, and keeps your voice. Try the free Remove noise on this Mac first; use this when that isn't enough.")
+            Text("Reduces background noise through ElevenLabs. Only the microphone track is sent after approval; preview the result before keeping it.")
                 .textStyle(.body).foregroundStyle(Theme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
             if let clean = model.edits.cleanVoice {

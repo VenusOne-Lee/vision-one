@@ -43,6 +43,7 @@ enum WorkspaceVerification {
             TranscriptWord(id: index, text: String(word), start: Double(index) * 0.075, end: Double(index + 1) * 0.075)
         }
         try Transcript(language: "en", engine: "workspace fixture", duration: 3, segments: [.init(words: words)]).write(to: take.transcriptURL)
+        try verifyCaptionPaneUpdates(in: root)
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -110,12 +111,50 @@ enum WorkspaceVerification {
                 }
             }
         }
+        // Exercise the actual window minimum as well as the two reference sizes.
+        for dark in [false, true] {
+            var appearance = Appearance.standard
+            appearance.mode = dark ? .dark : .light
+            ThemeStore.shared.renderAppearance(appearance)
+            for state in ["new-task", "editor", "sound"] {
+                let model = HarnessModel(snapshot: snapshot, takes: [take], page: state == "new-task" ? .newTask : .task(task.id))
+                if let workspace = model.workspace { await workspace.load(); workspace.editor.seek(toSource: 0.5) }
+                if state == "editor" { model.mode = .editor }
+                if state == "sound" { model.mode = .sound }
+                let name = "\(state)-\(dark ? "dark" : "light")-minimum.png"
+                try await capture(HarnessView(model: model), size: CGSize(width: 760, height: 520),
+                                  to: root.appendingPathComponent(name), requiresFrame: state == "editor")
+                model.workspace?.close()
+                names.append(name)
+            }
+        }
         let report: [String: Any] = ["screenshots": names, "source": "production HarnessView with isolated fixture snapshot",
-                                    "sizes": [[1512, 982], [900, 640]],
+                                    "sizes": [[1512, 982], [900, 640], [760, 520]],
                                     "limits": ["Static renders require human inspection against approved PNGs", "Does not establish VoiceOver, keyboard navigation, hardware capture or permissions correctness", "Verification-only video areas use decoded fixture frames from the actual AVPlayerItem composition because bitmap caching omits AVPlayer layers; live playback is unverified"]]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("workspace-render.json"))
         print("Workspace renders saved: \(names.count)")
+    }
+
+    private static func verifyCaptionPaneUpdates(in root: URL) throws {
+        let take = Take(folder: root.appendingPathComponent("caption-regression"))
+        try FileManager.default.createDirectory(at: take.folder, withIntermediateDirectories: true)
+        try take.saveCaptionSettings(CaptionSettings())
+        let control = DeliveryCaptionControl(take: take)
+        var external = CaptionSettings(isOn: false, style: .keyword, sizeScale: 1.5, position: 0.3, language: .zulu)
+        try take.saveCaptionSettings(external)
+        NotificationCenter.default.post(name: .takeStyleChanged, object: take.folder)
+        try MediaVerification.require(!control.isOn, "Delivery did not reload an external caption notification")
+        control.set(true)
+        external.isOn = true
+        try MediaVerification.require(take.loadCaptionSettings() == external && control.problem == nil,
+                                      "Delivery caption toggle overwrote newer settings")
+        let bytes = try Data(contentsOf: take.captionSettingsURL)
+        NotificationCenter.default.post(name: .takeStyleChanged, object: take.folder)
+        try MediaVerification.require(try Data(contentsOf: take.captionSettingsURL) == bytes,
+                                      "Delivery caption reload wrote settings after its own notification")
+        let reopened = DeliveryCaptionControl(take: take)
+        try MediaVerification.require(reopened.isOn, "Reopened delivery pane did not load saved visibility")
     }
 
     private static func capture<V: View>(_ view: V, size: CGSize, to url: URL, requiresFrame: Bool = false) async throws {
