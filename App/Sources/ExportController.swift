@@ -43,10 +43,10 @@ final class ExportController: ObservableObject {
             }
             do {
                 let output = try await render(exporter) { progress in
-                    Task { @MainActor in
+                    Task { @MainActor [weak self] in
                         // Updates can land out of order; the ring only
                         // moves forward.
-                        guard self.activeRun == run,
+                        guard let self, self.activeRun == run,
                               case let .exporting(_, current) = self.phase else { return }
                         self.phase = .exporting(preset: preset, progress: max(current, progress))
                     }

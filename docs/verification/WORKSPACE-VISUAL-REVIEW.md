@@ -72,3 +72,13 @@ The expanded media diagnostic uses two distinct tone tracks, with system audio d
 Inspected sound-light-minimum, sound-dark-minimum, sound-light-narrow and sound-dark-wide. At 760×520, Energy, voice clarity, mic/system gains, Show tracks and composer are visible. At larger sizes, optional tracks remain available below the mixer/preview. Independent FFmpeg full decode passed for all ten valid MP4 files in artifact 12919838385; the intentional invalid-import fixture was excluded. [Metrics and file hashes](3f3f470-media.json) record microphone export/preview peaks 0.25801/0.25007 and system peaks 0.10354/0.10022.
 
 The next minimum-editor change uses a one-row compact transport and defaults the timeline closed, with visible Details and Show timeline controls. Its preview size must be verified in the generated minimum images. A newly identified clip-card wiring gap is also fixed: clip export now passes the same template-aware CardMaker as the full-video queue. A native owned-HTML-asset render check is added; results are pending for that revision.
+
+## Compact editor and populated Library follow-up
+
+For `2b22376` / CI 40927817878, editor light/dark minimum and editor dark narrow/light wide were opened. At 760×520 the preview is now roughly 241px high, captions are readable, and playback, Details, Show timeline and Ask remain visible. The earlier ~80px viewport finding is resolved in static evidence. The user independently confirmed the minimum images from the later card-fixture run.
+
+For `27fafb9` / CI 40929007554, the user opened all four populated Library light/dark × wide/narrow images. Fixture rows/thumbnails, import, search/filter/sort were visible; no clipped actionable control was observed at 900×640 or 1512×982. The search placeholder truncates at 900px but remains usable. This does not verify empty recovery, rename failure, focus/hover menus or the 760×520 Library.
+
+The connector recovery adds filtered-empty and minimum Library captures. Their generation and inspection remain pending. Reduce Motion has conditional source and native transaction checks; screenshots do not verify animation behavior.
+
+For `1b5c2bf` / successful CI 40933978656, the user downloaded and inspected owned-template-intro.png and owned-template-body.png. The actual yellow/blue SVG fills the portrait output without black letterboxing, and the post-intro body retains a fully visible upper-right camera plus readable Producer caption. This accepts only the named synthetic template fixture, not general footage or interactive template application.

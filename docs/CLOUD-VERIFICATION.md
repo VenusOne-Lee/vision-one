@@ -6,7 +6,7 @@ The complete scope remains [FULL-OVERHAUL-PLAN.md](FULL-OVERHAUL-PLAN.md). No re
 
 - Started from `codex/producer-workspace-overhaul`, `e5ac6c4a5f2302d7a318c42e2cfc78018f1bbd8b`.
 - Read the full plan and workspace update; inspected all seven actual approved PNGs before implementation.
-- Cloud executor: Linux x86_64, no Swift, Xcode, macOS native UI or capture devices. GitHub repository APIs and source checkout are available. Native builds/tests run through existing macOS CI. No work has been started on the user's Mac.
+- Cloud executor: Linux x86_64, no Swift, Xcode, macOS native UI or capture devices. GitHub repository APIs are available. The initial Linux checkout existed, but the executor later became unavailable; it is currently inaccessible. Native builds/tests run through existing macOS CI. No work has been started on the user's Mac.
 - Draft PR: https://github.com/VenusOne-Lee/vision-one/pull/76. No merge, release, deployment or outbound message has been performed.
 
 ## Current authoritative CI evidence
@@ -65,3 +65,16 @@ Later commits require their own CI results. Preserve the historical local 821-te
 Cloud visual inspection of the retained synthetic portrait frames confirmed the camera stays fully within the upper-right output, captions are legible, the overlay survives, and framing moves from the red source region toward blue. Independent FFmpeg inspection confirmed H.264 1080×1920 and AAC stereo 48 kHz, both 2.5 seconds, with no full-decode errors. The SRT starts its cues at 0.2 and 1.1 seconds after the accepted cut. This closes only those fixture assertions.
 
 Real footage and an interactive macOS session must still establish actual audio quality, broader camera/framing/rotation behaviour, theme/accessibility and complete user workflows. The current Linux session has no interactive macOS surface or capture devices. The PR stays draft; the full goal remains unfinished.
+
+## Repository-connector recovery checkpoints
+
+The cloud shell currently returns **“No usable execution environment is available.”** The earlier uncommitted files have not been read or recovered. Fixes below were reconstructed against published `27fafb9` source using GitHub file reads and atomic tree/commit updates with an expected-head lease. No force push, new chat, merge or release was used.
+
+- `1b5c2bf`: separate supported literal WebKit scheme rules; compilation failure stops HTML loading; all-frame paint evidence retains animations with a flat final frame. The owned SVG fixture deliberately stretches via `preserveAspectRatio='none'`; the yellow-area assertion remains >80%. The prior actual asset reached the output but letterboxed; it was not a native fallback.
+- `46eb2dc`: Library recovery clears search and filter, with filter-aware empty copy. Rename failures show an error, retain the draft and expose Retry rename. Package regressions exercise reset semantics and an actual failed title write followed by retry. Workspace thread/trash/hover and root transactions respect Reduce Motion; a native transaction check verifies functional state changes are preserved.
+- `8962b6d`: export progress and terminal publication guard the originating run ID; cancellation is checked before publishing success or captions. Controlled native callbacks test A finishing, delayed A progress while B runs, B cancellation returning encoder success, failure and retry. This is controller behavior evidence only when its native check passes, separate from real encoder/media checks.
+- `aedd79f`: native WebKit loopback control loads the same local file/subresource as the protected card. The production renderer must make no additional connection. An actual CSS animation must retain its painted first frame and flat final frame; PNGs and `card-safety.json` are retained. Workspace coverage adds filtered-empty Library and both Library variants at 760×520 (78 captures total).
+
+CI 40933978656 (`1b5c2bf`) passed 841 package tests, native Debug build, actual media checks and 70 workspace renders. The user downloaded and inspected owned-template-intro/body PNGs: the yellow/blue asset fills portrait without letterboxing; body camera remains fully visible upper-right and Producer caption readable. CI 40934174179 (`46eb2dc`) passed 844 tests, native build, media and 70 renders, including the native motion transaction check. Export-run and loopback/fade revisions still require their own CI results. No native pass is inferred from source or package tests. A separate read-only artifact review in the tracking session is available; screenshot generation still does not establish visual acceptance.
+
+The Library More menu is now always visible instead of hover-only, so it remains discoverable before focus or pointer movement. Interactive keyboard/VoiceOver acceptance remains open. Export progress callbacks weakly capture their controller to avoid retaining a completed diagnostic/controller through a saved callback.

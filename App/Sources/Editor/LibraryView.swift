@@ -352,7 +352,6 @@ private struct LibraryRow: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            .opacity(isHovering ? 1 : 0)
             .accessibilityLabel("More for \(item.title)")
         }
         .padding(Theme.Space.sm)
