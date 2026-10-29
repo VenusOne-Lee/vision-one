@@ -309,6 +309,17 @@ final class HarnessModel: ObservableObject {
         }
     }
 
+    func retryRequest(before cellID: UUID, in taskID: UUID) {
+        guard let task = snapshot.task(taskID), let index = task.cells.firstIndex(where: { $0.id == cellID }) else { return }
+        let ask = task.cells[..<index].reversed().compactMap { cell -> (String, AskMode)? in
+            if case let .ask(text, mode) = cell.kind { return (text, mode) }
+            return nil
+        }.first
+        guard let (text, mode) = ask else { return }
+        let desk = self.desk
+        Task { await desk.submit(text, to: taskID, mode: mode) }
+    }
+
     /// ↑ in the composer, or × on a queued ask.
     func editQueued(at index: Int, to text: String?) {
         guard let id = page.taskID else { return }

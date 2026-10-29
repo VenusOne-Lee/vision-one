@@ -41,7 +41,7 @@ struct ProjectSettingsSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         })
-        .frame(width: 520, height: 620)
+        .frame(width: 520, height: min(620, max(340, (NSScreen.main?.visibleFrame.height ?? 800) - 120)))
         .foregroundStyle(Theme.text)
         .themed()
     }

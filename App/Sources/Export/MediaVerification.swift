@@ -42,6 +42,7 @@ enum MediaVerification {
         print("Media check: exporting source fixture with audio")
         try await session.export(to: take.screenURL, as: .mov)
         print("Media check: source fixture ready; preparing caption/camera export")
+        try TakeAudioTracks(tracks: [.mic]).write(to: take.audioTracksURL)
         try CameraTrack(cameraName: "Synthetic green camera", startOffset: 0,
                         placements: [.init(t: 0, x: 0.75, y: 0.1, size: 0.2)]).write(to: take.cameraInfoURL)
         try Transcript(language: "en", engine: "fixture", duration: 3,
@@ -111,18 +112,63 @@ enum MediaVerification {
         catch is Failure { throw Failure(message: "Invalid video accepted") }
         catch { /* expected AVFoundation rejection */ }
         try await VideoImporter.validate(silent)
+        try await verifyOtherOutputs(take: take, silent: silent, in: root)
         try await verifyStoppedMic()
 
         let report: [String: Any] = [
             "dimensions": [Int(size.width), Int(size.height)], "duration": length,
             "cameraGreenPixels": pixels.green, "brandYellowPixels": pixels.yellow,
             "captionWhitePixels": pixels.white, "earlyRedPixels": pixels.red, "laterBluePixels": laterPixels.blue, "decodedAudioPeak": exportedAudio, "previewAudioPeak": previewPeak,
-            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback"],
+            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback", "square and 4:5 MP4 dimensions", "manual fixed framing", "fit framing", "silent import edit/undo/redo/export"],
             "remaining": ["real capture and permissions", "native UI light/dark walkthrough", "human inspection of framing, caption placement and audible mix"]
         ]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("verification.json"), options: .atomic)
         print("Media verification passed; inspect verification.json, the MP4 and portrait-frame.png.")
+    }
+
+    private static func verifyOtherOutputs(take: Take, silent: URL, in root: URL) async throws {
+        for preset in [ExportPreset.square, .portrait] {
+            var exporter = VideoExporter(take: take, preset: preset)
+            exporter.captionRingHex = 0x0000FF
+            let output = try await exporter.run(to: root.appendingPathComponent("\(preset.rawValue).mp4")) { _ in }
+            let track = try await AVURLAsset(url: output.url).loadTracks(withMediaType: .video)[0]
+            let size = try await track.load(.naturalSize)
+            let expectedHeight = preset == .square ? 1080 : 1350
+            try require(Int(size.width) == 1080 && Int(size.height) == expectedHeight, "Incorrect \(preset.rawValue) dimensions")
+        }
+        for mode in [ClipFraming.Mode.fixed, .fit] {
+            var exporter = VideoExporter(take: take, preset: .hd1080)
+            exporter.clip = (.vertical, ClipFraming(mode: mode, centerX: 0.8, centerY: 0.5))
+            let output = try await exporter.run(to: root.appendingPathComponent("\(mode.rawValue)-portrait.mp4")) { _ in }
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: output.url))
+            let image = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
+            let pixels = try analyse(image)
+            if mode == .fixed { try require(pixels.blue > pixels.red, "Manual fixed framing was not preserved") }
+            else { try require(pixels.blue > 1000 && pixels.red > 1000, "Fit framing cropped part of the original screen") }
+            try save(image, to: root.appendingPathComponent("\(mode.rawValue)-portrait-frame.png"))
+        }
+
+        let imported = try VideoImport.copy(silent, into: TakeLibrary(folder: root.appendingPathComponent("imported")))
+        Transcriber.shared.transcribe(imported)
+        while Transcriber.shared.isWorking(on: imported) { try await Task.sleep(for: .milliseconds(10)) }
+        let editor = EditorModel(take: imported)
+        await editor.loadIfNeeded()
+        defer { editor.close() }
+        try require(editor.phase == .ready, "Silent imported video could not open in the editor")
+        guard case .failed = editor.transcriptState else { throw Failure(message: "Silent import did not explain its missing transcript") }
+        editor.selection = TimeSpan(start: 0.5, end: 1)
+        editor.cutSelection()
+        try require(abs(editor.edits.outputDuration - 2.5) < 0.1 && editor.undoManager.canUndo, "Silent import timeline editing failed")
+        editor.undoManager.undo()
+        try require(abs(editor.edits.outputDuration - 3) < 0.1, "Silent import cut undo failed")
+        editor.undoManager.redo()
+        try require(abs(editor.edits.outputDuration - 2.5) < 0.1, "Silent import cut redo failed")
+        let output = try await VideoExporter(take: imported, preset: .hd720)
+            .run(to: root.appendingPathComponent("silent-import-edited.mp4")) { _ in }
+        let asset = AVURLAsset(url: output.url)
+        try require(try await asset.loadTracks(withMediaType: .audio).isEmpty, "Silent import unexpectedly gained an audio track")
+        try require(abs(try await asset.load(.duration).seconds - 2.5) < 0.1, "Silent imported-video export ignored the edit")
     }
 
     private static func movie(at url: URL, green: Bool) async throws {

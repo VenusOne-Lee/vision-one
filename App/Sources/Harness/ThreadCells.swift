@@ -46,7 +46,12 @@ struct ThreadCellView: View {
                 AnsweredCard(card: card)
             }
         case let .failed(agent, message):
-            Notice(.error, lead: "\(agent.title) didn't finish", detail: message)
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                Notice(.error, lead: "\(agent.title) didn't finish", detail: message)
+                Button("Retry request") { model.retryRequest(before: cell.id, in: task.id) }
+                    .buttonStyle(.secondary)
+                    .help("Retries this request with its original plan/approval mode")
+            }
         }
     }
 
