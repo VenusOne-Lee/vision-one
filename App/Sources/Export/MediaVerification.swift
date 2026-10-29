@@ -43,7 +43,7 @@ enum MediaVerification {
         try await session.export(to: take.screenURL, as: .mov)
         print("Media check: source fixture ready; preparing caption/camera export")
         try TakeAudioTracks(tracks: [.mic]).write(to: take.audioTracksURL)
-        try CameraTrack(cameraName: "Synthetic green camera", startOffset: 0,
+        try CameraTrack(cameraName: "Synthetic green camera", startOffset: 0.2,
                         placements: [.init(t: 0, x: 0.75, y: 0.1, size: 0.2)]).write(to: take.cameraInfoURL)
         try Transcript(language: "en", engine: "fixture", duration: 3,
                        segments: [.init(words: [
@@ -90,6 +90,8 @@ enum MediaVerification {
         generator.requestedTimeToleranceAfter = .zero
         let image = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
         let pixels = try analyse(image)
+        let earlyImage = try await generator.image(at: CMTime(seconds: 0.1, preferredTimescale: 600)).image
+        try require(try analyse(earlyImage).green == 0, "Camera appeared before its recorded start offset")
         let laterImage = try await generator.image(at: CMTime(seconds: 1.8, preferredTimescale: 600)).image
         let laterPixels = try analyse(laterImage)
         try require(pixels.red > pixels.blue && laterPixels.blue > laterPixels.red,
@@ -113,13 +115,14 @@ enum MediaVerification {
         catch { /* expected AVFoundation rejection */ }
         try await VideoImporter.validate(silent)
         try await verifyOtherOutputs(take: take, silent: silent, in: root)
+        try await verifyRotatedImport(silent, in: root)
         try await verifyStoppedMic()
 
         let report: [String: Any] = [
             "dimensions": [Int(size.width), Int(size.height)], "duration": length,
             "cameraGreenPixels": pixels.green, "brandYellowPixels": pixels.yellow,
             "captionWhitePixels": pixels.white, "earlyRedPixels": pixels.red, "laterBluePixels": laterPixels.blue, "decodedAudioPeak": exportedAudio, "previewAudioPeak": previewPeak,
-            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback", "square and 4:5 MP4 dimensions", "manual fixed framing", "fit framing", "silent import edit/undo/redo/export"],
+            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback", "square and 4:5 MP4 dimensions", "manual fixed framing", "fit framing", "silent import edit/undo/redo/export", "camera late-start gap", "rotated import matches native orientation"],
             "remaining": ["real capture and permissions", "native UI light/dark walkthrough", "human inspection of framing, caption placement and audible mix"]
         ]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
@@ -169,6 +172,60 @@ enum MediaVerification {
         let asset = AVURLAsset(url: output.url)
         try require(try await asset.loadTracks(withMediaType: .audio).isEmpty, "Silent import unexpectedly gained an audio track")
         try require(abs(try await asset.load(.duration).seconds - 2.5) < 0.1, "Silent imported-video export ignored the edit")
+    }
+
+    private static func verifyRotatedImport(_ source: URL, in root: URL) async throws {
+        let folder = root.appendingPathComponent("rotated")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let take = Take(folder: folder)
+        let asset = AVURLAsset(url: source)
+        let sourceTrack = try await asset.loadTracks(withMediaType: .video)[0]
+        let composition = AVMutableComposition()
+        guard let track = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw Failure(message: "Couldn't create rotated fixture")
+        }
+        try track.insertTimeRange(try await sourceTrack.load(.timeRange), of: sourceTrack, at: .zero)
+        track.preferredTransform = CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 180, ty: 0)
+        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
+            throw Failure(message: "Couldn't create rotated fixture export")
+        }
+        try await session.export(to: take.screenURL, as: .mov)
+        try await VideoImporter.validate(take.screenURL)
+        let expectedGenerator = AVAssetImageGenerator(asset: AVURLAsset(url: take.screenURL))
+        expectedGenerator.appliesPreferredTrackTransform = true
+        let expected = try await expectedGenerator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
+        let output = try await VideoExporter(take: take, preset: .hd720)
+            .run(to: root.appendingPathComponent("rotated-import.mp4")) { _ in }
+        let actualGenerator = AVAssetImageGenerator(asset: AVURLAsset(url: output.url))
+        actualGenerator.appliesPreferredTrackTransform = true
+        let actual = try await actualGenerator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
+        try save(expected, to: root.appendingPathComponent("rotated-source-frame.png"))
+        try save(actual, to: root.appendingPathComponent("rotated-export-frame.png"))
+        try require(actual.width == expected.width && actual.height == expected.height,
+                    "Rotated import export has incorrect dimensions")
+        let nativeColours = try signature(expected)
+        let renderedColours = try signature(actual)
+        try require(zip(nativeColours, renderedColours).allSatisfy { abs($0.0 - $0.1) < 35 },
+                    "Rotated import orientation differs from native AVFoundation preview")
+    }
+
+    private static func signature(_ image: CGImage) throws -> [Int] {
+        var data = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        return try data.withUnsafeMutableBytes { raw in
+            guard let context = CGContext(data: raw.baseAddress, width: image.width, height: image.height,
+                bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw Failure(message: "Couldn't inspect orientation") }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            let bytes = raw.bindMemory(to: UInt8.self)
+            var colours: [Int] = []
+            for y in [image.height / 4, image.height * 3 / 4] {
+                for x in [image.width / 4, image.width * 3 / 4] {
+                    let p = (y * image.width + x) * 4
+                    colours += [Int(bytes[p]), Int(bytes[p + 1]), Int(bytes[p + 2])]
+                }
+            }
+            return colours
+        }
     }
 
     private static func movie(at url: URL, green: Bool) async throws {
