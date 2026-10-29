@@ -190,6 +190,15 @@ struct ClipCard: View {
 
     @ViewBuilder
     private var exportStatus: some View {
+        if let warning = model.warnings[clip.id] {
+            Text(warning).textStyle(.caption).foregroundStyle(Theme.error).fixedSize(horizontal: false, vertical: true)
+        }
+        if model.queuedIDs.contains(clip.id), model.exports[clip.id] == nil {
+            Text("Queued").textStyle(.caption).foregroundStyle(Theme.textMuted)
+        }
+        if model.cancelledIDs.contains(clip.id) {
+            Button("Cancelled · Retry") { model.export(clip) }.buttonStyle(.secondary).disabled(model.isExporting)
+        }
         switch model.exports[clip.id] {
         case let .exporting(progress):
             HStack(spacing: 6) {

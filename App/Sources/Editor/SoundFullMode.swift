@@ -26,15 +26,22 @@ struct SoundFullMode<Rail: View>: View {
 
     var body: some View {
         GeometryReader { geometry in
+            if geometry.size.width < 760 {
+                VSplitView {
+                    main.frame(minHeight: 280)
+                    asidePanel.frame(minHeight: 160)
+                }
+            } else {
             HStack(spacing: 0) {
                 main
                     .frame(minWidth: 420, maxWidth: .infinity)
                     .layoutPriority(1)
                 if geometry.size.width >= 760 {
                     SideResizeHandle(width: $asideWidth, range: 260...min(560, geometry.size.width * 0.45))
-                    asidePanel.frame(width: asideWidth)
+                    asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 500)))
                 }
                 rail()
+            }
             }
         }
         .background(Theme.canvas)
@@ -68,6 +75,7 @@ struct SoundFullMode<Rail: View>: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 PlayerSurface(player: model.player)
+                    .overlay { CaptionLayer(model: model) }
                     .background(Theme.text)
                     .onTapGesture { model.togglePlay() }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))

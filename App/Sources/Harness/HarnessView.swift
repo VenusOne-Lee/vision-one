@@ -42,14 +42,16 @@ struct HarnessView: View {
                 }.padding(Theme.Space.sm)
             }
             Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
+            GeometryReader { outer in
             HStack(spacing: 0) {
                 if showSidebar && model.mode == .tasks && fullPanel == nil {
                     HarnessSidebar(model: model)
-                        .frame(width: sidebarWidth)
+                        .frame(width: min(sidebarWidth, max(200, outer.size.width * 0.28)))
                     DragDivider(axis: .vertical, value: $sidebarWidth, range: 200...420)
                 }
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             }
         }
         .frame(minWidth: 760, minHeight: 520)

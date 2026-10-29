@@ -7,6 +7,7 @@ final class ExportController: ObservableObject {
     static let shared = ExportController()
 
     @Published private(set) var phase: ExportPhase = .idle
+    @Published private(set) var warning: String?
     private var task: Task<Void, Never>?
 
     /// Exports `take`. `keep` overrides the kept spans in source seconds;
@@ -18,6 +19,7 @@ final class ExportController: ObservableObject {
     func export(_ take: Take, preset: ExportPreset, keep: [Range<Double>]? = nil, overlays: [ExportOverlay] = [],
                 captionRingHex: UInt32? = nil, cards: CardMaker? = nil) {
         guard !phase.isBusy else { return }
+        warning = nil
         phase = .exporting(preset: preset, progress: 0)
         var exporter = VideoExporter(take: take, keep: keep, preset: preset, overlays: overlays,
                                      captionRingHex: captionRingHex, cards: cards)
@@ -33,7 +35,7 @@ final class ExportController: ObservableObject {
                         self.phase = .exporting(preset: preset, progress: max(current, progress))
                     }
                 }
-                CaptionExport.writeFiles(for: take, video: output.url, timeline: output.timeline,
+                warning = CaptionExport.writeFiles(for: take, video: output.url, timeline: output.timeline,
                                          offset: output.videoStart)
                 phase = .done(preset: preset, url: output.url, bytes: output.bytes)
             } catch is CancellationError {

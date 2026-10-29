@@ -35,6 +35,12 @@ public enum AppliedTemplate {
 
     public static func apply(id: String, to take: Take, overwrite: Bool = false,
                              root: URL = UserTemplates.standardFolder) throws {
+        try transact(take) {
+            try applyUnchecked(id: id, to: take, overwrite: overwrite, root: root)
+        }
+    }
+
+    private static func applyUnchecked(id: String, to take: Take, overwrite: Bool, root: URL) throws {
         if !overwrite, look(for: take) != nil { return }
         let custom = UserTemplates.loadAll(in: root).first { $0.look.id == id }
         guard let look = custom?.look ?? TemplateLook.builtIn(id: id) else {
@@ -78,12 +84,13 @@ public enum AppliedTemplate {
 
     public static func stamp(_ defaults: ProjectMediaDefaults?, on take: Take) throws {
         guard let defaults else { return }
+        let marker = take.folder.appendingPathComponent("project-defaults.json")
+        guard !FileManager.default.fileExists(atPath: marker.path) else { return }
+        try transact(take) {
         let hadCaptions = FileManager.default.fileExists(atPath: take.captionSettingsURL.path)
         if let id = defaults.templateID { try apply(id: id, to: take) }
         // Existing explicit caption settings win. A template supplies style,
         // while the project's captions and language choices supply availability.
-        let marker = take.folder.appendingPathComponent("project-defaults.json")
-        guard !FileManager.default.fileExists(atPath: marker.path) else { return }
         if !hadCaptions {
             var settings = take.loadCaptionSettings()
             settings.isOn = defaults.captions
@@ -91,5 +98,31 @@ public enum AppliedTemplate {
             try take.saveCaptionSettings(settings)
         }
         try JSONEncoder().encode(defaults).write(to: marker, options: .atomic)
+        }
+    }
+
+    /// Backs up only the sidecars this operation owns. Media and other edits
+    /// never move. On any failure restore the previous template and settings.
+    private static func transact(_ take: Take, _ change: () throws -> Void) throws {
+        let fm = FileManager.default
+        let backup = take.folder.appendingPathComponent(".template-rollback-\(UUID().uuidString)", isDirectory: true)
+        let names = ["template", "captions.json", "plan.json", "sound.json", "project-defaults.json"]
+        try fm.createDirectory(at: backup, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: backup) }
+        for name in names {
+            let source = take.folder.appendingPathComponent(name)
+            if fm.fileExists(atPath: source.path) { try fm.copyItem(at: source, to: backup.appendingPathComponent(name)) }
+        }
+        do { try change() }
+        catch {
+            let original = error
+            for name in names {
+                let target = take.folder.appendingPathComponent(name)
+                let saved = backup.appendingPathComponent(name)
+                if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
+                if fm.fileExists(atPath: saved.path) { try fm.copyItem(at: saved, to: target) }
+            }
+            throw original
+        }
     }
 }

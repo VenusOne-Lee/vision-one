@@ -54,7 +54,12 @@ struct ApplyTemplateSheet: View {
             try AppliedTemplate.apply(id: selection, to: workspace.take, overwrite: true)
             let energy = TakePlan.load(for: workspace.take)?.energy ?? .calm
             workspace.editor.setEnergy(energy)
+            NotificationCenter.default.post(name: .takeStyleChanged, object: workspace.take.folder)
             close()
         } catch { problem = "Couldn't apply this template: \(error.localizedDescription)" }
     }
+}
+
+extension Notification.Name {
+    static let takeStyleChanged = Notification.Name("VisionOneTakeStyleChanged")
 }

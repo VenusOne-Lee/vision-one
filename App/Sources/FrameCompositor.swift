@@ -16,6 +16,7 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
 
     let trackID: CMPersistentTrackID
     let overlays: [ExportOverlay]
+    let sourceTransform: CGAffineTransform
     /// Subtracted from the export time before overlays draw, so captions
     /// keep the edited video's clock after an intro.
     let overlayTimeOffset: Double
@@ -32,13 +33,14 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     /// camera.mov's track and where to draw it, when the take has one.
     let camera: CameraLayer?
 
-    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], overlayTimeOffset: Double = 0,
+    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], sourceTransform: CGAffineTransform = .identity, overlayTimeOffset: Double = 0,
          effects: FrameEffects? = nil,
          crop: (@Sendable (Double) -> NormalisedRect?)? = nil, background: CIColor = .black,
          camera: CameraLayer? = nil) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
+        self.sourceTransform = sourceTransform
         self.overlayTimeOffset = overlayTimeOffset
         self.effects = effects
         self.crop = crop
@@ -52,6 +54,7 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         self.timeRange = timeRange
         trackID = kCMPersistentTrackID_Invalid
         overlays = []
+        sourceTransform = .identity
         overlayTimeOffset = 0
         effects = nil
         crop = nil
@@ -104,7 +107,8 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
             return
         }
 
-        var image = CIImage(cvPixelBuffer: source)
+        var image = CIImage(cvPixelBuffer: source).transformed(by: instruction.sourceTransform)
+        image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         if let effects = instruction.effects, !effects.isEmpty {
             // Effects run on the edited video's clock, like overlays.
             image = FrameEffectRenderer.apply(effects, to: image,

@@ -32,9 +32,10 @@ enum CaptionExport {
     /// export's own timeline and move later by `offset`, the brand
     /// intro's length, so they line up with the file. If writing fails
     /// (no transcript yet, say), no half set is left behind.
-    static func writeFiles(for take: Take, video: URL, timeline: ExportTimeline, offset: Double) {
+    @discardableResult
+    static func writeFiles(for take: Take, video: URL, timeline: ExportTimeline, offset: Double) -> String? {
         let settings = take.loadCaptionSettings()
-        guard settings.isOn, settings.writeFiles else { return }
+        guard settings.isOn, settings.writeFiles else { removeFiles(beside: video); return nil }
         do {
             try take.writeCaptionFiles(
                 settings: settings,
@@ -43,8 +44,10 @@ enum CaptionExport {
                 to: video.deletingLastPathComponent(),
                 name: video.deletingPathExtension().lastPathComponent
             )
+            return nil
         } catch {
             removeFiles(beside: video)
+            return "The video was exported, but subtitle files couldn't be written: \(error.localizedDescription)"
         }
     }
 

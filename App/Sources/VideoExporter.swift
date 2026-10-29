@@ -92,7 +92,10 @@ struct VideoExporter {
         guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else { throw Failure.noVideo }
         let sourceAudio = try await asset.loadTracks(withMediaType: .audio)
         let assetDuration = try await asset.load(.duration)
-        let naturalSize = try await sourceVideo.load(.naturalSize)
+        let encodedSize = try await sourceVideo.load(.naturalSize)
+        let sourceTransform = try await sourceVideo.load(.preferredTransform)
+        let displayed = CGRect(origin: .zero, size: encodedSize).applying(sourceTransform)
+        let naturalSize = CGSize(width: abs(displayed.width), height: abs(displayed.height))
         let frameRate = try await sourceVideo.load(.nominalFrameRate)
 
         // Without explicit spans, export what the editor kept (edits.json;
@@ -124,12 +127,19 @@ struct VideoExporter {
         // the whole video follow the cursor (events.json) through it.
         let crop: Crop?
         if let clip {
-            crop = .fixed(ClipFrame.rect(format: clip.format,
-                                         sourceAspect: naturalSize.height > 0 ? Double(naturalSize.width / naturalSize.height) : 0,
-                                         framing: clip.framing))
+            if let plan = ClipFrame.reframe(format: clip.format, framing: clip.framing,
+                                             sourceWidth: Int(naturalSize.width), sourceHeight: Int(naturalSize.height),
+                                             duration: assetDuration.seconds,
+                                             events: try? EventLog.read(from: take.eventsURL)) {
+                crop = .follow(plan)
+            } else {
+                crop = .fixed(ClipFrame.rect(format: clip.format,
+                                             sourceAspect: naturalSize.height > 0 ? Double(naturalSize.width / naturalSize.height) : 0,
+                                             framing: clip.framing))
+            }
         } else if let format = preset.format {
             let focus = (try? EventLog.read(from: take.eventsURL)).map { ReframePlanner.focus(from: $0) } ?? []
-            crop = .follow(ReframePlanner.plan(format: format, mode: .follow,
+            crop = .follow(ReframePlanner.plan(format: format, mode: AppliedTemplate.look(for: take)?.reframe(for: format) ?? .follow,
                                                sourceWidth: Int(naturalSize.width), sourceHeight: Int(naturalSize.height),
                                                duration: assetDuration.seconds, focus: focus))
         } else {
@@ -162,7 +172,7 @@ struct VideoExporter {
         while true {
             let slice = attempt
             bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
-                                     sourceVideo: sourceVideo, sourceAudio: sourceAudio,
+                                     sourceVideo: sourceVideo, sourceAudio: sourceAudio, sourceTransform: sourceTransform,
                                      overlays: allOverlays, effects: effects, settings: settings, crop: crop, to: url) { fraction in
                 progress(ExportPlanner.overallProgress(fraction, attempt: slice, of: attempts))
             }
@@ -215,7 +225,7 @@ struct VideoExporter {
     }
 
     private func render(timeline: ExportTimeline, plan: TemplatePlan, cards: BrandCardSet,
-                        sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
+                        sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack], sourceTransform: CGAffineTransform,
                         overlays: [ExportOverlay], effects: FrameEffects?, settings: ExportSettings,
                         crop: Crop?, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
@@ -298,7 +308,7 @@ struct VideoExporter {
         var isFit = false
         if case let .fixed(rect)? = crop, rect == .full { isFit = true }
         instructions.append(FrameInstruction(timeRange: CMTimeRange(start: videoStart, end: videoEnd),
-                                             trackID: video.trackID, overlays: overlays,
+                                             trackID: video.trackID, overlays: overlays, sourceTransform: sourceTransform,
                                              overlayTimeOffset: videoStart.seconds, effects: effects,
                                              crop: cropAt,
                                              // "Fit" clips sit on the canvas, ink on paper.
@@ -482,8 +492,11 @@ struct VideoExporter {
             throw Failure.writer(writer.error)
         }
 
-        try? FileManager.default.removeItem(at: url)
-        try FileManager.default.moveItem(at: partial, to: url)
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: partial)
+        } else {
+            try FileManager.default.moveItem(at: partial, to: url)
+        }
         progress(1)
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value
         return size ?? 0

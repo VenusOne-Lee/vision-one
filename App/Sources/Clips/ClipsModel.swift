@@ -23,10 +23,14 @@ final class ClipsModel: ObservableObject {
     /// Width over height of the recording.
     @Published private(set) var sourceAspect: Double = 16.0 / 9.0
     @Published var saveError: String?
+    @Published private(set) var warnings: [UUID: String] = [:]
+    @Published private(set) var queuedIDs: [UUID] = []
+    @Published private(set) var cancelledIDs: Set<UUID> = []
 
     private(set) var events: EventLog?
     private var exportTask: Task<Void, Never>?
     private var playTask: Task<Void, Never>?
+    private var framePlans: [ClipFormat: ReframePlan] = [:]
     private var watch: Task<Void, Never>?
 
     init(take: Take, editor: EditorModel) {
@@ -42,7 +46,7 @@ final class ClipsModel: ObservableObject {
 
     var canFind: Bool { editor.transcript.map { !$0.isEmpty } ?? false }
 
-    var isExporting: Bool { exports.values.contains { if case .exporting = $0 { return true } else { return false } } }
+    var isExporting: Bool { !queuedIDs.isEmpty || exports.values.contains { if case .exporting = $0 { return true } else { return false } } }
 
     // MARK: Loading
 
@@ -58,7 +62,15 @@ final class ClipsModel: ObservableObject {
         let asset = AVURLAsset(url: take.screenURL)
         if let track = try? await asset.loadTracks(withMediaType: .video).first,
            let size = try? await track.load(.naturalSize), size.height > 0 {
-            sourceAspect = Double(size.width / size.height)
+            let transform = (try? await track.load(.preferredTransform)) ?? .identity
+            let displayed = CGRect(origin: .zero, size: size).applying(transform)
+            sourceAspect = Double(abs(displayed.width) / max(1, abs(displayed.height)))
+            framePlans = [:]
+            for format in ClipFormat.allCases {
+                framePlans[format] = ClipFrame.reframe(format: format, framing: .follow,
+                    sourceWidth: Int(abs(displayed.width)), sourceHeight: Int(abs(displayed.height)),
+                    duration: editor.edits.sourceDuration, events: events)
+            }
         }
         if selectedID == nil { selectedID = list.visible.first?.id }
         startWatching()
@@ -166,8 +178,10 @@ final class ClipsModel: ObservableObject {
 
     /// The window export will cut out of the screen for `clip`.
     func window(for clip: Clip) -> NormalisedRect {
-        ClipFrame.rect(format: clip.format, sourceAspect: sourceAspect,
-                       framing: ClipFrame.resolved(clip, events: events))
+        if clip.framing.mode == .follow, let plan = framePlans[clip.format] {
+            return plan.crop(at: min(clip.end, max(clip.start, editor.sourceTime)))
+        }
+        return ClipFrame.rect(format: clip.format, sourceAspect: sourceAspect, framing: clip.framing)
     }
 
     func duration(of clip: Clip) -> Double { clip.duration(in: editor.edits) }
@@ -229,17 +243,25 @@ final class ClipsModel: ObservableObject {
     /// the editor's cuts left out, cut to its format and window.
     func export(_ clip: Clip) {
         guard !isExporting else { return }
-        exportTask = Task { await render(clip) }
+        queuedIDs = [clip.id]
+        exportTask = Task { await render(clip); queuedIDs = [] }
     }
 
     /// Exports every kept clip, one after another.
     func exportAccepted() {
         guard !isExporting else { return }
         let clips = list.accepted
+        queuedIDs = clips.map(\.id)
         exportTask = Task {
-            for clip in clips where !Task.isCancelled {
+            for clip in clips {
+                guard !Task.isCancelled else {
+                    cancelledIDs.formUnion(queuedIDs)
+                    break
+                }
+                queuedIDs.removeAll { $0 == clip.id }
                 await render(clip)
             }
+            queuedIDs = []
         }
     }
 
@@ -251,10 +273,12 @@ final class ClipsModel: ObservableObject {
             return
         }
         var exporter = VideoExporter(take: take, keep: keep, preset: .hd1080)
-        exporter.clip = (clip.format, ClipFrame.resolved(clip, events: events))
+        exporter.clip = (clip.format, clip.framing)
         exporter.captionRingHex = BrandStore.shared.kit.ring.hex
         exporter.ring = BrandStore.shared.kit.ring
-        exporter.overlays = BrandStore.shared.overlays()
+        exporter.overlays = BrandStore.shared.overlays(look: AppliedTemplate.look(for: take))
+        cancelledIDs.remove(id)
+        warnings[id] = nil
         exports[id] = .exporting(0)
         do {
             let output = try await exporter.run(to: take.clipURL(for: clip)) { progress in
@@ -263,10 +287,11 @@ final class ClipsModel: ObservableObject {
                     self.exports[id] = .exporting(progress)
                 }
             }
-            CaptionExport.writeFiles(for: take, video: output.url, timeline: output.timeline, offset: output.videoStart)
+            warnings[id] = CaptionExport.writeFiles(for: take, video: output.url, timeline: output.timeline, offset: output.videoStart)
             exports[id] = .done(output.url, output.bytes)
         } catch is CancellationError {
             exports[id] = nil
+            cancelledIDs.insert(id)
         } catch {
             exports[id] = .failed(error.localizedDescription)
         }

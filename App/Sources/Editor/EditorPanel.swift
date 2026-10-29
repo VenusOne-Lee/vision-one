@@ -26,6 +26,7 @@ struct EditorPanel: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
                 PlayerSurface(player: model.player)
+                    .overlay { CaptionLayer(model: model) }
                     .overlay { EffectsLayer(model: model, effects: model.effects) }
                     .background(Theme.text)
                     .onTapGesture { model.togglePlay() }

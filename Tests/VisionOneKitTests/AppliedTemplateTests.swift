@@ -37,3 +37,39 @@ final class AppliedTemplateTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(DeskProject.self, from: JSONEncoder().encode(saved)), saved)
     }
 }
+
+extension AppliedTemplateTests {
+    func testInitiallyNoTemplateStillStampsOnlyOnce() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let take = Take(folder: root)
+        try AppliedTemplate.stamp(ProjectMediaDefaults(templateID: nil), on: take)
+        var user = take.loadCaptionSettings()
+        user.style = .boldPop
+        user.sizeScale = 1.5
+        try take.saveCaptionSettings(user)
+        try AppliedTemplate.stamp(ProjectMediaDefaults(templateID: "short", captions: false), on: take)
+        XCTAssertNil(AppliedTemplate.look(for: take))
+        XCTAssertNil(TakePlan.load(for: take))
+        XCTAssertEqual(take.loadCaptionSettings(), user)
+    }
+
+    func testMissingCustomAssetRollsBackTemplateAndSettings() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let take = Take(folder: root.appendingPathComponent("take"))
+        let templates = root.appendingPathComponent("templates")
+        try FileManager.default.createDirectory(at: take.folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try AppliedTemplate.apply(id: "demo", to: take)
+        let before = AppliedTemplate.look(for: take)
+        let captions = take.loadCaptionSettings()
+        var broken = TemplateLook.builtIn(id: "short")!
+        broken.id = "broken"
+        broken.intro = .file("missing.html")
+        try broken.save(to: templates.appendingPathComponent("broken"))
+        XCTAssertThrowsError(try AppliedTemplate.apply(id: "broken", to: take, overwrite: true, root: templates))
+        XCTAssertEqual(AppliedTemplate.look(for: take), before)
+        XCTAssertEqual(take.loadCaptionSettings(), captions)
+    }
+}

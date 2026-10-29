@@ -214,6 +214,7 @@ final class HarnessModel: ObservableObject {
         let input = ComposerInput.parse(raw, candidates: mentionCandidates)
         let text = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        let desk = self.desk
         let route = AskRouter.route(text)
         if case let .clarify(message) = route {
             draft = raw
@@ -234,7 +235,6 @@ final class HarnessModel: ObservableObject {
             }
             return
         }
-        let desk = self.desk
         if let take = input.mentions.first {
             Task {
                 let task = await desk.taskForRecording(take, in: self.project)

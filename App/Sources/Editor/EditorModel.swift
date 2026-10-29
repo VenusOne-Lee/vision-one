@@ -49,6 +49,8 @@ final class EditorModel: ObservableObject {
     @Published var saveError: String?
     /// Shape of the video, so boxes drawn over the preview line up.
     @Published private(set) var videoSize: CGSize = .zero
+    private var previewTransform = CGAffineTransform.identity
+    private var previewCamera: (id: CMPersistentTrackID, info: CameraTrack)?
     /// Mic loudness every 10 ms, for the waveform and finding silence.
     /// Nil until levels.json is read or measured.
     @Published private(set) var levels: LoudnessEnvelope? {
@@ -478,6 +480,7 @@ final class EditorModel: ObservableObject {
         let keep = sourceTime
         do {
             let composition = try await PreviewComposition.make(from: asset, keeping: edits.keptSpans, take: take)
+            previewCamera = try await PreviewComposition.addCamera(for: take, keeping: edits.keptSpans, to: composition)
             let voiceTracks = composition.tracks(withMediaType: .audio).map(\.trackID)
             let timeline = ExportTimeline(keep: edits.keptSpans.map { $0.start..<$0.end },
                                           sourceDuration: edits.sourceDuration, frameRate: 0)
@@ -486,7 +489,11 @@ final class EditorModel: ObservableObject {
             let fixes = await VoiceComposer.addFixes(for: take, timeline: timeline, to: composition, offset: 0)
             guard !Task.isCancelled else { return }
             if let track = composition.tracks(withMediaType: .video).first {
-                let natural = try await track.load(.naturalSize)
+                let encoded = try await track.load(.naturalSize)
+                let transform = try await track.load(.preferredTransform)
+                previewTransform = transform
+                let displayed = CGRect(origin: .zero, size: encoded).applying(transform)
+                let natural = CGSize(width: abs(displayed.width), height: abs(displayed.height))
                 // Big enough to judge a blur, small enough to play smoothly.
                 let scale = min(1, 1920 / max(natural.width, natural.height, 1))
                 let size = CGSize(width: (natural.width * scale / 2).rounded() * 2,
@@ -571,15 +578,21 @@ extension EditorModel {
     /// The export compositor, drawing this take's zooms and blurs, or nil
     /// to play the frames as they are.
     fileprivate func previewVideoComposition() -> AVVideoComposition? {
-        guard let preview, preview.renderSize.width > 0,
-              let effects = effects.previewEffects(edits: edits) else { return nil }
+        guard let preview, preview.renderSize.width > 0 else { return nil }
+        let effects = effects.previewEffects(edits: edits)
+        guard effects != nil || previewCamera != nil || previewTransform != .identity else { return nil }
         let composition = AVMutableVideoComposition()
         composition.customVideoCompositorClass = FrameCompositor.self
         composition.renderSize = preview.renderSize
         composition.frameDuration = CMTime(value: 1, timescale: 30)
         composition.instructions = [
             FrameInstruction(timeRange: CMTimeRange(start: .zero, duration: preview.composition.duration),
-                             trackID: preview.trackID, overlays: [], effects: effects),
+                             trackID: preview.trackID, overlays: [], sourceTransform: previewTransform, effects: effects,
+                             camera: previewCamera.map { camera in
+                                 CameraLayer(trackID: camera.id, track: camera.info, timeline: outputTimeline,
+                                             ringColour: VideoExporter.cgColor(BrandStore.shared.kit.ring),
+                                             background: BackgroundRenderer(background: CameraBackground.read(from: take.backgroundURL)))
+                             }),
         ]
         return composition
     }
@@ -589,6 +602,24 @@ extension EditorModel {
 /// same spans export renders, so what you hear is what you get. It only
 /// points at screen.mov, so rebuilding it after an edit is quick.
 enum PreviewComposition {
+    static func addCamera(for take: Take, keeping spans: [TimeSpan], to composition: AVMutableComposition) async throws
+        -> (id: CMPersistentTrackID, info: CameraTrack)? {
+        guard let camera = await VideoExporter.camera(for: take),
+              let track = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else { return nil }
+        var outputStart = 0.0
+        for span in spans {
+            let wanted = CMTimeRange(start: VideoExporter.time(camera.info.cameraTime(forScreen: span.start)),
+                                     end: VideoExporter.time(camera.info.cameraTime(forScreen: span.end)))
+            let available = wanted.intersection(camera.range)
+            if available.duration > .zero {
+                try track.insertTimeRange(available, of: camera.track,
+                                          at: VideoExporter.time(outputStart) + (available.start - wanted.start))
+            }
+            outputStart += span.duration
+        }
+        return (track.trackID, camera.info)
+    }
+
     /// With `take`, a kept cleaned voice plays in place of the mic, as
     /// in export.
     static func make(from asset: AVAsset, keeping spans: [TimeSpan], take: Take? = nil) async throws -> AVMutableComposition {

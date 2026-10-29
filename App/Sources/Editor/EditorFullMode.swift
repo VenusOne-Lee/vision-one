@@ -84,7 +84,7 @@ struct EditorFullMode<Rail: View>: View {
                         .layoutPriority(1)
                     if showAside {
                         SideResizeHandle(width: $asideWidth, range: 260...min(640, geometry.size.width * 0.5))
-                        asidePanel.frame(width: asideWidth)
+                        asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 470)))
                     }
                     rail()
                 }
