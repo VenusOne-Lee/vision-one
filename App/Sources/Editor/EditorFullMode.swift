@@ -237,11 +237,23 @@ struct EditorFullMode<Rail: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: Theme.Space.sm) {
                 SegmentedTabs(selection: Binding(get: { aside }, set: { asideRaw = $0.rawValue }),
-                              options: asides) { pane in
+                              options: [EditorAside.transcript, .changes]) { pane in
                     pane == .changes && model.proposedChangeCount > 0
                         ? "\(pane.title) \(model.proposedChangeCount)" : pane.title
                 }
                 Spacer(minLength: 0)
+                if asides.count > 2 {
+                    Menu {
+                        ForEach(asides.filter { $0 != .transcript && $0 != .changes }) { pane in
+                            Button(pane.title) { asideRaw = pane.rawValue }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 24, height: 24)
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .accessibilityLabel("More editor panels")
+                    .help("Steps, clips and thumbnails")
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
