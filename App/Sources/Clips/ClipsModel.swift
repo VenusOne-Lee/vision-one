@@ -276,7 +276,9 @@ final class ClipsModel: ObservableObject {
         exporter.clip = (clip.format, clip.framing)
         exporter.captionRingHex = BrandStore.shared.kit.ring.hex
         exporter.ring = BrandStore.shared.kit.ring
-        exporter.overlays = BrandStore.shared.overlays(look: AppliedTemplate.look(for: take))
+        let look = AppliedTemplate.look(for: take)
+        exporter.overlays = BrandStore.shared.overlays(look: look)
+        exporter.cards = BrandStore.shared.cardMaker(look: look, templateFolder: AppliedTemplate.folder(for: take))
         cancelledIDs.remove(id)
         warnings[id] = nil
         exports[id] = .exporting(0)

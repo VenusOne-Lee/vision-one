@@ -118,18 +118,69 @@ enum MediaVerification {
         try await verifyRotatedImport(silent, in: root)
         try await verifyStoppedMic()
         let sourcePeaks = try await verifySeparateSourceLevels(video: silent, in: root)
+        try await verifyOwnedTemplateCard(source: take, in: root)
 
         let report: [String: Any] = [
             "dimensions": [Int(size.width), Int(size.height)], "duration": length,
             "separateSourcePeaks": sourcePeaks,
             "cameraGreenPixels": pixels.green, "brandYellowPixels": pixels.yellow,
             "captionWhitePixels": pixels.white, "earlyRedPixels": pixels.red, "laterBluePixels": laterPixels.blue, "decodedAudioPeak": exportedAudio, "previewAudioPeak": previewPeak,
-            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback", "square and 4:5 MP4 dimensions", "manual fixed framing", "fit framing", "silent import edit/undo/redo/export", "camera late-start gap", "rotated import matches native orientation", "independent microphone/system levels and preview/export agreement"],
+            "checks": ["actual MP4 decode", "accepted-cut duration", "separate camera", "caption pixels", "brand overlay", "timed sidecars", "invalid import", "silent import", "stale mic start/callback", "square and 4:5 MP4 dimensions", "manual fixed framing", "fit framing", "silent import edit/undo/redo/export", "camera late-start gap", "rotated import matches native orientation", "independent microphone/system levels and preview/export agreement", "applied template owned HTML asset renders with timed captions and camera after intro"],
             "remaining": ["real capture and permissions", "native UI light/dark walkthrough", "human inspection of framing, caption placement and audible mix"]
         ]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("verification.json"), options: .atomic)
         print("Media verification passed; inspect verification.json, the MP4 and portrait-frame.png.")
+    }
+
+    /// Applying a reusable style must affect the real deliverable, even after
+    /// its original library folder is removed. Exercise a relative HTML asset.
+    private static func verifyOwnedTemplateCard(source: Take, in root: URL) async throws {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
+        let library = root.appendingPathComponent("template-library")
+        let template = library.appendingPathComponent("fixture-card")
+        let assets = template.appendingPathComponent("assets")
+        try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+        let look = TemplateLook(id: "fixture-card", title: "Owned card", summary: "Native render fixture", purposeID: "short",
+                                intro: .file("intro.html"), outro: .off,
+                                formats: [.init(.vertical, reframe: .follow)], captionStyle: .subtitle, watermark: false)
+        try look.save(to: template)
+        try Data("<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='#ffff00'/></svg>".utf8)
+            .write(to: assets.appendingPathComponent("paper.svg"))
+        try Data("<html><head><style>html,body{margin:0;width:100%;height:100%;background:#000}img{width:100%;height:100%;object-fit:fill}</style></head><body><img src='assets/paper.svg'></body></html>".utf8)
+            .write(to: template.appendingPathComponent("intro.html"))
+        let take = Take(folder: root.appendingPathComponent("template-take"))
+        try FileManager.default.copyItem(at: source.folder, to: take.folder)
+        try AppliedTemplate.apply(id: look.id, to: take, overwrite: true, root: library)
+        try FileManager.default.removeItem(at: template)
+        let brand = BrandKit(name: "Fixture", intro: BrandCard(enabled: true, duration: 1))
+        let maker = CardMaker(brand: brand, brandFolder: root, look: nil, templateFolder: nil)
+        var exporter = VideoExporter(take: take, preset: .hd720)
+        exporter.clip = (.vertical, .follow)
+        exporter.cards = maker
+        exporter.captionRingHex = 0x0000FF
+        let output = try await exporter.run(to: root.appendingPathComponent("owned-template-card.mp4")) { _ in }
+        try require(abs(output.videoStart - 1) < 0.05, "Applied template intro was not included in the clip render")
+        let asset = AVURLAsset(url: output.url)
+        try require(abs(try await asset.load(.duration).seconds - 3.5) < 0.1, "Template card/cut duration is incorrect")
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        let intro = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
+        let colours = try analyse(intro)
+        try require(colours.yellow > intro.width * intro.height * 8 / 10,
+                    "Owned HTML card asset did not reach the rendered MP4 (native fallback is not equivalent)")
+        let body = try await generator.image(at: CMTime(seconds: 1.5, preferredTimescale: 600)).image
+        let bodyColours = try analyse(body)
+        try require(bodyColours.green > 1000 && bodyColours.white > 1000,
+                    "Camera/captions were lost or mistimed after template intro")
+        try require(CaptionExport.writeFiles(for: take, video: output.url, timeline: output.timeline, offset: output.videoStart) == nil,
+                    "Template clip subtitle write failed")
+        let srt = try String(contentsOf: output.url.deletingPathExtension().appendingPathExtension("srt"), encoding: .utf8)
+        try require(srt.contains("00:00:01,200"), "Subtitle clock did not include the applied intro")
+        try save(intro, to: root.appendingPathComponent("owned-template-intro.png"))
+        try save(body, to: root.appendingPathComponent("owned-template-body.png"))
     }
 
     private static func verifySeparateSourceLevels(video: URL, in root: URL) async throws -> [String: Double] {
