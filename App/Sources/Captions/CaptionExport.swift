@@ -27,15 +27,29 @@ enum CaptionExport {
         return [CaptionRenderer(track: CaptionTrack(cues: cues), settings: settings, ringHex: ringHex)]
     }
 
+    /// Expected absence is an explanation, not a sidecar-write failure.
+    static func omissionReason(for take: Take) -> String? {
+        let settings = take.loadCaptionSettings()
+        guard settings.isOn else { return nil }
+        let translated = settings.language.map { take.transcriptURL(language: $0) }
+        let source = translated.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil } ?? take.transcriptURL
+        guard !FileManager.default.fileExists(atPath: source.path) else { return nil }
+        if (try? TranscriptFailure.read(from: take.transcriptFailedURL))?.reason == .noAudio {
+            return "No captions: this video has no audio."
+        }
+        return "No captions: a transcript is not available yet."
+    }
+
     /// Writes "<video name>.srt" and ".vtt" next to a finished export,
     /// when captions are on and files are wanted. Cues come from the
     /// export's own timeline and move later by `offset`, the brand
     /// intro's length, so they line up with the file. If writing fails
-    /// (no transcript yet, say), no half set is left behind.
+    /// (a permissions, corrupt-data or disk error), no half set is left behind.
     @discardableResult
     static func writeFiles(for take: Take, video: URL, timeline: ExportTimeline, offset: Double) -> String? {
         let settings = take.loadCaptionSettings()
         guard settings.isOn, settings.writeFiles else { removeFiles(beside: video); return nil }
+        guard omissionReason(for: take) == nil else { removeFiles(beside: video); return nil }
         do {
             try take.writeCaptionFiles(
                 settings: settings,

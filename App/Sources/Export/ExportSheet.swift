@@ -81,6 +81,10 @@ struct ExportSheet: View {
                 .padding(Theme.Space.lg)
                 .frame(maxHeight: .infinity, alignment: .top)
             }
+            if let explanation = CaptionExport.omissionReason(for: take) {
+                Text(explanation).textStyle(.caption).foregroundStyle(Theme.textMuted)
+                    .padding(.horizontal, Theme.Space.lg).padding(.bottom, Theme.Space.sm)
+            }
             if let captionProblem {
                 Text(captionProblem).textStyle(.caption).foregroundStyle(Theme.error).padding(.horizontal, Theme.Space.lg)
             }

@@ -510,24 +510,29 @@ private struct MusicPicker: View {
             if let preview {
                 IconButton("Play \(title)", systemImage: "play.fill") { EffectAudition.play(preview) }
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 13, weight: .medium))
-                Text(summary).font(.system(size: 11)).foregroundStyle(Theme.textMuted).lineLimit(1)
+            Button(action: pick) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title).font(.system(size: 13, weight: .medium))
+                        Text(summary).font(.system(size: 11)).foregroundStyle(Theme.textMuted).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    if isOn { Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)) }
+                }
+                .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: 0)
-            if isOn {
-                Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold))
-            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(title)
+            .accessibilityValue(isOn ? "Selected" : "Not selected")
+            .accessibilityAddTraits(isOn ? .isSelected : [])
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(isOn ? Theme.canvas : Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(isOn ? Theme.text : Theme.line))
-        .contentShape(Rectangle())
-        .onTapGesture(perform: pick)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
     }
+
 }
 
 /// Every placed effect, dashed until kept, plus adding your own.

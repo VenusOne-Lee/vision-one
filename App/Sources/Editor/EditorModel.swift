@@ -109,6 +109,8 @@ final class EditorModel: ObservableObject {
     /// effects volume ramps, so mute and solo can be applied live.
     private var mixTracks: [MixLane: [CMPersistentTrackID]] = [:]
     private var soundParameters: [AVMutableAudioMixInputParameters] = []
+    /// Keep selected music/effect assets alive for the current player item.
+    private var soundAssets: [AVAsset] = []
     /// Redone sentences on their own tracks, and where the original
     /// voice is silent under them.
     private var redoParameters: [AVMutableAudioMixInputParameters] = []
@@ -581,6 +583,7 @@ final class EditorModel: ObservableObject {
             item.audioTimePitchAlgorithm = .spectral
             item.audioMix = previewAudioMix()
             soundProblem = added.problem
+            soundAssets = added.assets
             player.replaceCurrentItem(with: item)
             seek(toSource: keep)
             if wasPlaying { player.play() }

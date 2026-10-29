@@ -116,6 +116,7 @@ enum MediaVerification {
         try await VideoImporter.validate(silent)
         try await verifyOtherOutputs(take: take, silent: silent, in: root)
         try await TranscriptViewVerification.verifySilentSource(silent, in: root)
+        try await verifyMusicOnSilentImport(silent, in: root)
         try await verifyRotatedImport(silent, in: root)
         try await verifyStoppedMic()
         let sourcePeaks = try await verifySeparateSourceLevels(video: silent, in: root)
@@ -232,6 +233,71 @@ enum MediaVerification {
             peaks[name + "Preview"] = preview
         }
         return peaks
+    }
+
+    /// Matches the real QA path: silent import, accepted trim, Still water
+    /// at its saved default -14 dB, then an actual 1080p MP4 and preview decode.
+    private static func verifyMusicOnSilentImport(_ silent: URL, in root: URL) async throws {
+        let take = try VideoImport.copy(silent, into: TakeLibrary(folder: root.appendingPathComponent("music-import-library")))
+        guard let still = SoundLibrary.music.first(where: { $0.id == "still-water" }) else {
+            throw Failure(message: "Still water library sound is missing")
+        }
+        try SoundPlan(music: .library(still)).write(to: take.soundURL)
+        try EditList(sourceDuration: 3, cuts: [.init(span: TimeSpan(start: 2.5, end: 3))]).write(to: take.editsURL)
+        try take.saveCaptionSettings(CaptionSettings())
+        try TranscriptFailure(reason: .noAudio, message: "This video has no audio.").write(to: take.transcriptFailedURL)
+        let output = try await VideoExporter(take: take, preset: .hd1080)
+            .run(to: root.appendingPathComponent("silent-import-with-still-water.mp4")) { _ in }
+        let asset = AVURLAsset(url: output.url)
+        try require(try await asset.loadTracks(withMediaType: .audio).count == 1,
+                    "Selected Still water music is missing from silent-source MP4")
+        let peak = try await audioPeak(asset)
+        try require(peak > 0.001, "Selected Still water MP4 audio decoded as silence")
+        let editor = EditorModel(take: take)
+        await editor.loadIfNeeded()
+        defer { editor.close() }
+        guard let preview = editor.player.currentItem else { throw Failure(message: "Music preview item missing") }
+        let previewPeak = try await audioPeak(preview.asset, mix: preview.audioMix)
+        try require(editor.soundProblem == nil && previewPeak > 0.001 && abs(previewPeak - peak) < 0.03,
+                    "Silent-source selected music differs between preview and MP4")
+
+        // No transcript is expected for this source. Clear old sidecars without
+        // misreporting an I/O failure; explain the omission in the export UI.
+        let srt = output.url.deletingPathExtension().appendingPathExtension("srt")
+        let vtt = output.url.deletingPathExtension().appendingPathExtension("vtt")
+        for url in [srt, vtt] { try Data("obsolete captions".utf8).write(to: url) }
+        try require(CaptionExport.writeFiles(for: take, video: output.url, timeline: output.timeline, offset: 0) == nil,
+                    "Expected missing transcript was reported as a sidecar-write failure")
+        try require(CaptionExport.omissionReason(for: take) == "No captions: this video has no audio."
+                    && !FileManager.default.fileExists(atPath: srt.path) && !FileManager.default.fileExists(atPath: vtt.path),
+                    "Missing-transcript explanation or stale-sidecar cleanup failed")
+
+        // A real target-file failure must still warn and clean partial files.
+        try Transcript(language: "en", engine: "sidecar failure fixture", duration: 3, segments: [.init(words: [
+            .init(id: 0, text: "Fixture", start: 0.2, end: 0.8)
+        ])]).write(to: take.transcriptURL)
+        try FileManager.default.createDirectory(at: srt, withIntermediateDirectories: true)
+        let warning = CaptionExport.writeFiles(for: take, video: output.url, timeline: output.timeline, offset: 0)
+        try require(warning?.contains("subtitle files couldn't be written") == true,
+                    "Actual subtitle-file write failure lost its warning")
+
+        // Missing selected media is an export failure, never a silently partial
+        // success. The already-successful music render remains untouched.
+        try SoundPlan(music: .file(at: root.appendingPathComponent("missing-music.wav"))).write(to: take.soundURL)
+        let missingOutput = root.appendingPathComponent("missing-music-must-not-succeed.mp4")
+        do {
+            _ = try await VideoExporter(take: take, preset: .hd1080).run(to: missingOutput) { _ in }
+            throw Failure(message: "Unavailable selected music silently exported")
+        } catch VideoExporter.Failure.sound(_) {
+            try require(!FileManager.default.fileExists(atPath: missingOutput.path), "Partial music export was published")
+        }
+        let report: [String: Any] = ["libraryID": still.id, "musicDB": MusicBed.defaultLevelDB,
+                                    "exportPeak": peak, "previewPeak": previewPeak,
+                                    "audioStreamCount": 1, "missingTranscriptSkipped": true,
+                                    "realSidecarWriteFailureWarned": true, "missingMusicExportRejected": true]
+        try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+            .write(to: root.appendingPathComponent("silent-import-music.json"))
+        print("Native silent-import Still water MP4/preview audio and caption omission checks passed")
     }
 
     private static func verifyOtherOutputs(take: Take, silent: URL, in root: URL) async throws {

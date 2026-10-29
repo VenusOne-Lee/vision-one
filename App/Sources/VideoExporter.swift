@@ -23,6 +23,7 @@ struct VideoExporter {
         case reader(Error?)
         case writer(Error?)
         case blurs(Error)
+        case sound(String)
         /// Still over the preset's size limit after every retry.
         case tooBig(limit: Int64)
 
@@ -33,6 +34,7 @@ struct VideoExporter {
             case let .reader(error): return "Couldn't read the recording. \(error?.localizedDescription ?? "")"
             case let .writer(error): return "Couldn't write the video. \(error?.localizedDescription ?? "")"
             case let .blurs(error): return "Couldn't read this take's blurs, so it wasn't exported. Open it in the editor to check them. \(error.localizedDescription)"
+            case let .sound(message): return "Couldn’t export the selected music or effects. \(message) Choose another sound or remove it, then try again."
             case let .tooBig(limit): return ExportPhase.stillTooBig(limitBytes: limit)
             }
         }
@@ -361,6 +363,8 @@ struct VideoExporter {
         trace?("add music and replacement voices")
         let soundTracks = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition,
                                                   offset: joinOffset)
+        defer { withExtendedLifetime(soundTracks.assets) {} }
+        if let problem = soundTracks.problem { throw Failure.sound(problem) }
         // Sentences said again replace the original voice in their slot.
         let redos = ((try? RedoList.load(from: take.redosURL)) ?? RedoList()).accepted
         let redone = await RedoComposer.add(redos, take: take, timeline: timeline, to: composition, offset: joinOffset)
