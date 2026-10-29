@@ -124,21 +124,21 @@ final class CameraOnlyCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDel
     func finishWriting() async -> (saved: Bool, firstFrame: Double?, error: Error?) {
         let taken: (AVAssetWriter?, AVAssetWriterInput?, AVAssetWriterInput?, CMTime?) = await withCheckedContinuation { done in
             queue.async { [self] in
-                let result = (writer, video, mic, firstFrame)
-                url = nil
-                writer = nil
-                video = nil
-                mic = nil
-                firstFrame = nil
+                let result = (self.writer, self.video, self.mic, self.firstFrame)
+                self.url = nil
+                self.writer = nil
+                self.video = nil
+                self.mic = nil
+                self.firstFrame = nil
                 done.resume(returning: result)
             }
         }
-        let (writer, video, mic, first) = taken
-        guard let writer, writer.status == .writing else { return (false, nil, writer?.error) }
-        video?.markAsFinished()
-        mic?.markAsFinished()
-        await writer.finishWriting()
-        return (writer.status == .completed, first.map { hostSeconds($0) }, writer.error)
+        let (finishing, videoInput, micInput, first) = taken
+        guard let finishing, finishing.status == .writing else { return (false, nil, finishing?.error) }
+        videoInput?.markAsFinished()
+        micInput?.markAsFinished()
+        await finishing.finishWriting()
+        return (finishing.status == .completed, first.map { hostSeconds($0) }, finishing.error)
     }
 
     var firstFrameSeconds: Double? { queue.sync { firstFrame.map { hostSeconds($0) } } }
