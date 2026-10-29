@@ -63,6 +63,8 @@ struct VideoExporter {
     var clip: (format: ClipFormat, framing: ClipFraming)?
     /// Colour of the ring around the camera bubble (the builder's ring).
     var ring: RingColour = .black
+    /// Optional diagnostic stages; normal exports stay quiet.
+    var trace: (@Sendable (String) -> Void)?
 
     /// The part of the screen an export shows.
     enum Crop {
@@ -88,7 +90,9 @@ struct VideoExporter {
     /// called from a background queue with 0...1, and only goes forward,
     /// even when a size-limited export has to go again.
     func run(to outputURL: URL? = nil, progress: @escaping @Sendable (Double) -> Void) async throws -> Output {
+        trace?("load source metadata")
         let asset = AVURLAsset(url: take.screenURL)
+        defer { withExtendedLifetime(asset) {} }
         guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else { throw Failure.noVideo }
         let sourceAudio = try await asset.loadTracks(withMediaType: .audio)
         let assetDuration = try await asset.load(.duration)
@@ -165,6 +169,7 @@ struct VideoExporter {
             try Task.checkCancellation()
         }
 
+        trace?("load effects and captions")
         let effects = try appliesEffects ? Self.effects(for: take, timeline: timeline) : nil
         let captions = captionRingHex.map {
             CaptionExport.overlays(for: take, timeline: timeline, ringHex: $0, language: captionLanguage)
@@ -221,12 +226,12 @@ struct VideoExporter {
 
     /// The take's camera.mov and camera.json, or nil when it has none or
     /// either can't be read (the export then shows the screen alone).
-    static func camera(for take: Take) async -> (track: AVAssetTrack, range: CMTimeRange, info: CameraTrack)? {
+    static func camera(for take: Take) async -> (asset: AVAsset, track: AVAssetTrack, range: CMTimeRange, info: CameraTrack)? {
         guard let info = try? CameraTrack.read(from: take.cameraInfoURL), !info.placements.isEmpty else { return nil }
         let asset = AVURLAsset(url: take.cameraURL)
         guard let track = try? await asset.loadTracks(withMediaType: .video).first,
               let range = try? await track.load(.timeRange), range.duration > .zero else { return nil }
-        return (track, range, info)
+        return (asset, track, range, info)
     }
 
     static func cgColor(_ ring: RingColour) -> CGColor {
@@ -239,6 +244,7 @@ struct VideoExporter {
                         overlays: [ExportOverlay], effects: FrameEffects?, settings: ExportSettings,
                         crop: Crop?, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
+        trace?("create composition and recorded audio sources")
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw Failure.noVideo
@@ -256,7 +262,9 @@ struct VideoExporter {
 
         // The camera, on its own track, cut the same way as the screen.
         // The compositor places the bubble after cropping, in output coordinates.
+        trace?("load separate camera")
         let camera = await Self.camera(for: take)
+        defer { withExtendedLifetime(camera?.asset) {} }
         var cameraTrack: AVMutableCompositionTrack?
         if camera != nil {
             cameraTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
@@ -266,12 +274,14 @@ struct VideoExporter {
             let range = CMTimeRange(start: Self.time(segment.source.lowerBound),
                                     end: Self.time(segment.source.upperBound))
             let at = Self.time(segment.outputStart)
+            trace?("insert screen \(segment.source.lowerBound)..<\(segment.source.upperBound)")
             try video.insertTimeRange(range, of: sourceVideo, at: at)
             if let camera, let cameraTrack {
                 let wanted = CMTimeRange(start: Self.time(camera.info.cameraTime(forScreen: segment.source.lowerBound)),
                                          end: Self.time(camera.info.cameraTime(forScreen: segment.source.upperBound)))
                 let available = wanted.intersection(camera.range)
                 if available.duration > .zero {
+                    trace?("insert camera \(available.start.seconds)..<\(available.end.seconds)")
                     try cameraTrack.insertTimeRange(available, of: camera.track, at: at + (available.start - wanted.start))
                 }
             }
@@ -281,6 +291,7 @@ struct VideoExporter {
                 let source = audioSources[index]
                 let available = range.intersection(source.range)
                 guard available.duration > .zero else { continue }
+                trace?("insert audio \(index) \(available.start.seconds)..<\(available.end.seconds)")
                 try track.insertTimeRange(available, of: source.track, at: at + (available.start - range.start))
             }
         }
@@ -298,6 +309,7 @@ struct VideoExporter {
             composition.insertEmptyTimeRange(CMTimeRange(start: .zero, duration: bodyStart))
         }
 
+        trace?("build frame instructions")
         var instructions: [FrameInstruction] = []
         if let intro = cards.intro, plan.intro != nil {
             instructions.append(FrameInstruction(timeRange: CMTimeRange(start: .zero, end: bodyStart), card: intro))
@@ -346,6 +358,7 @@ struct VideoExporter {
         // after the intro so they start with the video.
         let sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
         let words: [TimeSpan] = sound.isEmpty ? [] : ((try? Transcript.read(from: take.transcriptURL))?.words.map(\.span) ?? [])
+        trace?("add music and replacement voices")
         let soundTracks = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition,
                                                   offset: joinOffset)
         // Sentences said again replace the original voice in their slot.
@@ -388,6 +401,7 @@ struct VideoExporter {
         }
         audioMix.inputParameters = recorded + soundTracks.parameters + redone.parameters + voiceFixes.parameters
 
+        trace?("encode composed video and audio")
         return try await encode(composition: composition, videoTracks: [video] + (cameraTrack.map { [$0] } ?? []),
                                 audio: audio + soundTracks.tracks + redone.tracks + voiceFixes.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
@@ -469,7 +483,9 @@ struct VideoExporter {
             audioInput = input
         }
 
+        trace?("start reader")
         guard reader.startReading() else { throw Failure.reader(reader.error) }
+        trace?("start writer")
         guard writer.startWriting() else {
             reader.cancelReading()
             throw Failure.writer(writer.error)

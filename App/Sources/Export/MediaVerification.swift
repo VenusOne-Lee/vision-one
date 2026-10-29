@@ -58,6 +58,7 @@ enum MediaVerification {
 
         try RecordedMix(voiceDB: -6, systemDB: -12).write(for: take)
         var exporter = VideoExporter(take: take, preset: .hd1080)
+        exporter.trace = { print("Media export stage: \($0)") }
         exporter.clip = (.vertical, .follow)
         exporter.captionRingHex = 0x0000FF
         exporter.overlays = [VerificationOverlay()]
