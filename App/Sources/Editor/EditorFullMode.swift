@@ -69,16 +69,12 @@ struct EditorFullMode<Rail: View>: View {
             if geometry.size.width < 760 {
                 // Narrow: the aside goes under the stage.
                 VSplitView {
-                    HStack(spacing: 0) {
-                        ToolStrip(model: model, tool: $toolRaw)
-                        stage
-                    }
+                    stage
                     .frame(minHeight: 320)
                     if showAside { asidePanel.frame(minHeight: 180) }
                 }
             } else {
                 HStack(spacing: 0) {
-                    ToolStrip(model: model, tool: $toolRaw)
                     stage
                         .frame(minWidth: 380, maxWidth: .infinity)
                         .layoutPriority(1)
@@ -119,6 +115,7 @@ struct EditorFullMode<Rail: View>: View {
     @ViewBuilder
     private var stage: some View {
         VStack(spacing: 0) {
+            ToolStrip(model: model, tool: $toolRaw)
             switch model.phase {
             case .loading:
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -286,12 +283,14 @@ struct ToolStrip: View {
     @Binding var tool: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        HStack(spacing: 4) {
             ForEach(EditorTool.allCases) { option in
-                IconButton(option.title, systemImage: option.systemImage,
-                           shortcut: option.key.uppercased(), isOn: option.rawValue == tool) {
-                    tool = option.rawValue
+                Button { tool = option.rawValue } label: {
+                    Label(option.title, systemImage: option.systemImage)
+                        .font(.system(size: 12, weight: .medium))
                 }
+                .buttonStyle(TabPillStyle(isOn: option.rawValue == tool))
+                .accessibilityAddTraits(option.rawValue == tool ? .isSelected : [])
                 .help("\(option.title) (\(option.key.uppercased())): \(option.help)")
             }
             Spacer(minLength: Theme.Space.sm)
@@ -304,11 +303,10 @@ struct ToolStrip: View {
             }
             .disabled(!model.undoManager.canRedo)
         }
-        .padding(.vertical, 10)
-        .frame(width: 44)
-        .frame(maxHeight: .infinity)
+        .padding(.horizontal, 12)
+        .frame(height: 44)
         .background(Theme.paper)
-        .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
 
     private var undoTitle: String {

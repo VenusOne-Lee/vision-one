@@ -26,13 +26,21 @@ final class ThemeStore: ObservableObject {
             guard appearance != oldValue else { return }
             if undoing { undoing = false } else { history = Array((history + [oldValue]).suffix(20)) }
             apply()
-            try? AppearanceFile.save(appearance)
+            if !transient { try? AppearanceFile.save(appearance) }
         }
     }
 
     /// Earlier looks, newest last, so Undo is one click.
     @Published private(set) var history: [Appearance] = []
     private var undoing = false
+    private var transient = false
+
+    /// CI renders both appearances without writing the person's theme file.
+    func renderAppearance(_ value: Appearance) {
+        transient = true
+        appearance = value
+        transient = false
+    }
 
     var canUndo: Bool { !history.isEmpty }
 

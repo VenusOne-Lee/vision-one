@@ -95,7 +95,22 @@ final class HarnessModel: ObservableObject {
     private var watching: [Task<Void, Never>] = []
     private var drafts: [String: String] = [:]
 
+    /// Native render diagnostics use an isolated snapshot, never the live Desk.
+    let isFixture: Bool
+
+    init(snapshot: DeskSnapshot, takes: [Take], page: HarnessPage) {
+        isFixture = true
+        panels = PanelLayoutBook()
+        self.snapshot = snapshot
+        self.takes = takes
+        titles = Dictionary(uniqueKeysWithValues: takes.map { ($0.name, $0.displayTitle()) })
+        self.page = page
+        project = snapshot.projects.first?.id
+        workspace = snapshot.task(page.taskID ?? UUID())?.take.map(TaskWorkspace.init(take:))
+    }
+
     private init() {
+        isFixture = false
         panels = PanelLayoutBook.decode(UserDefaults.standard.data(forKey: "harness.panels"))
         refreshTakes()
         watchDesk()
@@ -110,6 +125,7 @@ final class HarnessModel: ObservableObject {
     }
 
     func refreshTakes() {
+        guard !isFixture else { return }
         let latest = TakeLibrary.standard.takes()
         var names: [String: String] = [:]
         for take in latest { names[take.name] = take.displayTitle() }
@@ -216,7 +232,7 @@ final class HarnessModel: ObservableObject {
         } else {
             panels.last = next
         }
-        UserDefaults.standard.set(panels.encoded(), forKey: "harness.panels")
+        if !isFixture { UserDefaults.standard.set(panels.encoded(), forKey: "harness.panels") }
     }
 
     // MARK: Asking

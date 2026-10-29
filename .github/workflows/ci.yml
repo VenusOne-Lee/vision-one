@@ -21,6 +21,7 @@ jobs:
         run: xcodegen generate
 
       - name: Build app (unsigned)
+        id: native-build
         run: |
           xcodebuild -project VisionOne.xcodeproj -scheme VisionOne \
             -configuration Debug -destination 'platform=macOS' \
@@ -30,6 +31,12 @@ jobs:
         timeout-minutes: 10
         run: |
           'build/DerivedData/Build/Products/Debug/Vision One.app/Contents/MacOS/Vision One' --verify-media "$RUNNER_TEMP/vision-media"
+
+      - name: Render native workspace fixtures
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        timeout-minutes: 5
+        run: |
+          'build/DerivedData/Build/Products/Debug/Vision One.app/Contents/MacOS/Vision One' --verify-workspace "$RUNNER_TEMP/vision-media"
 
       - name: Preserve media verification evidence
         if: always()

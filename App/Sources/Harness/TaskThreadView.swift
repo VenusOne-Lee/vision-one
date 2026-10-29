@@ -128,6 +128,20 @@ struct NewTaskView: View {
     @AppStorage("harness.aiNoticeDismissed") private var aiNoticeDismissed = false
 
     var body: some View {
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= 940
+            HStack(spacing: 0) {
+                introduction(showDefaults: !wide)
+                if wide {
+                    Rectangle().fill(Theme.line).frame(width: 1)
+                    ScrollView { contextRail.padding(24) }
+                        .frame(width: 300).background(Theme.paper)
+                }
+            }
+        }
+    }
+
+    private func introduction(showDefaults: Bool) -> some View {
         ScrollView {
         VStack(spacing: Theme.Space.lg) {
             Spacer(minLength: Theme.Space.lg)
@@ -158,7 +172,7 @@ struct NewTaskView: View {
                 Composer(model: model, placeholder: "Describe a video, or press record")
                     .frame(maxWidth: 640)
             }
-            projectDefaults
+            if showDefaults { contextRail }
             Spacer(minLength: Theme.Space.lg)
         }
         .padding(.horizontal, Theme.Space.xl)
@@ -169,6 +183,7 @@ struct NewTaskView: View {
         .task(id: AIReadinessKey(ai)) {
             // Not checked again once closed: the notice never comes back.
             guard !aiNoticeDismissed else { return }
+            guard !model.isFixture else { anyRungReady = true; return }
             anyRungReady = await ai.ladder().provider(for: .custom) != nil
         }
     }
@@ -218,14 +233,44 @@ struct NewTaskView: View {
             let look = TemplateLook.builtIn.first { $0.id == id } ?? UserTemplates.loadAll().map(\.look).first { $0.id == id }
             Text("\(look?.title ?? "No template") · Captions \(defaults?.captions == false ? "off" : "on") · Saved on this Mac")
                 .textStyle(.caption).foregroundStyle(Theme.textMuted)
-            if let newest = model.takes.first {
-                Button("Resume \(model.title(of: newest))") { model.open(newest) }.buttonStyle(.quiet)
-            }
         }
         .panelStyle().frame(maxWidth: 640)
         .sheet(isPresented: $showingProjectSettings) {
             if let project = model.currentProject { ProjectSettingsSheet(project: project) { showingProjectSettings = false } }
         }
+    }
+
+    private var contextRail: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            projectDefaults
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Recent videos").textStyle(.bodyStrong)
+                if model.takes.isEmpty {
+                    Text("Record or import a video to start your library.")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                ForEach(Array(model.takes.prefix(3)), id: \.folder) { take in
+                    Button { model.open(take) } label: {
+                        Label(model.title(of: take), systemImage: "play.rectangle")
+                            .textStyle(.label).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                    }.buttonStyle(.quiet)
+                }
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Script sources").textStyle(.bodyStrong)
+                let sources = model.currentProject?.sources.filter(\.enabled) ?? []
+                if sources.isEmpty {
+                    Text("Add a repository or Linear team in project settings.")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                ForEach(sources, id: \.self) { source in
+                    Label(source.title, systemImage: source.kind == .github ? "chevron.left.forwardslash.chevron.right" : "checklist")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                Button("Project settings…") { showingProjectSettings = true }
+                    .buttonStyle(.secondary).disabled(model.currentProject == nil)
+            }
+        }.frame(maxWidth: 640, alignment: .leading)
     }
 
     private var projectSuffix: String {

@@ -110,7 +110,12 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
             return
         }
 
-        var image = CIImage(cvPixelBuffer: source).transformed(by: instruction.sourceTransform)
+        // AVFoundation describes orientation in top-left coordinates; Core
+        // Image uses bottom-left coordinates. Conjugate the linear part
+        // by the vertical flip, then normalize the translated bounds.
+        let t = instruction.sourceTransform
+        let oriented = CGAffineTransform(a: t.a, b: -t.b, c: -t.c, d: t.d, tx: t.tx, ty: -t.ty)
+        var image = CIImage(cvPixelBuffer: source).transformed(by: oriented)
         image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         if let effects = instruction.effects, !effects.isEmpty {
             // Effects run on the edited video's clock, like overlays.
