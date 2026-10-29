@@ -71,6 +71,16 @@ struct AppCommands: Commands {
                 recorder.togglePause()
             }
             .disabled(!recorder.phase.isLive)
+            // The same pick as the mode pill beside Home's record button,
+            // reachable from the keyboard and by assistive tools.
+            Menu("Record") {
+                ForEach(CaptureMode.allCases, id: \.self) { mode in
+                    Toggle(mode.menuTitle, isOn: Binding(
+                        get: { recorder.choice.mode == mode },
+                        set: { if $0 { recorder.choice.mode = mode } }))
+                }
+            }
+            .disabled(recorder.phase.isLive || recorder.phase.isBusy)
             Button("Record an Agent…") {
                 // Counts down like any take, which gives time to start the
                 // agent. Only the agent's clicks and typing are marked.
