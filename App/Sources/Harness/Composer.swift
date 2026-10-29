@@ -183,7 +183,8 @@ struct Composer: View {
 
     private var recordButton: some View {
         Button {
-            Task { await recorder.toggle() }
+            if recorder.phase.isLive { Task { await recorder.toggle() } }
+            else { model.preparingRecording = true }
         } label: {
             ZStack {
                 Circle()

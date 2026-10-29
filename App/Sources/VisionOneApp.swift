@@ -61,6 +61,11 @@ struct AppCommands: Commands {
                 .keyboardShortcut(ShortcutMap.newTask)
         }
         CommandGroup(after: .newItem) {
+            Button("Import Video…") {
+                EditorWindowController.shared.show()
+                HarnessModel.shared.importVideo()
+            }.keyboardShortcut("i", modifiers: [.command, .shift])
+
             Button(recorder.phase.isLive ? "Stop Recording  \(ShortcutMap.record.display)"
                                          : "Start Recording  \(ShortcutMap.record.display)") {
                 Task { await recorder.toggle() }

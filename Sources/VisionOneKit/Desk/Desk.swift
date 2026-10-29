@@ -218,6 +218,10 @@ public actor Desk {
     @discardableResult
     public func submit(_ ask: String, to taskID: UUID, mode: AskMode? = nil) -> AskRoute {
         let route = AskRouter.route(ask)
+        if case let .clarify(message) = route {
+            update(taskID) { $0.cells.append(TaskCell(.log(message))) }
+            return route
+        }
         guard case let .plan(plan) = route, let task = self.task(taskID) else { return route }
         let chosen = mode ?? task.mode
         if busy.contains(taskID) {

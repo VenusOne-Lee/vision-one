@@ -68,6 +68,12 @@ struct LibraryView: View {
 
     private var takesSection: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
+            HStack {
+                Text("Library").textStyle(.title)
+                Spacer()
+                Button("Import a video…") { HarnessModel.shared.importVideo() }
+                    .buttonStyle(.secondary)
+            }
             if let next = pickUp {
                 PickUpBanner(item: next) { open(next.take) }
             }

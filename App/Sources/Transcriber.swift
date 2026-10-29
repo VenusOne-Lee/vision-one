@@ -224,7 +224,7 @@ enum TakeAudio {
 
         var errorDescription: String? {
             switch self {
-            case .noAudio: return "This take has no sound. Turn on the mic and record again."
+            case .noAudio: return "This video has no audio to transcribe. You can still trim, add effects and export it. Import a version with audio if you need a transcript."
             case .unreadable: return "The recording couldn't be read. It may still be saving; try again."
             }
         }

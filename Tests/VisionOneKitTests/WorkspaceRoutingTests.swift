@@ -15,3 +15,12 @@ final class WorkspaceRoutingTests: XCTestCase {
         XCTAssertEqual(plan.steps.count, 2)
     }
 }
+
+extension WorkspaceRoutingTests {
+    func testAmbiguousRequestDoesNotRunAnUnrelatedEdit() {
+        for ask in ["", "help", "do something", "hello", "what can you do?"] {
+            guard case .clarify = AskRouter.route(ask) else { return XCTFail("Unexpected action for \(ask)") }
+        }
+        XCTAssertEqual(AskRouter.route("Import a video"), .open("import"))
+    }
+}

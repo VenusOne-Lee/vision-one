@@ -11,6 +11,7 @@ struct HarnessView: View {
     @ObservedObject var model: HarnessModel
     @ObservedObject private var recorder = ScreenRecorder.shared
     @ObservedObject private var theme = ThemeStore.shared
+    @ObservedObject private var importer = VideoImporter.shared
 
     @AppStorage("harness.showSidebar") private var showSidebar = true
     @AppStorage("harness.sidebarWidth") private var sidebarWidth = 248.0
@@ -24,6 +25,21 @@ struct HarnessView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar
+            if importer.isImporting {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text("Importing video on this Mac…").textStyle(.caption)
+                    Spacer()
+                    Button("Cancel") { importer.cancel() }.buttonStyle(.quiet)
+                }.padding(Theme.Space.sm)
+            }
+            if let message = importer.problem {
+                HStack {
+                    Text(message).textStyle(.caption).foregroundStyle(Theme.error)
+                    Spacer()
+                    Button("Dismiss") { importer.clearProblem() }.buttonStyle(.quiet)
+                }.padding(Theme.Space.sm)
+            }
             Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
             HStack(spacing: 0) {
                 if showSidebar && model.mode == .tasks && fullPanel == nil {
@@ -40,6 +56,9 @@ struct HarnessView: View {
         .foregroundStyle(Theme.text)
         .themed()
         .background(shortcuts)
+        .sheet(isPresented: $model.preparingRecording) {
+            RecordingPreparationView(model: model)
+        }
         .sheet(isPresented: $showingExport) {
             if let workspace = model.workspace {
                 ExportSheet(take: workspace.take, keep: nil) { showingExport = false }
@@ -138,7 +157,8 @@ struct HarnessView: View {
                     noTakesMode = next
                     return
                 }
-                model.open(newest)
+                model.open(newest, mode: next)
+                return
             }
             fullPanel = nil
             model.mode = next
@@ -204,6 +224,7 @@ struct HarnessView: View {
                 let layout = narrow ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
                 layout {
                     TaskThreadView(model: model, task: task)
+                        .id(task.id)
                         .frame(minWidth: 340, maxWidth: .infinity)
                     // The panel needs a take; a task that's still a plan
                     // or a script is just its thread.

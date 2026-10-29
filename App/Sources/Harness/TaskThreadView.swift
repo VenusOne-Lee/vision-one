@@ -27,6 +27,10 @@ struct TaskThreadView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Theme.Space.md) {
                         let activity = task.cells.filter { isActivity($0) }
+                        ForEach(task.cells.filter { !isActivity($0) }) { cell in
+                            ThreadCellView(cell: cell, task: task, model: model)
+                                .id(cell.id)
+                        }
                         if !activity.isEmpty {
                             DisclosureGroup("\(activity.count) completed updates", isExpanded: $showActivity) {
                                 ForEach(activity) { cell in
@@ -35,10 +39,6 @@ struct TaskThreadView: View {
                             }
                             .textStyle(.caption)
                             .foregroundStyle(Theme.textMuted)
-                        }
-                        ForEach(task.cells.filter { !isActivity($0) }) { cell in
-                            ThreadCellView(cell: cell, task: task, model: model)
-                                .id(cell.id)
                         }
                         if task.cells.count <= 2, task.take != nil { firstSteps }
                         StatusCell(snapshot: model.snapshot, task: task) { model.stopRunning() }
@@ -128,8 +128,9 @@ struct NewTaskView: View {
     @AppStorage("harness.aiNoticeDismissed") private var aiNoticeDismissed = false
 
     var body: some View {
+        ScrollView {
         VStack(spacing: Theme.Space.lg) {
-            Spacer(minLength: Theme.Space.xl)
+            Spacer(minLength: Theme.Space.lg)
             Text("What should we make\(projectSuffix)?")
                 .textStyle(.display)
                 .foregroundStyle(Theme.text)
@@ -138,10 +139,10 @@ struct NewTaskView: View {
                 .minimumScaleFactor(0.7)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-            Text("Record, refine and share — one task at a time.")
+            Text("Start with a recording, a video, a script or an Autopilot demo.")
                 .textStyle(.body).foregroundStyle(Theme.textMuted)
             if !recorder.phase.isLive {
-                firstRecording
+                startingActions
             }
             FlowChips(chips: ["Clips from my last video", "Cut my last video to 60 seconds",
                               "Copy a style", "Write this week's update"]) { chip in
@@ -162,6 +163,7 @@ struct NewTaskView: View {
         .padding(.horizontal, Theme.Space.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.canvas)
+        }
         .onChange(of: model.takes.isEmpty) { _, empty in if !empty { clipsNeededTake = false } }
         .task(id: AIReadinessKey(ai)) {
             // Not checked again once closed: the notice never comes back.
@@ -170,21 +172,35 @@ struct NewTaskView: View {
         }
     }
 
-    /// Nothing recorded yet (the first run lands here): one clear way in.
-    private var firstRecording: some View {
-        VStack(spacing: Theme.Space.xs) {
-            Button("Start recording") {
-                Task { await recorder.toggle() }
+    private var startingActions: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), alignment: .leading)], spacing: Theme.Space.sm) {
+            startCard("Record a walkthrough", detail: "Screen, camera and audio", icon: "record.circle") {
+                model.preparingRecording = true
             }
-            .buttonStyle(PillButtonStyle(kind: .primary, size: .large))
-            .disabled(recorder.phase.isBusy)
-            .help("Record your screen", shortcut: ShortcutMap.record)
-            if hotKey.isRegistered {
-                Text("or press \(ShortcutMap.record.display) from any app")
-                    .textStyle(.caption)
-                    .foregroundStyle(Theme.textMuted)
+            startCard("Import a video", detail: "Edit a file from this Mac", icon: "video.badge.plus") { model.importVideo() }
+            startCard("Write a script", detail: "Script Coach and teleprompter", icon: "doc.text") {
+                ScriptCoachWindowController.shared.show()
+            }
+            startCard("Autopilot demo", detail: "Review setup before it runs", icon: "sparkles") {
+                AutopilotWindowController.shared.show()
             }
         }
+        .frame(maxWidth: 760)
+    }
+
+    private func startCard(_ title: String, detail: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                Image(systemName: icon).font(.system(size: 24)).accessibilityHidden(true)
+                Text(title).textStyle(.bodyStrong)
+                Text(detail).textStyle(.caption).foregroundStyle(Theme.textMuted)
+            }
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
+            .panelStyle()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusRing(RoundedRectangle(cornerRadius: Theme.Radius.lg))
     }
 
     private var projectSuffix: String {
@@ -201,15 +217,13 @@ struct NewTaskView: View {
                 clipsNeededTake = true
                 return
             }
-            model.open(newest)
-            model.send("/clips 3")
+            model.open(newest, then: "/clips 3")
         case "Cut my last video to 60 seconds":
             guard let newest = model.takes.first else {
                 clipsNeededTake = true
                 return
             }
-            model.open(newest)
-            model.send("Cut it to 60 seconds")
+            model.open(newest, then: "Cut it to 60 seconds")
         case "Write this week's update":
             model.send("/script what's new this week")
         default:
