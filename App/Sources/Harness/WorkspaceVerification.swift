@@ -45,6 +45,7 @@ enum WorkspaceVerification {
         }
         try Transcript(language: "en", engine: "workspace fixture", duration: 3, segments: [.init(words: words)]).write(to: take.transcriptURL)
         try WorkspaceMotion.verify()
+        try await ExportControllerVerification.run(in: root)
         try verifyCaptionPaneUpdates(in: root)
         try await verifyTakeSwitch(source: take, in: root)
         let original = ThemeStore.shared.appearance
@@ -99,6 +100,7 @@ enum WorkspaceVerification {
                 let model = HarnessModel(snapshot: snapshot, takes: [take], page: .task(task.id))
                 let suffix = "\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide")"
                 let tools: [(String, AnyView)] = [
+                    ("library-filter-empty", AnyView(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }))),
                     ("task-tools", AnyView(WorkspaceToolsSheet(model: model, close: {}))),
                     ("recording", AnyView(RecordingPreparationView(model: model, availableHeight: size.height))),
                     ("script-coach", AnyView(ScriptCoachView(model: ScriptCoachModel(learnPace: false)))),
