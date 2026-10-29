@@ -92,7 +92,7 @@ enum WorkspaceVerification {
         }
         let report: [String: Any] = ["screenshots": names, "source": "production HarnessView with isolated fixture snapshot",
                                     "sizes": [[1512, 982], [900, 640]],
-                                    "limits": ["Static renders require human inspection against approved PNGs", "Does not establish VoiceOver, keyboard navigation, hardware capture or permissions correctness", "AVPlayer layers may require separate media evidence"]]
+                                    "limits": ["Static renders require human inspection against approved PNGs", "Does not establish VoiceOver, keyboard navigation, hardware capture or permissions correctness", "Verification-only video areas use decoded fixture frames from the actual AVPlayerItem composition because bitmap caching omits AVPlayer layers; live playback is unverified"]]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("workspace-render.json"))
         print("Workspace renders saved: \(names.count)")

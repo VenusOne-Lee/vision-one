@@ -177,7 +177,7 @@ struct PanelContent: View {
             case .changes:
                 ChangesPanel(model: workspace.editor, effects: workspace.editor.effects)
             case .clips:
-                ClipsPane(model: workspace.clips)
+                DeliveryPanel(workspace: workspace, model: model)
             case .sound:
                 SoundPanelContent(model: workspace.editor)
             case .post:

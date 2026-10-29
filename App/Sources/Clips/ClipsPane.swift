@@ -481,9 +481,11 @@ private struct RenderedClipPreview: View {
 }
 
 /// Delivery shows the actual rendered file, with no substitute source crop.
-private struct ClipDeliveryPreview: View {
+struct ClipDeliveryPreview: View {
     @ObservedObject var model: ClipsModel
     let clip: Clip
+    var height: CGFloat = 320
+    var showsRenderAction = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
@@ -505,14 +507,16 @@ private struct ClipDeliveryPreview: View {
                     .foregroundStyle(Theme.textMuted).background(Theme.canvas)
                 }
             }
-            .frame(height: clip.format == .vertical ? 320 : 220)
+            .frame(height: height)
             .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
             HStack {
                 Text("Last rendered MP4").textStyle(.caption).foregroundStyle(Theme.textMuted)
                 Spacer()
-                Button("Render preview") { model.export(clip) }
-                    .buttonStyle(.secondary).disabled(model.isExporting)
+                if showsRenderAction {
+                    Button("Render preview") { model.export(clip) }
+                        .buttonStyle(.secondary).disabled(model.isExporting)
+                }
             }
             Text("After changing a clip or its captions, render again to update this preview.")
                 .textStyle(.caption).foregroundStyle(Theme.textMuted)
@@ -523,9 +527,13 @@ private struct ClipDeliveryPreview: View {
 private struct DeliveryMovie: View {
     let url: URL
     @State private var player: AVPlayer?
+    @Environment(\.workspaceRender) private var workspaceRender
     var body: some View {
         Group {
-            if let player { VideoPlayer(player: player) }
+            if let player {
+                if workspaceRender { VerificationPlayerFrame(player: player) }
+                else { VideoPlayer(player: player) }
+            }
             else { ProgressView() }
         }
         .background(Color.black)

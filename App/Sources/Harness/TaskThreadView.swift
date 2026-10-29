@@ -31,6 +31,9 @@ struct TaskThreadView: View {
                             ThreadCellView(cell: cell, task: task, model: model)
                                 .id(cell.id)
                         }
+                        if model.layout.selected == .clips, let workspace = model.workspace {
+                            DeliveryReview(workspace: workspace)
+                        }
                         if !activity.isEmpty {
                             DisclosureGroup("\(activity.count) completed updates", isExpanded: $showActivity) {
                                 ForEach(activity) { cell in
@@ -143,9 +146,9 @@ struct NewTaskView: View {
 
     private func introduction(showDefaults: Bool) -> some View {
         ScrollView {
-        VStack(spacing: Theme.Space.lg) {
-            Spacer(minLength: Theme.Space.lg)
-            Text("What should we make\(projectSuffix)?")
+        VStack(spacing: showDefaults ? Theme.Space.md : Theme.Space.lg) {
+            Spacer(minLength: showDefaults ? 8 : Theme.Space.lg)
+            Text("What are we making?")
                 .textStyle(.display)
                 .foregroundStyle(Theme.text)
                 .multilineTextAlignment(.center)
@@ -156,11 +159,7 @@ struct NewTaskView: View {
             Text("Start with a recording, a video, a script or an Autopilot demo.")
                 .textStyle(.body).foregroundStyle(Theme.textMuted)
             if !recorder.phase.isLive {
-                startingActions
-            }
-            FlowChips(chips: ["Clips from my last video", "Cut my last video to 60 seconds",
-                              "Copy a style", "Write this week's update"]) { chip in
-                start(chip)
+                startingActions(compact: showDefaults)
             }
             if model.takes.isEmpty, clipsNeededTake {
                 FirstTakeHint(neededTake: true)
@@ -171,6 +170,10 @@ struct NewTaskView: View {
                 }
                 Composer(model: model, placeholder: "Describe a video, or press record")
                     .frame(maxWidth: 640)
+            }
+            FlowChips(chips: ["Clips from my last video", "Cut my last video to 60 seconds",
+                              "Copy a style", "Write this week's update"]) { chip in
+                start(chip)
             }
             if showDefaults { contextRail }
             Spacer(minLength: Theme.Space.lg)
@@ -188,30 +191,30 @@ struct NewTaskView: View {
         }
     }
 
-    private var startingActions: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), alignment: .leading)], spacing: Theme.Space.sm) {
-            startCard("Record a walkthrough", detail: "Screen, camera and audio", icon: "record.circle") {
+    private func startingActions(compact: Bool) -> some View {
+        LazyVGrid(columns: compact ? [GridItem(.flexible()), GridItem(.flexible())] : [GridItem(.adaptive(minimum: 150), alignment: .leading)], spacing: Theme.Space.sm) {
+            startCard("Record a walkthrough", detail: "Screen, camera and audio", icon: "record.circle", compact: compact) {
                 model.preparingRecording = true
             }
-            startCard("Import a video", detail: "Edit a file from this Mac", icon: "video.badge.plus") { model.importVideo() }
-            startCard("Write a script", detail: "Script Coach and teleprompter", icon: "doc.text") {
+            startCard("Import a video", detail: "Edit a file from this Mac", icon: "video.badge.plus", compact: compact) { model.importVideo() }
+            startCard("Write a script", detail: "Script Coach and teleprompter", icon: "doc.text", compact: compact) {
                 ScriptCoachWindowController.shared.show()
             }
-            startCard("Autopilot demo", detail: "Review setup before it runs", icon: "sparkles") {
+            startCard("Autopilot demo", detail: "Review setup before it runs", icon: "sparkles", compact: compact) {
                 AutopilotWindowController.shared.show()
             }
         }
         .frame(maxWidth: 760)
     }
 
-    private func startCard(_ title: String, detail: String, icon: String, action: @escaping () -> Void) -> some View {
+    private func startCard(_ title: String, detail: String, icon: String, compact: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
-                Image(systemName: icon).font(.system(size: 24)).accessibilityHidden(true)
+                Image(systemName: icon).font(.system(size: compact ? 18 : 24)).accessibilityHidden(true)
                 Text(title).textStyle(.bodyStrong)
                 Text(detail).textStyle(.caption).foregroundStyle(Theme.textMuted)
             }
-            .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: compact ? 65 : 120, alignment: .leading)
             .panelStyle()
             .contentShape(Rectangle())
         }

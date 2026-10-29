@@ -516,7 +516,39 @@ private struct PlayheadHandle: Shape {
 }
 
 /// AVPlayerView without its own controls; the editor has its transport.
-struct PlayerSurface: NSViewRepresentable {
+struct PlayerSurface: View {
+    let player: AVPlayer
+    @Environment(\.workspaceRender) private var workspaceRender
+
+    var body: some View {
+        if workspaceRender { VerificationPlayerFrame(player: player) }
+        else { NativePlayerSurface(player: player) }
+    }
+}
+
+/// AVPlayer layers are absent from NSView bitmap caching. Diagnostics alone
+/// substitute a decoded frame from the SAME item and video composition.
+/// This does not verify live playback; MediaVerification tests rendered media.
+struct VerificationPlayerFrame: View {
+    let player: AVPlayer
+    @State private var frame: CGImage?
+    var body: some View {
+        ZStack {
+            Color.black
+            if let frame { Image(decorative: frame, scale: 1).resizable().scaledToFit() }
+        }
+        .task {
+            guard let item = player.currentItem else { return }
+            let generator = AVAssetImageGenerator(asset: item.asset)
+            generator.videoComposition = item.videoComposition
+            generator.appliesPreferredTrackTransform = item.videoComposition == nil
+            generator.maximumSize = CGSize(width: 1512, height: 982)
+            frame = try? await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)).image
+        }
+    }
+}
+
+private struct NativePlayerSurface: NSViewRepresentable {
     let player: AVPlayer
 
     func makeNSView(context: Context) -> AVPlayerView {

@@ -42,8 +42,26 @@ struct TransportBar<Accessory: View>: View {
     @ViewBuilder var accessory: () -> Accessory
 
     var body: some View {
-        HStack(spacing: Theme.Space.sm) {
-            HStack(spacing: 2) {
+        ViewThatFits(in: .horizontal) {
+            wide.fixedSize(horizontal: true, vertical: false)
+            VStack(spacing: 6) {
+                HStack(spacing: 8) { playback; timecode; Spacer(minLength: 0) }
+                HStack(spacing: 8) {
+                    length
+                    Spacer(minLength: 0)
+                    if showsZoom { zoomControls(slider: false) }
+                }
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(spacing: 8) { accessory() }.fixedSize()
+                }
+                .frame(height: 32)
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var playback: some View {
+        HStack(spacing: 2) {
                 ToolbarIcon(systemImage: "backward.end.fill", help: "Go to the start") { model.seekToStart() }
                 ToolbarIcon(systemImage: "backward.frame.fill", help: "Back one frame (← in the timeline)") {
                     model.stepFrames(-1)
@@ -65,6 +83,11 @@ struct TransportBar<Accessory: View>: View {
                 }
                 ToolbarIcon(systemImage: "forward.end.fill", help: "Go to the end") { model.seekToEnd() }
             }
+    }
+
+    private var wide: some View {
+        HStack(spacing: Theme.Space.sm) {
+            playback
             timecode
             length
             if let span = model.selection {

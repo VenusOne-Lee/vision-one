@@ -22,6 +22,7 @@ struct HarnessView: View {
     @State private var noTakesMode: HarnessMode?
     @State private var showingTemplate = false
     @State private var showingTools = false
+    @State private var compactPane = "Review"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -255,24 +256,33 @@ struct HarnessView: View {
                 GeometryReader { geometry in
                 let narrow = geometry.size.width < 720
                 let stageWidth = min(max(geometry.size.width * stageFraction, 320), max(320, geometry.size.width - 340))
-                let layout = narrow ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
-                layout {
-                    TaskThreadView(model: model, task: task)
-                        .id(task.id)
-                        .frame(minWidth: 340, maxWidth: .infinity)
-                    // The panel needs a take; a task that's still a plan
-                    // or a script is just its thread.
-                    if let workspace = model.workspace, !model.layout.isHidden {
-                        if !narrow {
-                        DragDivider(axis: .vertical, value: Binding(
-                            get: { Double(stageWidth) },
-                            set: { stageFraction = $0 / max(1, geometry.size.width) }),
-                            range: 320...max(320, Double(geometry.size.width - 340)), inverted: true)
+                if narrow, let workspace = model.workspace, !model.layout.isHidden {
+                    VStack(spacing: 0) {
+                        HStack {
+                            SegmentedTabs(selection: $compactPane, options: ["Task", "Review"]) { $0 }
+                            Spacer()
+                        }.padding(8).background(Theme.paper)
+                        Divider().overlay(Theme.line)
+                        if compactPane == "Task" {
+                            TaskThreadView(model: model, task: task).id(task.id)
+                        } else {
+                            PanelHost(model: model, workspace: workspace) { fullPanel = $0 }
+                                .task(id: workspace.take.name) { await workspace.load() }
                         }
-                        PanelHost(model: model, workspace: workspace) { fullPanel = $0 }
-                            .frame(width: narrow ? nil : stageWidth)
-                            .frame(minHeight: narrow ? 240 : nil)
-                            .task(id: workspace.take.name) { await workspace.load() }
+                    }
+                } else {
+                    HStack(spacing: 0) {
+                        TaskThreadView(model: model, task: task).id(task.id)
+                            .frame(minWidth: 340, maxWidth: .infinity)
+                        if let workspace = model.workspace, !model.layout.isHidden {
+                            DragDivider(axis: .vertical, value: Binding(
+                                get: { Double(stageWidth) },
+                                set: { stageFraction = $0 / max(1, geometry.size.width) }),
+                                range: 320...max(320, Double(geometry.size.width - 340)), inverted: true)
+                            PanelHost(model: model, workspace: workspace) { fullPanel = $0 }
+                                .frame(width: stageWidth)
+                                .task(id: workspace.take.name) { await workspace.load() }
+                        }
                     }
                 }
                 }

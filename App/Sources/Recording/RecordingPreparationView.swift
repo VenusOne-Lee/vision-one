@@ -149,7 +149,7 @@ struct RecordingPreparationView: View {
             inputs.cancel()
             Task { await inputs.preview(recorder.choice) }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in access.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in if !model.isFixture { access.refresh() } }
         .onDisappear { starting = false; inputs.cancel(); inputs.cancelPreview() }
     }
 
