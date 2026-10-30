@@ -79,6 +79,30 @@ enum WorkspaceUndoVerification {
         try MediaVerification.require(menu.performKeyEquivalent(with: try key(in: window, redo: true)), "Canvas redo key was not dispatched")
         try MediaVerification.require(abs(first.edits.outputDuration - 2.5) < 0.001, "Canvas Cmd-Shift-Z did not redo trim")
 
+        // Effects mutate their own ObservableObject. Editor-owned toolbar
+        // controls must also refresh at group close, Undo and Redo.
+        var editorInvalidations = 0
+        let undoRefresh = first.objectWillChange.sink { editorInvalidations += 1 }
+        defer { undoRefresh.cancel() }
+        let originalZooms = first.effects.zooms
+        first.undoManager.beginUndoGrouping()
+        first.effects.addZoom(at: 0, sourceDuration: first.edits.sourceDuration)
+        let afterEffect = editorInvalidations
+        first.undoManager.endUndoGrouping()
+        let addedZooms = first.effects.zooms
+        try MediaVerification.require(addedZooms != originalZooms && first.undoManager.canUndo
+            && editorInvalidations > afterEffect, "Effect group close did not refresh editor Undo controls")
+        let beforeUndo = editorInvalidations
+        first.undoManager.undo()
+        try MediaVerification.require(first.effects.zooms == originalZooms && first.undoManager.canRedo
+            && editorInvalidations > beforeUndo, "Effect Undo did not refresh editor Redo controls")
+        let beforeRedo = editorInvalidations
+        first.undoManager.redo()
+        try MediaVerification.require(first.effects.zooms == addedZooms && first.undoManager.canUndo
+            && editorInvalidations > beforeRedo, "Effect Redo did not refresh editor Undo controls")
+        first.undoManager.undo()
+        first.effects.isAdjusting = false
+
         model.page = .task(b.id)
         await model.workspace?.load()
         guard let second = model.workspace?.editor else { throw MediaVerification.Failure(message: "B editor missing") }
@@ -116,7 +140,7 @@ enum WorkspaceUndoVerification {
         window.makeFirstResponder(nil)
         field.removeFromSuperview()
 
-        try JSONSerialization.data(withJSONObject: ["canvasTrimUndoRedo": true, "taskSwitchRoutesCurrentEditor": true,
+        try JSONSerialization.data(withJSONObject: ["effectUndoControlsRefresh": true, "canvasTrimUndoRedo": true, "taskSwitchRoutesCurrentEditor": true,
                                                   "textFieldUndoRedoPreserved": true],
                                    options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("workspace-undo.json"))

@@ -93,6 +93,7 @@ final class EditorModel: ObservableObject {
 
     private var asset: AVURLAsset?
     private var timeObserver: Any?
+    private var undoChanges: AnyCancellable?
     private var rebuildTask: Task<Void, Never>?
     private var watch: Task<Void, Never>?
     /// Every cut id this editor has seen, so cuts written by someone else
@@ -123,6 +124,17 @@ final class EditorModel: ObservableObject {
     init(take: Take, renderPhase: Phase? = nil) {
         self.take = take
         effects = EffectsModel(take: take, undoManager: undoManager)
+        // Effects share this history but publish through their own model.
+        // Refresh editor-owned toolbar controls after the manager settles.
+        let undoNotifications: [Notification.Name] = [
+            .NSUndoManagerDidCloseUndoGroup, .NSUndoManagerDidUndoChange,
+            .NSUndoManagerDidRedoChange
+        ]
+        undoChanges = Publishers.MergeMany(undoNotifications.map {
+            NotificationCenter.default.publisher(for: $0, object: undoManager)
+        }).sink { [weak self] _ in
+            MainActor.assumeIsolated { self?.objectWillChange.send() }
+        }
         if let renderPhase {
             phase = renderPhase
             loadStarted = true
