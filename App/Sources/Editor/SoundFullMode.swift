@@ -87,7 +87,11 @@ struct SoundFullMode<Rail: View>: View {
                 HStack(spacing: Theme.Space.md) {
                     Text("Sound mix").textStyle(.bodyStrong)
                     Spacer(minLength: Theme.Space.sm)
-                    LoudnessMeter(lufs: model.voiceLoudness)
+                    LoudnessMeter(lufs: model.voiceLoudness, status: model.audioLevelsState.message)
+                    if case .failed = model.audioLevelsState {
+                        Button("Retry audio") { Task { await model.loadLevels() } }
+                            .buttonStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -306,7 +310,7 @@ private struct VoiceWave: View {
             }
             .overlay {
                 if model.levels == nil {
-                    Text("Reading the mic…")
+                    Text(model.audioLevelsState.message)
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.textMuted)
                 }
@@ -348,6 +352,7 @@ private struct LaneResizeEdge: View {
 /// The voice's loudness against what platforms aim for.
 struct LoudnessMeter: View {
     let lufs: Float?
+    let status: String
 
     var body: some View {
         HStack(spacing: Theme.Space.sm) {
@@ -370,7 +375,7 @@ struct LoudnessMeter: View {
                 }
                 .frame(width: 120, height: 8)
             } else {
-                Text("Loudness after the mic is read")
+                Text(status)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textMuted)
             }

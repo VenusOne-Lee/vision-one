@@ -329,6 +329,32 @@ enum MediaVerification {
         await editor.loadIfNeeded()
         defer { editor.close() }
         try require(editor.phase == .ready, "Silent imported video could not open in the editor")
+        await editor.loadLevels()
+        try require(editor.audioLevelsState == .noAudio && editor.levels == nil,
+                    "Silent sound view remained loading instead of reporting no source audio")
+
+        let retryTake = Take(folder: root.appendingPathComponent("audio-level-retry"))
+        try FileManager.default.createDirectory(at: retryTake.folder, withIntermediateDirectories: true)
+        let retryEditor = EditorModel(take: retryTake)
+        defer { retryEditor.close() }
+        await retryEditor.loadLevels()
+        guard case .failed = retryEditor.audioLevelsState else {
+            throw Failure(message: "Unreadable audio did not expose a recoverable levels failure")
+        }
+        try FileManager.default.copyItem(at: take.screenURL, to: retryTake.screenURL)
+        await retryEditor.loadLevels()
+        try require(retryEditor.audioLevelsState == .ready && retryEditor.levels != nil,
+                    "Audio-level retry did not recover after the source became readable")
+
+        editor.seek(toSource: editor.edits.sourceDuration - 0.2)
+        editor.play()
+        for _ in 0..<200 {
+            if !editor.isPlaying && editor.sourceTime >= editor.edits.sourceDuration - 0.05 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try require(!editor.isPlaying && editor.sourceTime >= editor.edits.sourceDuration - 0.05,
+                    "Preview remained Playing after reaching end of media")
+        editor.seek(toSource: 0)
         try require(editor.transcriptState == .noAudio && !editor.canRetryTranscript,
                     "Silent import did not offer permanent no-audio recovery")
         try require(try TranscriptFailure.read(from: imported.transcriptFailedURL).reason == .noAudio,

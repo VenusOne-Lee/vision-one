@@ -25,6 +25,23 @@ final class EditorModel: ObservableObject {
         case failed(String)
     }
 
+    enum AudioLevelsState: Equatable {
+        case idle, loading, ready, noAudio
+        case failed(String)
+
+        var message: String {
+            switch self {
+            case .idle: return "Audio levels not read yet"
+            case .loading: return "Reading audio…"
+            case .ready: return "No measurable voice loudness"
+            case .noAudio: return "No source audio in this video"
+            case let .failed(message): return message
+            }
+        }
+    }
+
+    @Published private(set) var audioLevelsState: AudioLevelsState = .idle
+
     let take: Take
     let undoManager = UndoManager()
     let player = AVPlayer()
@@ -63,7 +80,10 @@ final class EditorModel: ObservableObject {
     /// Mic loudness every 10 ms, for the waveform and finding silence.
     /// Nil until levels.json is read or measured.
     @Published private(set) var levels: LoudnessEnvelope? {
-        didSet { if levels != oldValue { voiceLoudness = levels?.integratedLoudness() } }
+        didSet {
+            if levels != oldValue { voiceLoudness = levels?.integratedLoudness() }
+            if levels != nil { audioLevelsState = .ready }
+        }
     }
     /// The mic's integrated loudness, for the sound full mode's meter.
     @Published private(set) var voiceLoudness: Float?
@@ -94,6 +114,7 @@ final class EditorModel: ObservableObject {
     private var asset: AVURLAsset?
     private var timeObserver: Any?
     private var undoChanges: AnyCancellable?
+    private var playbackChanges: AnyCancellable?
     private var rebuildTask: Task<Void, Never>?
     private var watch: Task<Void, Never>?
     /// Every cut id this editor has seen, so cuts written by someone else
@@ -135,6 +156,13 @@ final class EditorModel: ObservableObject {
         }).sink { [weak self] _ in
             MainActor.assumeIsolated { self?.objectWillChange.send() }
         }
+        // A final periodic time callback can precede AVPlayer's rate change
+        // at EOF. Observe the actual transport state as well.
+        playbackChanges = player.publisher(for: \.rate, options: [.initial, .new])
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] rate in
+                MainActor.assumeIsolated { self?.isPlaying = rate != 0 }
+            }
         if let renderPhase {
             phase = renderPhase
             loadStarted = true
@@ -739,22 +767,34 @@ extension EditorModel {
     /// cleaned before silence was checked against the mic get their
     /// undecided silence suggestions redone at the same time.
     func loadLevels() async {
-        if levels != nil { return }
+        if levels != nil { audioLevelsState = .ready; return }
+        guard audioLevelsState != .loading else { return }
         if let saved = try? LoudnessEnvelope.read(from: take.levelsURL) {
             levels = saved
             return
         }
-        guard let samples = try? await TakeAudio.read(take).samples else { return }
-        let rate = TakeAudio.sampleRate
-        let measured = await Task.detached(priority: .utility) {
-            LoudnessEnvelope.measure(samples: samples, sampleRate: rate)
-        }.value
-        guard levels == nil else { return }
-        levels = measured
-        try? measured.write(to: take.levelsURL)
-        guard !words.isEmpty else { return }
-        let fresh = CleanupDetector().pauses(in: words, duration: edits.sourceDuration, loudness: measured)
-        replaceSuggestions(SilenceCut.refreshSuggestions(edits, with: fresh))
+        audioLevelsState = .loading
+        do {
+            let samples = try await TakeAudio.read(take).samples
+            try Task.checkCancellation()
+            let rate = TakeAudio.sampleRate
+            let measured = await Task.detached(priority: .utility) {
+                LoudnessEnvelope.measure(samples: samples, sampleRate: rate)
+            }.value
+            try Task.checkCancellation()
+            guard levels == nil else { audioLevelsState = .ready; return }
+            levels = measured
+            try? measured.write(to: take.levelsURL)
+            guard !words.isEmpty else { return }
+            let fresh = CleanupDetector().pauses(in: words, duration: edits.sourceDuration, loudness: measured)
+            replaceSuggestions(SilenceCut.refreshSuggestions(edits, with: fresh))
+        } catch is CancellationError {
+            audioLevelsState = .idle
+        } catch TakeAudio.ReadError.noAudio {
+            audioLevelsState = .noAudio
+        } catch {
+            audioLevelsState = .failed("Couldn't read this video's audio. Try again.")
+        }
     }
 
     /// "Cut the silence" from the Ask bar: every quiet stretch, cut now as
