@@ -1,0 +1,28 @@
+{
+  "checkpoint": "033d087b6fba6547d4a34e83f4e06145de4acbbd",
+  "scope": "Observed native results reported by the local verification assistant; the full twelve-part plan remains open.",
+  "verified": [
+    "df24f1f: separate manual Post copy persisted across A/B/A navigation and app relaunch; explicit empty overrides preserved, silent-take Draft gates disabled.",
+    "5f0fbab: actual compact window 1524x1104 pixels and recording sheet 1320x944 pixels. Light/dark scrolling reaches script, teleprompter, Coach, rehearsal and countdown with fixed header/footer. No capture attempted.",
+    "5f0fbab: ambiguous edit request clarified without running an edit; 'open sound' navigated the same take. 'show sound' was not recognized.",
+    "5f0fbab: individually inspected all twelve post-no-speech, transcript-no-audio and autopilot-start-error light/dark narrow/wide PNGs. Visible content legible without clipping. Autopilot images show only the notice, not the full screen."
+  ],
+  "open": [
+    {
+      "area": "Canvas",
+      "observed": "64625: Zoom drag/click and Blur drag produced no effect. Timeline drag control worked. Zoom here popover added effect; toolbar Undo stayed disabled while Cmd-Z removed it.",
+      "status": "Requires source diagnosis, fix and real gesture retest. Draw untested."
+    },
+    {
+      "area": "Script Coach",
+      "observed": "df24: two on-device rewrite requests returned from Thinking without suggestion/error. Built-in Use it suggestion worked.",
+      "status": "This commit fixes dropped phrase-flag rewrites, adds no-result/stale-result feedback and preserves full-line replacement semantics. CI and native model retest pending; actual model reply in original failure was not observed."
+    },
+    {
+      "area": "Sound",
+      "observed": "5f0fbab: silent source continues Reading the mic and loudness-pending text. At EOF playback still advertised Pause.",
+      "status": "Requires source diagnosis, fix and native retest."
+    }
+  ],
+  "limits": "No full VoiceOver, representative audio quality, provider account, complex automation or full-plan completion claim. No merge or publication authorized."
+}

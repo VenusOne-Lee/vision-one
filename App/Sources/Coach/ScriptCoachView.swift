@@ -47,6 +47,8 @@ final class ScriptCoachModel: ObservableObject {
     /// Asks the ladder (on this Mac first) for easier ways to say the flagged lines.
     func suggestRewrites() {
         guard let request = ScriptCoach().rewriteRequest(coach.script, flags: flags, tone: coach.tone) else { return }
+        guard !rewriting else { return }
+        let requestedText = coach.scriptText
         rewriting = true
         problem = nil
         let ladder = AIServices.shared.ladder()
@@ -54,7 +56,16 @@ final class ScriptCoachModel: ObservableObject {
             defer { rewriting = false }
             do {
                 let rewrites = try await ladder.complete(request).decode([ScriptCoach.Rewrite].self)
-                report = ScriptCoach().applying(rewrites, to: report)
+                guard coach.scriptText == requestedText else {
+                    problem = "Your script changed while the coach was thinking. Ask again for the current version."
+                    return
+                }
+                let updated = ScriptCoach().applying(rewrites, to: report, script: coach.script)
+                guard updated.flags != report.flags else {
+                    problem = "The coach returned no usable changes for these lines. Try again, or edit the script yourself."
+                    return
+                }
+                report = updated
             } catch {
                 problem = CoachServices.message(for: error)
             }
