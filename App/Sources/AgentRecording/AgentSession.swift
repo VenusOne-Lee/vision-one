@@ -203,9 +203,10 @@ struct AgentProcess {
 /// approval cards, so a "yes" only counts from the real keyboard, mouse
 /// or trackpad.
 enum PersonInput {
+    /// `event` is the one being handled, or NSApp's current event if nil.
     @MainActor
-    static func pressedByPerson(_ event: NSEvent? = NSApp.currentEvent) -> Bool {
-        guard let cg = event?.cgEvent else { return true }
+    static func pressedByPerson(_ event: NSEvent? = nil) -> Bool {
+        guard let cg = (event ?? NSApp.currentEvent)?.cgEvent else { return true }
         let origin = InputOrigin.of(sourcePID: cg.getIntegerValueField(.eventSourceUnixProcessID),
                                     userData: cg.getIntegerValueField(.eventSourceUserData),
                                     ownPID: ProcessInfo.processInfo.processIdentifier)
