@@ -11,7 +11,10 @@
     "205a51d: local Xcode Debug build and strict deep code-signature verification passed. Actual silent QA take shows No source audio in this video in Sound header and waveform. Playback changed Play to Pause while running and returned to Play at EOF 00:00:02.15. Dark mixer screenshot inspected.",
     "205a51d: CI 41033978239 rendered-media step passed, including missing-source audio analysis failure followed by recovery after restoring the source, silent terminal state and EOF playback state. Full run status is recorded separately.",
     "205a51d: complete CI 41033978239 succeeded, including package tests, native build, actual rendered media and native workspace fixtures.",
-    "b8418b2: verification bundle now uses mcp-verification.sock, separate from release and dev. All 31 local MCPTests passed; signed native build and strict signature verification passed. Live bridge initialized protocol 2025-11-25, listed 25 tools and returned recording=false through a mode-0600 socket. Duplicate QA title returned ambiguity guidance; exact folder get_take/get_timeline succeeded with the expected Square export and no effects. Settings showed the named verification client connected with Ask first selected. No MCP recording/edit/export/share call was made."
+    "b8418b2: verification bundle now uses mcp-verification.sock, separate from release and dev. All 31 local MCPTests passed; signed native build and strict signature verification passed. Live bridge initialized protocol 2025-11-25, listed 25 tools and returned recording=false through a mode-0600 socket. Duplicate QA title returned ambiguity guidance; exact folder get_take/get_timeline succeeded with the expected Square export and no effects. Settings showed the named verification client connected with Ask first selected. No MCP recording/edit/export/share call was made.",
+    "b8418b2: complete CI 41035169364 succeeded, including package tests, native build, rendered media and workspace fixtures.",
+    "b8418b2: actual QA task Archive removed it from its project and exposed Restore in Archived tasks. Restore reopened the same project/task and preserved its Square export; saved desk.json confirms archived=false. No other task was archived.",
+    "b8418b2: actual two-format export selected Vertical and Portrait 4:5, showed Vertical exporting while Portrait waited, then two videos ready. Both H.264 MP4s fully decoded: Vertical 1080x1920 28311 bytes; Portrait 1080x1350 19769 bytes; each 2.5 seconds and correctly no audio. Decoded frames inspected and show the expected red/blue QA image. No external share action."
   ],
   "open": [
     {
@@ -25,7 +28,11 @@
     },
     {
       "area": "MCP completion",
-      "status": "CI 41035169364 is running for b8418b2. Live read-only runtime and UI entry point verified; recording approvals, agent action capture and broader client workflows remain open."
+      "status": "Source CI 41035169364 passed. Live read-only runtime and UI entry point verified; recording approvals, agent action capture and broader client workflows remain open."
+    },
+    {
+      "area": "Delivery scope",
+      "status": "Single-take multi-format actual UI completed. Actual multi-take queue/cancel/failure interaction and representative real-media quality remain open; earlier native CI covers synthetic queue behavior."
     }
   ],
   "limits": "No full VoiceOver, representative audio quality, provider account, complex automation or full-plan completion claim. No merge or publication authorized."
