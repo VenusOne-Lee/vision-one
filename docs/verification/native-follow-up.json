@@ -1,27 +1,26 @@
 {
-  "checkpoint": "033d087b6fba6547d4a34e83f4e06145de4acbbd",
+  "checkpoint": "205a51d9b203f8464f6ef865111161500672778f",
   "scope": "Observed native results reported by the local verification assistant; the full twelve-part plan remains open.",
   "verified": [
     "df24f1f: separate manual Post copy persisted across A/B/A navigation and app relaunch; explicit empty overrides preserved, silent-take Draft gates disabled.",
     "5f0fbab: actual compact window 1524x1104 pixels and recording sheet 1320x944 pixels. Light/dark scrolling reaches script, teleprompter, Coach, rehearsal and countdown with fixed header/footer. No capture attempted.",
     "5f0fbab: ambiguous edit request clarified without running an edit; 'open sound' navigated the same take. 'show sound' was not recognized.",
-    "5f0fbab: individually inspected all twelve post-no-speech, transcript-no-audio and autopilot-start-error light/dark narrow/wide PNGs. Visible content legible without clipping. Autopilot images show only the notice, not the full screen."
+    "5f0fbab: individually inspected all twelve post-no-speech, transcript-no-audio and autopilot-start-error light/dark narrow/wide PNGs. Visible content legible without clipping. Autopilot images show only the notice, not the full screen.",
+    "30d3e2b: Script Coach focused nine tests and CI 41032607706 passed. Actual on-device full-line and phrase-flag rewrites produced suggestions; Use it replaced only the intended sentence and preserved the next sentence. Original QA script restored.",
+    "11de12f: CI 41033409772 passed. Native Zoom here immediately enabled toolbar Undo; Undo removed the zoom, Redo restored it, and final Undo removed the temporary effect.",
+    "205a51d: local Xcode Debug build and strict deep code-signature verification passed. Actual silent QA take shows No source audio in this video in Sound header and waveform. Playback changed Play to Pause while running and returned to Play at EOF 00:00:02.15. Dark mixer screenshot inspected.",
+    "205a51d: CI 41033978239 rendered-media step passed, including missing-source audio analysis failure followed by recovery after restoring the source, silent terminal state and EOF playback state. Full run status is recorded separately.",
+    "205a51d: complete CI 41033978239 succeeded, including package tests, native build, actual rendered media and native workspace fixtures."
   ],
   "open": [
     {
-      "area": "Canvas",
-      "observed": "64625: Zoom drag/click and Blur drag produced no effect. Timeline drag control worked. Zoom here popover added effect; toolbar Undo stayed disabled while Cmd-Z removed it.",
-      "status": "Requires source diagnosis, fix and real gesture retest. Draw untested."
+      "area": "Canvas gestures",
+      "observed": "Earlier Zoom/Blur drags did not add effects. Subsequent native pointer retest failed in Computer Use itself with windowNotFoundAtPosition before input delivery; this does not establish an app gesture defect.",
+      "status": "Manual Zoom/Blur create-and-undo test requested. Draw remains unverified. Toolbar Undo issue separately fixed and verified in 11de12f."
     },
     {
-      "area": "Script Coach",
-      "observed": "df24: two on-device rewrite requests returned from Thinking without suggestion/error. Built-in Use it suggestion worked.",
-      "status": "This commit fixes dropped phrase-flag rewrites, adds no-result/stale-result feedback and preserves full-line replacement semantics. CI and native model retest pending; actual model reply in original failure was not observed."
-    },
-    {
-      "area": "Sound",
-      "observed": "5f0fbab: silent source continues Reading the mic and loudness-pending text. At EOF playback still advertised Pause.",
-      "status": "Requires source diagnosis, fix and native retest."
+      "area": "Script Coach recovery",
+      "status": "Empty, unknown and unchanged rewrite outputs covered by tests. Stale-response and unusable-response feedback not forced with the live model."
     }
   ],
   "limits": "No full VoiceOver, representative audio quality, provider account, complex automation or full-plan completion claim. No merge or publication authorized."

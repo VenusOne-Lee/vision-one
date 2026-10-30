@@ -2,6 +2,18 @@
 
 The complete scope remains [FULL-OVERHAUL-PLAN.md](FULL-OVERHAUL-PLAN.md). No requirement is considered fully accepted merely because its code or unit tests exist. This is an unfinished draft PR, not a completion certificate.
 
+## Latest native follow-up: 205a51d
+
+This section and [native-follow-up.json](verification/native-follow-up.json) supersede the older pending retest statements below for the specifically named checks.
+
+- Script Coach: cloud commit `30d3e2b` preserves whole-line suggestions on phrase flags and reports unusable or stale replies. Nine focused tests, [CI 41032607706](https://github.com/VenusOne-Lee/vision-one/actions/runs/41032607706), and actual on-device full-line/phrase rewrite application passed. The following sentence was preserved; the QA script was restored.
+- Editor history: cloud commit `11de12f` refreshes toolbar availability when shared effect history changes. [CI 41033409772](https://github.com/VenusOne-Lee/vision-one/actions/runs/41033409772) and actual Zoom here → toolbar Undo → Redo → Undo passed.
+- Sound: cloud commit `205a51d` distinguishes loading, silent source and retryable analysis failure, and observes player rate at EOF. The local signed Debug build passed. Actual silent-video Sound header/waveform show “No source audio in this video”; playback returns to Play at EOF. CI media checks passed for missing-source failure/retry, no-audio state and EOF state.
+- Earlier local Post A/B/A/relaunch persistence, compact light/dark recording-sheet scrolling, and individual inspection of the twelve new Post/no-audio/Autopilot images are recorded in native-follow-up.json. Those specifically named retests are no longer pending.
+- Canvas drag acceptance remains open. A later automated retest failed in the Computer Use pointer driver with `windowNotFoundAtPosition` before input delivery. That failure is not evidence of an app gesture defect. A manual Zoom/Blur create-and-undo test has been requested; Draw remains unverified.
+- Full [CI 41033978239](https://github.com/VenusOne-Lee/vision-one/actions/runs/41033978239) succeeded for the source checkpoint, including package/native build/media/workspace fixtures.
+- Full VoiceOver/focus, representative audible quality/footage, configured-provider workflows and complex automation remain open. No merge or release.
+
 ## Environment and source
 
 - Started from `codex/producer-workspace-overhaul`, `e5ac6c4a5f2302d7a318c42e2cfc78018f1bbd8b`.
