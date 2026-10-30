@@ -14,7 +14,9 @@
     "b8418b2: verification bundle now uses mcp-verification.sock, separate from release and dev. All 31 local MCPTests passed; signed native build and strict signature verification passed. Live bridge initialized protocol 2025-11-25, listed 25 tools and returned recording=false through a mode-0600 socket. Duplicate QA title returned ambiguity guidance; exact folder get_take/get_timeline succeeded with the expected Square export and no effects. Settings showed the named verification client connected with Ask first selected. No MCP recording/edit/export/share call was made.",
     "b8418b2: complete CI 41035169364 succeeded, including package tests, native build, rendered media and workspace fixtures.",
     "b8418b2: actual QA task Archive removed it from its project and exposed Restore in Archived tasks. Restore reopened the same project/task and preserved its Square export; saved desk.json confirms archived=false. No other task was archived.",
-    "b8418b2: actual two-format export selected Vertical and Portrait 4:5, showed Vertical exporting while Portrait waited, then two videos ready. Both H.264 MP4s fully decoded: Vertical 1080x1920 28311 bytes; Portrait 1080x1350 19769 bytes; each 2.5 seconds and correctly no audio. Decoded frames inspected and show the expected red/blue QA image. No external share action."
+    "b8418b2: actual two-format export selected Vertical and Portrait 4:5, showed Vertical exporting while Portrait waited, then two videos ready. Both H.264 MP4s fully decoded: Vertical 1080x1920 28311 bytes; Portrait 1080x1350 19769 bytes; each 2.5 seconds and correctly no audio. Decoded frames inspected and show the expected red/blue QA image. No external share action.",
+    "b8418b2: actual multi-take queue UI used a 120-second synthetic fixture and existing QA take B. B showed Another take is exporting and Queue 2, then Queued position 1; Stop marked both B outputs cancelled; Retry unfinished returned B to position 1. The active fixture finished normally and B subsequently showed two videos ready. Probed outputs: fixture 120s H264 at 1080x1920 and 1080x1350 with no audio; B 2.5s H264 at both dimensions with AAC. This is queued cancellation/retry and serial completion, not active cancellation or failure recovery.",
+    "Queue-test cleanup: temporary imports at 2026-10-30 11.49.45 (long fixture) and 11.49.14 (picker selected the previous short fixture on the first attempt) were archived through the UI; saved desk.json confirms both archived and original QA task unarchived. Media retained locally. Original QA editor restored at zero with no effects. No outbound share."
   ],
   "open": [
     {
@@ -32,7 +34,7 @@
     },
     {
       "area": "Delivery scope",
-      "status": "Single-take multi-format actual UI completed. Actual multi-take queue/cancel/failure interaction and representative real-media quality remain open; earlier native CI covers synthetic queue behavior."
+      "status": "Actual single-take multi-format and multi-take queued cancellation/retry/serial completion verified with synthetic inputs. Active cancellation and injected failure recovery remain native-CI-only; representative real-media quality and provider handoffs remain open."
     }
   ],
   "limits": "No full VoiceOver, representative audio quality, provider account, complex automation or full-plan completion claim. No merge or publication authorized."
