@@ -36,6 +36,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
     private var sink: CaptureSink?
     private var cursor: CursorLogger?
     private var take: Take?
+    private var destinationTaskID: UUID?
+    private var destinationProjectID: UUID?
     private let deviceTracks = DeviceTracks()
     /// Camera only: open from just before the countdown until the take
     /// ends, so the preview is live while counting down.
@@ -91,6 +93,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
                 return
             }
         }
+        destinationTaskID = HarnessModel.shared.page.taskID
+        destinationProjectID = HarnessModel.shared.currentProject?.id
         MainWindowStepAside.hide()
         // The script shows during the countdown, so the first line is
         // ready to read.
@@ -99,6 +103,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
         let go = await Countdown.shared.run(on: recordedScreen())
         isCountingDown = false
         guard go else {
+            destinationTaskID = nil
+            destinationProjectID = nil
             Teleprompter.shared.hide()
             closeCameraOnly()
             MainWindowStepAside.restore()
@@ -106,6 +112,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
         }
         await start()
         if !phase.isLive {
+            destinationTaskID = nil
+            destinationProjectID = nil
             Teleprompter.shared.hide()
             closeCameraOnly()
             MainWindowStepAside.restore()
@@ -118,6 +126,11 @@ final class ScreenRecorder: NSObject, ObservableObject {
     func start(choosing override: CaptureChoice? = nil) async {
         guard !phase.isBusy, !phase.isLive else { return }
         let choice = override ?? self.choice
+        if override != nil {
+            // Programmatic/agent capture owns its destination separately.
+            destinationTaskID = nil
+            destinationProjectID = nil
+        }
 
         if choice.mode == .camera {
             await startCameraOnly(choice)
@@ -340,6 +353,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
     /// Normal app windows that can be recorded, for the picker. Empty
     /// without Screen Recording access.
     func pickableWindows() async -> [WindowCandidate] {
+        // Merely opening a picker must not request an OS permission.
+        guard AccessCenter.shared.checklist.state(of: .screen) == .granted else { return [] }
         guard let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true) else {
             return []
         }
@@ -365,6 +380,15 @@ final class ScreenRecorder: NSObject, ObservableObject {
             writePauseCuts(for: take, firstFrame: firstFrame)
             // Remember what it's for now, so a later pick on Home
             // doesn't change what this take is.
+            let desk = AIServices.shared.desk
+            let snapshot = await desk.snapshot
+            if let id = destinationTaskID, snapshot.task(id) != nil {
+                await desk.addTake(take, to: id)
+            } else {
+                _ = await desk.taskForRecording(take, in: destinationProjectID)
+            }
+            destinationTaskID = nil
+            destinationProjectID = nil
             try? TakePlan.stamp(take, from: .standard)
             lastTake = take
             Transcriber.shared.transcribe(take)
@@ -374,6 +398,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
             // pick). Both wait for the transcript.
             ReadyToShareWindowController.shared.afterStop(take)
         } else {
+            destinationTaskID = nil
+            destinationProjectID = nil
             phase = .failed(message: writerError?.localizedDescription
                 ?? (choice.mode == .camera
                     ? "Nothing was recorded. Try again, and check the camera is connected."

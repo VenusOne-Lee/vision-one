@@ -1,4 +1,5 @@
 import AppKit
+import AVKit
 import SwiftUI
 import VisionOneKit
 
@@ -25,7 +26,10 @@ struct ClipsPane: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: Theme.Space.sm) {
+                    LazyVStack(spacing: Theme.Space.md) {
+                        if let selected = model.selected {
+                            ClipDeliveryPreview(model: model, clip: selected)
+                        }
                         ForEach(model.list.visible) { clip in
                             ClipCard(model: model, clip: clip, isSelected: clip.id == model.selectedID)
                         }
@@ -81,6 +85,7 @@ struct ClipCard: View {
     let isSelected: Bool
 
     @State private var title = ""
+    @State private var previewing = false
     @FocusState private var editingTitle: Bool
 
     var body: some View {
@@ -190,6 +195,15 @@ struct ClipCard: View {
 
     @ViewBuilder
     private var exportStatus: some View {
+        if let warning = model.warnings[clip.id] {
+            Text(warning).textStyle(.caption).foregroundStyle(Theme.error).fixedSize(horizontal: false, vertical: true)
+        }
+        if model.queuedIDs.contains(clip.id), model.exports[clip.id] == nil {
+            Text("Queued").textStyle(.caption).foregroundStyle(Theme.textMuted)
+        }
+        if model.cancelledIDs.contains(clip.id) {
+            Button("Cancelled · Retry") { model.export(clip) }.buttonStyle(.secondary).disabled(model.isExporting)
+        }
         switch model.exports[clip.id] {
         case let .exporting(progress):
             HStack(spacing: 6) {
@@ -202,9 +216,12 @@ struct ClipCard: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textMuted)
             }
-        case let .done(_, bytes):
+        case let .done(url, bytes):
             HStack(spacing: 6) {
                 ExportRing(progress: 1)
+                Button("Preview MP4") { previewing = true }
+                    .buttonStyle(.secondary)
+                    .sheet(isPresented: $previewing) { RenderedClipPreview(url: url) }
                 Button("Show · \(ExportPhase.size(bytes))") { model.reveal(clip.id) }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
@@ -445,5 +462,82 @@ struct ClipWindowOverlay: View {
         }
         let h = size.width / a
         return CGRect(x: 0, y: (size.height - h) / 2, width: size.width, height: h)
+    }
+}
+
+private struct RenderedClipPreview: View {
+    @State private var player: AVPlayer
+    @Environment(\.dismiss) private var dismiss
+    init(url: URL) { _player = State(initialValue: AVPlayer(url: url)) }
+    var body: some View {
+        VStack(spacing: Theme.Space.md) {
+            Text("Rendered clip").textStyle(.title)
+            VideoPlayer(player: player).frame(minWidth: 400, minHeight: 360)
+            Button("Done") { dismiss() }.buttonStyle(.primary)
+        }
+        .padding(Theme.Space.md).frame(maxHeight: 700).background(Theme.canvas).themed()
+        .onAppear { player.play() }.onDisappear { player.pause() }
+    }
+}
+
+/// Delivery shows the actual rendered file, with no substitute source crop.
+struct ClipDeliveryPreview: View {
+    @ObservedObject var model: ClipsModel
+    let clip: Clip
+    var height: CGFloat = 320
+    var showsRenderAction = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.sm) {
+            HStack {
+                Text("Clip preview").textStyle(.bodyStrong)
+                Spacer()
+                Text(clip.format.detail).textStyle(.caption).foregroundStyle(Theme.textMuted)
+            }
+            Group {
+                if case let .done(url, _) = model.exports[clip.id] {
+                    DeliveryMovie(url: url)
+                } else {
+                    VStack(spacing: Theme.Space.sm) {
+                        Image(systemName: "play.rectangle").font(.system(size: 28))
+                        Text(model.isExporting ? "Rendering the clip…" : "Render to check framing, camera and captions together.")
+                            .textStyle(.caption).multilineTextAlignment(.center)
+                    }
+                    .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .foregroundStyle(Theme.textMuted).background(Theme.canvas)
+                }
+            }
+            .frame(height: height)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+            HStack {
+                Text("Last rendered MP4").textStyle(.caption).foregroundStyle(Theme.textMuted)
+                Spacer()
+                if showsRenderAction {
+                    Button("Render preview") { model.export(clip) }
+                        .buttonStyle(.secondary).disabled(model.isExporting)
+                }
+            }
+            Text("After changing a clip or its captions, render again to update this preview.")
+                .textStyle(.caption).foregroundStyle(Theme.textMuted)
+        }
+    }
+}
+
+private struct DeliveryMovie: View {
+    let url: URL
+    @State private var player: AVPlayer?
+    @Environment(\.workspaceRender) private var workspaceRender
+    var body: some View {
+        Group {
+            if let player {
+                if workspaceRender { VerificationPlayerFrame(player: player) }
+                else { VideoPlayer(player: player) }
+            }
+            else { ProgressView() }
+        }
+        .background(Color.black)
+        .task(id: url) { player = AVPlayer(url: url) }
+        .onDisappear { player?.pause(); player = nil }
     }
 }

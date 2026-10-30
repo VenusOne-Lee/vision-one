@@ -46,7 +46,12 @@ struct ThreadCellView: View {
                 AnsweredCard(card: card)
             }
         case let .failed(agent, message):
-            Notice(.error, lead: "\(agent.title) didn't finish", detail: message)
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                Notice(.error, lead: "\(agent.title) didn't finish", detail: message)
+                Button("Retry request") { model.retryRequest(before: cell.id, in: task.id) }
+                    .buttonStyle(.secondary)
+                    .help("Retries this request with its original plan/approval mode")
+            }
         }
     }
 
@@ -106,15 +111,15 @@ struct TakeThreadCard: View {
                     Image(systemName: "film").foregroundStyle(Theme.textFaint)
                 }
             }
-            .frame(width: 128, height: 80)
+            .frame(width: 72, height: 52)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).textStyle(.headline).lineLimit(2)
                 Text(take.shortLabel()).textStyle(.caption).foregroundStyle(Theme.textMuted)
                 HStack(spacing: Theme.Space.sm) {
-                    Button("Open in Editor", action: openEditor)
+                    Button("Edit video", action: openEditor)
                         .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
-                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([take.screenURL]) }
+                    Button("Show file") { NSWorkspace.shared.activateFileViewerSelecting([take.screenURL]) }
                         .buttonStyle(PillButtonStyle(kind: .quiet, size: .small))
                 }
                 .padding(.top, 2)

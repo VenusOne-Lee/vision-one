@@ -71,8 +71,15 @@ Add a script from the Script row on Home (or the coach, or an agent, through Use
 
 ## Not yet
 
-- Showing and moving the bubble in the editor's preview
-- The bubble in short clips
+- Moving the camera bubble directly in the editor's preview (the recorded placement is now rendered there)
 - Following a window's moves in the cursor log (v1 uses its frame at start)
 - Lower frame rate and resolution on 8 GB Macs
 - Hiding the real cursor and drawing a smooth one (v0.2, needs export)
+
+## Producer Workspace preparation
+
+New task and the composer open one preparation sheet with the existing `CapturePicker` and `SourcesList`, a source snapshot, a selected-microphone level test, explicit access controls, countdown and script access. The sheet height follows the active screen's visible height and scrolls its controls. It does not request access simply to take a snapshot or test a microphone; use the labelled Allow buttons first. Existing camera-on behaviour retains its separate floating preview.
+
+The microphone probe runs off the main thread and never writes audio to disk. Start/cancel/source-change/dismiss revoke a generation before awaiting session shutdown, so an old start or queued meter callback cannot restore a stopped probe. CI also exercises this race with a delayed fake probe. Real input-device and permission-transition checks remain open.
+
+Recording setup remembers source/countdown choices per project. Stop attaches the recording to the captured task/project before transcription and default application. Global hotkeys, pause/resume, restart/delete and agent recording remain available.

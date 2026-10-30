@@ -61,6 +61,20 @@ extension Take {
         try encoder.encode(settings).write(to: captionSettingsURL, options: .atomic)
     }
 
+    /// A visibility-only edit must merge with the latest saved style, position
+    /// and language. Never replace those fields from a pane's cached copy.
+    @discardableResult
+    public func setCaptionVisibility(_ isOn: Bool) throws -> CaptionSettings {
+        var settings: CaptionSettings
+        if FileManager.default.fileExists(atPath: captionSettingsURL.path) {
+            settings = try JSONDecoder().decode(CaptionSettings.self, from: Data(contentsOf: captionSettingsURL))
+        } else { settings = CaptionSettings() }
+        guard settings.isOn != isOn else { return settings }
+        settings.isOn = isOn
+        try saveCaptionSettings(settings)
+        return settings
+    }
+
     /// The words captions are made from: the translation in
     /// `settings.language` when the take has one, otherwise what was said.
     public func captionTranscript(language: SALanguage?) throws -> Transcript {

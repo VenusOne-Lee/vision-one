@@ -2,98 +2,127 @@ import AppKit
 import Combine
 import VisionOneKit
 
-/// Exports several presets of one take, one after another.
-/// `ExportController` runs one export at a time, so the next preset only
-/// starts once the controller has left `.exporting`. Progress for each
-/// preset comes from the controller's phase, kept in an `ExportBatch`.
-/// There's one for the app, so closing the export sheet doesn't stop
-/// the batch, and opening it again shows where it's got to.
+/// Serial multi-take delivery. Each take keeps its batch and results while
+/// another take runs. Jobs read the take's saved settings when they start.
 @MainActor
 final class ExportQueue: ObservableObject {
-    static let shared = ExportQueue()
+    static let shared = ExportQueue(controller: .shared)
 
+    struct Request: Identifiable {
+        let id = UUID()
+        let take: Take
+        let presets: [ExportPreset]
+        let keep: [Range<Double>]?
+        var initialBatch: ExportBatch? = nil
+    }
     @Published private(set) var batch: ExportBatch?
-    /// The take the batch is for.
+    @Published private(set) var waiting: [Request] = []
+    @Published private(set) var finished: [URL: ExportBatch] = [:]
+    @Published private(set) var warnings: [URL: [String]] = [:]
     private(set) var take: Take?
-    /// When the batch started, for the time-left guess.
     private(set) var startedAt: Date?
-
     private let controller: ExportController
     private var keep: [Range<Double>]?
     private var watching: AnyCancellable?
+    private var requests: [URL: Request] = [:]
 
-    private init() {
-        let controller = ExportController.shared
+    init(controller: ExportController) {
         self.controller = controller
-        // Phases arrive on the next turn of the main queue, after the
-        // controller has finished setting them, so starting the next
-        // export from here sees the controller's real state.
-        watching = controller.$phase
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] phase in
-                MainActor.assumeIsolated { self?.follow(phase) }
-            }
+        watching = controller.$phase.receive(on: DispatchQueue.main).sink { [weak self] phase in
+            MainActor.assumeIsolated { self?.follow(phase) }
+        }
     }
+    var isRunning: Bool { batch?.isRunning == true || !waiting.isEmpty }
 
-    var isRunning: Bool { batch?.isRunning ?? false }
-
-    /// Starts exporting `presets` of `take`. `keep` overrides the kept
-    /// spans; nil uses the take's edits.json, as the Export menu does.
     func export(_ take: Take, presets: [ExportPreset], keep: [Range<Double>]?) {
-        guard !isRunning, !presets.isEmpty else { return }
-        self.take = take
-        self.keep = keep
-        startedAt = Date()
-        batch = ExportBatch(presets)
-        startNext()
+        guard !presets.isEmpty else { return }
+        guard batch(for: take)?.isRunning != true else { return }
+        let request = Request(take: take, presets: presets, keep: keep)
+        requests[take.folder] = request
+        finished[take.folder] = nil
+        warnings[take.folder] = []
+        if batch?.isRunning == true {
+            waiting.append(request)
+        } else { begin(request) }
     }
 
-    /// Stops the running export and everything after it.
-    func cancel() {
-        guard isRunning else { return }
+    func cancel(_ target: Take? = nil) {
+        let target = target ?? take
+        guard let target else { return }
+        if let index = waiting.firstIndex(where: { $0.take.folder == target.folder }) {
+            let request = waiting.remove(at: index)
+            var cancelled = request.initialBatch ?? ExportBatch(request.presets)
+            cancelled.cancel()
+            finished[target.folder] = cancelled
+            return
+        }
+        guard target.folder == take?.folder, batch?.isRunning == true else { return }
         batch?.cancel()
         if batch?.current != nil { controller.cancel() }
+        else { startNext() }
     }
 
-    /// Forgets a finished batch, so the formats can be picked again.
-    func reset() {
-        guard !isRunning else { return }
-        batch = nil
-        startedAt = nil
+    func retry(_ take: Take) {
+        guard var resumed = batch(for: take), !resumed.isRunning else { return }
+        resumed.retryUnfinished()
+        guard resumed.isRunning else { return }
+        let request = Request(take: take, presets: resumed.presets, keep: requests[take.folder]?.keep, initialBatch: resumed)
+        requests[take.folder] = request
+        if batch?.isRunning == true { waiting.append(request) }
+        else { begin(request) }
     }
 
-    /// The batch, when it's for `take`.
+    func reset(_ target: Take? = nil) {
+        guard let target = target ?? take, batch(for: target)?.isRunning != true else { return }
+        finished[target.folder] = nil
+        warnings[target.folder] = nil
+        requests[target.folder] = nil
+        if take?.folder == target.folder { batch = nil; startedAt = nil }
+    }
+
     func batch(for take: Take) -> ExportBatch? {
-        self.take?.folder == take.folder ? batch : nil
+        if self.take?.folder == take.folder { return batch }
+        if let request = waiting.first(where: { $0.take.folder == take.folder }) { return request.initialBatch ?? ExportBatch(request.presets) }
+        return finished[take.folder]
     }
-
+    func position(of take: Take) -> Int? {
+        waiting.firstIndex(where: { $0.take.folder == take.folder }).map { $0 + 1 }
+    }
     func revealExports() {
         guard let urls = batch?.exported, !urls.isEmpty else { return }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
-
+    private func begin(_ request: Request) {
+        take = request.take
+        keep = request.keep
+        startedAt = Date()
+        batch = request.initialBatch ?? ExportBatch(request.presets)
+        startNext()
+    }
     private func follow(_ phase: ExportPhase) {
-        guard batch != nil else { return }
+        guard batch?.isRunning == true else { return }
+        if case let .done(preset, _, _) = phase, batch?.current == preset, let take, let warning = controller.warning {
+            warnings[take.folder, default: []].append(warning)
+        }
         batch?.apply(phase)
         startNext()
     }
-
     private func startNext() {
-        guard let take, let preset = batch?.next else { return }
-        // Something else is exporting (the menu bar panel, say); wait for
-        // it to finish and go then.
+        guard let take else { return }
+        guard let preset = batch?.next else {
+            if let batch, !batch.isRunning {
+                finished[take.folder] = batch
+                if !waiting.isEmpty { begin(waiting.removeFirst()) }
+            }
+            return
+        }
         guard !controller.phase.isBusy else { return }
-
         batch?.start(preset)
-        // The same call as the Export menu: captions are built inside the
-        // export, from the timeline it renders; subtitle files follow once
-        // the video is done.
         let brand = BrandStore.shared
+        let look = AppliedTemplate.look(for: take)
         controller.export(take, preset: preset, keep: keep,
-                          overlays: brand.overlays(),
-                          captionRingHex: brand.kit.ring.hex,
-                          cards: brand.cardMaker())
-
+                          overlays: brand.overlays(look: look), captionRingHex: brand.kit.ring.hex,
+                          cards: brand.cardMaker(look: look, templateFolder: AppliedTemplate.folder(for: take)))
         guard case let .exporting(running, _) = controller.phase, running == preset else {
             batch?.fail(preset, message: "Couldn't start the \(preset.title) export.")
             startNext()

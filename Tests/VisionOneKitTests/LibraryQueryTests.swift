@@ -69,3 +69,40 @@ final class LibraryQueryTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: take.titleURL.path))
     }
 }
+
+extension LibraryQueryTests {
+    func testShowEveryTakeClearsSearchAndFilterKeepingSort() {
+        var query = LibraryQuery(search: "missing", filter: .exported, sort: .title)
+        query.showEveryTake()
+        XCTAssertEqual(query.search, "")
+        XCTAssertEqual(query.filter, .all)
+        XCTAssertEqual(query.sort, .title)
+        XCTAssertEqual(query.apply(to: items).count, items.count)
+    }
+
+    func testFilteredEmptyCopyDoesNotQuoteAnEmptySearch() {
+        XCTAssertEqual(LibraryQuery(filter: .exported).emptyMessage, "No exported videos yet.")
+        XCTAssertEqual(LibraryQuery(filter: .toReview).emptyMessage, "No videos need review.")
+        XCTAssertTrue(LibraryQuery(search: "launch", filter: .exported).emptyMessage.contains("exported"))
+    }
+
+    func testRenameFailureRetainsDraftForRetry() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let take = Take(folder: folder)
+        try FileManager.default.createDirectory(at: take.titleURL, withIntermediateDirectories: true)
+        var draft = LibraryRenameDraft()
+        draft.begin(title: "Old title")
+        draft.text = "New title"
+        XCTAssertThrowsError(try draft.finish { try take.setTitle($0) })
+        XCTAssertTrue(draft.needsRetry)
+        XCTAssertFalse(draft.isEditing)
+        draft.begin(title: "Old title")
+        XCTAssertEqual(draft.text, "New title")
+        try FileManager.default.removeItem(at: take.titleURL)
+        try draft.finish { try take.setTitle($0) }
+        XCTAssertEqual(take.customTitle(), "New title")
+        XCTAssertFalse(draft.needsRetry)
+    }
+}

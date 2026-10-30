@@ -48,17 +48,18 @@ struct TranscriptTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.bind(model)
         context.coordinator.update()
     }
 
     @MainActor
     final class Coordinator {
-        let model: EditorModel
+        private(set) var model: EditorModel
         weak var textView: TranscriptNSTextView?
         /// Character range of each word, by word position.
         private(set) var wordRanges: [NSRange] = []
         private var renderedEdits: EditList?
-        private var renderedWordCount = -1
+        private var renderedTranscriptRevision = -1
         private var renderedFixes: [VoiceEdits.WordFix]?
         private var underlined: Int?
 
@@ -66,16 +67,29 @@ struct TranscriptTextView: NSViewRepresentable {
             self.model = model
         }
 
+        /// NSViewRepresentable can reuse this coordinator across task switches.
+        /// A selection from another take must never cut the previous model.
+        func bind(_ next: EditorModel) {
+            guard model !== next else { return }
+            model = next
+            wordRanges = []
+            renderedEdits = nil
+            renderedTranscriptRevision = -1
+            renderedFixes = nil
+            underlined = nil
+            textView?.setSelectedRange(NSRange(location: 0, length: 0))
+        }
+
         func update() {
             guard let textView, let storage = textView.textStorage else { return }
-            if renderedEdits != model.edits || renderedWordCount != model.words.count
+            if renderedEdits != model.edits || renderedTranscriptRevision != model.transcriptRevision
                 || renderedFixes != model.voiceEdits.fixes {
                 let selection = textView.selectedRanges
                 let (text, ranges) = TranscriptRenderer.render(model: model)
                 storage.setAttributedString(text)
                 wordRanges = ranges
                 renderedEdits = model.edits
-                renderedWordCount = model.words.count
+                renderedTranscriptRevision = model.transcriptRevision
                 renderedFixes = model.voiceEdits.fixes
                 underlined = nil
                 let kept = selection.filter { $0.rangeValue.upperBound <= storage.length }

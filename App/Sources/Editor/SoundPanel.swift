@@ -140,6 +140,7 @@ struct EnergyDial: View {
             ForEach(Energy.allCases, id: \.self) { option in
                 Button { choose(option) } label: {
                     Text(option.title)
+                        .lineLimit(1).fixedSize()
                         .font(.system(size: 12, weight: .medium))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
@@ -151,6 +152,7 @@ struct EnergyDial: View {
                 .accessibilityAddTraits(option == energy ? .isSelected : [])
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
         .clipShape(Capsule())
         .overlay(Capsule().strokeBorder(Theme.text, lineWidth: 1))
         .help("Calm suggests no effects, Lively a few on new topics, Viral more")

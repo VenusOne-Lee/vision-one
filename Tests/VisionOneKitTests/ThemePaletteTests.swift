@@ -18,6 +18,25 @@ final class ThemePaletteTests: XCTestCase {
         }
     }
 
+    func testModeToggleRestoresAllPersonalPreferences() throws {
+        for preset in ThemePreset.allCases {
+            var original = Appearance.standard.applying(preset)
+            original.corners = .round
+            original.density = .roomy
+            original.transcriptFont = .easyRead
+            original.panelSide = .left
+            original.accent = DesignTokens.accentPurple
+            var switched = original
+            switched.toggleMode()
+            XCTAssertNotEqual(switched.mode, original.mode)
+            // Persistence between toggles must not discard the original choices.
+            switched = try AppearanceFile.decode(AppearanceFile.encode(switched))
+            XCTAssertEqual(ThemePalette.resolve(switched).failures, [])
+            switched.toggleMode()
+            XCTAssertEqual(switched, original)
+        }
+    }
+
     func testPaperIsDesignMdAsWritten() {
         let p = ThemePalette.resolve(.standard)
         XCTAssertEqual(p.paper, DesignTokens.paper)

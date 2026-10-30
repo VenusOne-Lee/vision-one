@@ -57,6 +57,32 @@ final class ScriptCoachTests: XCTestCase {
         XCTAssertEqual(length.text, "1:01")
     }
 
+    func testModelRewriteForPhraseFlagReplacesWholeLine() throws {
+        let script = Script(text: "She sells sea shells by the shore. Try it today.")
+        let coach = ScriptCoach()
+        let report = coach.check(script)
+        let original = try XCTUnwrap(report.flags.first { $0.phrase != nil && $0.suggestion == nil })
+        let updated = coach.applying([.init(line: original.line, say: "Find shells by the sea.")],
+                                     to: report, script: script)
+        let flag = try XCTUnwrap(updated.flags.first { $0.id == original.id })
+        XCTAssertTrue(flag.suggestionReplacesLine)
+        XCTAssertEqual(script.applying(flag).text, "Find shells by the sea. Try it today.")
+    }
+
+    func testEmptyUnknownAndUnchangedRewritesLeaveReportIntact() throws {
+        let coach = ScriptCoach()
+        let report = coach.check(rankRide)
+        let line = try XCTUnwrap(rankRide.lines.first { line in report.flags.contains { $0.line == line.id } })
+        let cases: [[ScriptCoach.Rewrite]] = [
+            [], [.init(line: line.id, say: "  \n  ")],
+            [.init(line: 9999, say: "Unknown line.")],
+            [.init(line: line.id, say: line.text)]
+        ]
+        for rewrites in cases {
+            XCTAssertEqual(coach.applying(rewrites, to: report, script: rankRide), report)
+        }
+    }
+
     func testRewriteRequestOnlySendsFlaggedLines() throws {
         let coach = ScriptCoach()
         let report = coach.check(rankRide)

@@ -7,6 +7,8 @@ import VisionOneKit
 /// this only turns them into tracks and volume ramps.
 enum SoundComposer {
     struct Added {
+        /// Source assets must outlive insertion and asynchronous playback/encoding.
+        var assets: [AVAsset] = []
         var tracks: [AVMutableCompositionTrack] = []
         var parameters: [AVMutableAudioMixInputParameters] = []
         /// The music's track among `tracks`; the rest are effects.
@@ -31,9 +33,13 @@ enum SoundComposer {
         if let bed = plan.music {
             do {
                 let asset = AVURLAsset(url: try await SoundFiles.url(for: bed))
+                added.assets.append(asset)
                 musicTrack = try await asset.loadTracks(withMediaType: .audio).first
                 musicDuration = try await asset.load(.duration).seconds
-                if musicTrack == nil { added.problem = "\(bed.title) has no sound to play." }
+                if musicTrack == nil || musicDuration?.isFinite != true || (musicDuration ?? 0) <= 0 {
+                    added.problem = "\(bed.title) has no sound to play."
+                    musicTrack = nil
+                }
             } catch {
                 added.problem = "Couldn't play the music: \(error.localizedDescription)"
             }
@@ -64,20 +70,30 @@ enum SoundComposer {
             }
         }
 
+        if musicTrack != nil, !mix.music.isEmpty, added.musicTrackID == nil, added.problem == nil {
+            added.problem = "Couldn't create the selected music track."
+        }
         guard mix.laneCount > 0 else { return added }
         var sources: [String: AVAssetTrack] = [:]
         var lanes: [(AVMutableCompositionTrack, AVMutableAudioMixInputParameters)] = []
         for _ in 0..<mix.laneCount {
-            guard let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { break }
+            guard let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                added.problem = "Couldn't create a selected sound-effect track."
+                break
+            }
             lanes.append((track, AVMutableAudioMixInputParameters(track: track)))
         }
         for effect in mix.effects where effect.lane < lanes.count {
             do {
                 if sources[effect.soundID] == nil {
                     let asset = AVURLAsset(url: try await SoundFiles.url(forLibrarySound: effect.soundID))
+                    added.assets.append(asset)
                     sources[effect.soundID] = try await asset.loadTracks(withMediaType: .audio).first
                 }
-                guard let source = sources[effect.soundID] else { continue }
+                guard let source = sources[effect.soundID] else {
+                    added.problem = "The selected sound effect has no audio."
+                    continue
+                }
                 let (track, parameters) = lanes[effect.lane]
                 let start = time(effect.outputStart + offset)
                 try track.insertTimeRange(CMTimeRange(start: .zero, duration: time(effect.duration)), of: source, at: start)

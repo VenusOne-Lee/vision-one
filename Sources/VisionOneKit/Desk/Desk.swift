@@ -139,6 +139,12 @@ public actor Desk {
         let task = DeskTask(projectID: project.id, title: title ?? Self.title(for: ask, takes: takes),
                             takes: takes, mode: mode)
         tasks.append(task)
+        for take in takes {
+            do { try AppliedTemplate.stamp(project.mediaDefaults, on: take) }
+            catch {
+                update(task.id) { $0.cells.append(TaskCell(.log("Couldn't apply project defaults: \(error.localizedDescription)"))) }
+            }
+        }
         changed()
         if let ask, !ask.isEmpty { submit(ask, to: task.id, mode: mode) }
         return task
@@ -174,6 +180,10 @@ public actor Desk {
     }
 
     public func addTake(_ take: Take, to taskID: UUID) {
+        if let task = task(taskID), let project = project(task.projectID) {
+            do { try AppliedTemplate.stamp(project.mediaDefaults, on: take) }
+            catch { update(taskID) { $0.cells.append(TaskCell(.log("Couldn't apply project defaults: \(error.localizedDescription)"))) } }
+        }
         update(taskID) { task in
             guard !task.takeFolders.contains(take.folder) else { return }
             task.takeFolders.append(take.folder)
@@ -218,6 +228,10 @@ public actor Desk {
     @discardableResult
     public func submit(_ ask: String, to taskID: UUID, mode: AskMode? = nil) -> AskRoute {
         let route = AskRouter.route(ask)
+        if case let .clarify(message) = route {
+            update(taskID) { $0.cells.append(TaskCell(.log(message))) }
+            return route
+        }
         guard case let .plan(plan) = route, let task = self.task(taskID) else { return route }
         let chosen = mode ?? task.mode
         if busy.contains(taskID) {
@@ -509,6 +523,7 @@ public actor Desk {
             return text.prefix(1).uppercased() + text.dropFirst()
         }
         guard let take = takes.last else { return "New task" }
+        if let title = take.customTitle() { return title }
         let purpose = TakePlan.load(for: take)?.purpose.title ?? "Recording"
         return "\(purpose) · \(take.name)"
     }

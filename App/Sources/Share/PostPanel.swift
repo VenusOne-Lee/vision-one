@@ -43,14 +43,27 @@ final class PostRulesStore: ObservableObject {
 /// panel width from about 280 pt.
 struct PostPanel: View {
     let take: Take
+    var onNetworkMount: ((ShareTarget, PostDraftControl) -> Void)? = nil
+
+    var body: some View {
+        PostPanelContent(take: take, onNetworkMount: onNetworkMount)
+            .id(take.folder)
+    }
+}
+
+private struct PostPanelContent: View {
+    let take: Take
 
     @StateObject private var agents: AgentsModel
     @ObservedObject private var queue = ExportQueue.shared
     @ObservedObject private var rules = PostRulesStore.shared
     @ObservedObject private var transcriber = Transcriber.shared
 
-    init(take: Take) {
+    let onNetworkMount: ((ShareTarget, PostDraftControl) -> Void)?
+
+    init(take: Take, onNetworkMount: ((ShareTarget, PostDraftControl) -> Void)? = nil) {
         self.take = take
+        self.onNetworkMount = onNetworkMount
         _agents = StateObject(wrappedValue: AgentsModel(take: take))
     }
 
@@ -65,7 +78,7 @@ struct PostPanel: View {
                 PanelLabel("Socials")
                 VStack(spacing: Theme.Space.sm) {
                     ForEach(ShareTarget.allCases) { target in
-                        NetworkRow(take: take, target: target, agents: agents, queue: queue, rules: rules)
+                        NetworkRow(take: take, target: target, agents: agents, queue: queue, rules: rules, onMount: onNetworkMount)
                     }
                 }
                 if let link = ShareLinks.link(for: take) {
@@ -82,23 +95,25 @@ struct PostPanel: View {
         FileManager.default.fileExists(atPath: take.transcriptURL.path)
     }
 
+    private var canDraftWithSharer: Bool { PostCopy.canDraft(for: take) }
+
     /// Before the Sharer has written anything: one button, or a wait for
     /// the transcript it reads.
     private var draftFirst: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            Text("Nothing drafted yet")
+            Text(canDraftWithSharer ? "Nothing drafted yet" : "Write your own post copy")
                 .textStyle(.headline)
                 .foregroundStyle(Theme.text)
-            Text(hasTranscript
+            Text(canDraftWithSharer
                  ? "The Sharer writes a title, chapters, a Version One launch and a post for each network from what you said."
-                 : "Waiting for the transcript. The Sharer writes your posts from what you said.")
+                 : "Automatic drafts need at least \(SharerAgent.minimumWords) kept words. Your video is ready to edit and export. Expand a network below to write your own copy.")
                 .textStyle(.body)
                 .foregroundStyle(Theme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
             RunStatus(run: agents.sharerRun)
-            Button("Draft with Sharer") { agents.runSharer(launch: true) }
+            Button("Draft with Sharer") { if canDraftWithSharer { agents.runSharer(launch: true) } }
                 .buttonStyle(PillButtonStyle(kind: .primary))
-                .disabled(!hasTranscript || agents.sharerRun.isRunning)
+                .disabled(!canDraftWithSharer || agents.sharerRun.isRunning)
         }
         .padding(Theme.Space.md)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -127,17 +142,22 @@ private struct VersionOneCard: View {
     private static let host = "versionone.co.za"
 
     @State private var editing = false
-    @State private var asking = false
-    @State private var posted = false
-    @State private var text = ""
+    @StateObject private var draftCopy: PostDraftControl
+
+    init(take: Take, agents: AgentsModel, rules: PostRulesStore) {
+        self.take = take
+        self.agents = agents
+        self.rules = rules
+        _draftCopy = StateObject(wrappedValue: PostDraftControl(take: take, destination: "versionone"))
+    }
 
     private var draft: String { agents.share?.launch?.postText ?? "" }
-    private var words: String { text.isEmpty ? draft : text }
+    private var words: String { draftCopy.manualText ?? draft }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             HStack {
-                Text("VERSION ONE · \(posted ? "COPIED" : "DRAFT")")
+                Text("VERSION ONE · \(draftCopy.posted ? "COPIED" : "DRAFT")")
                     .textStyle(.caption)
                     .tracking(0.6)
                     .foregroundStyle(Theme.textMuted)
@@ -150,7 +170,7 @@ private struct VersionOneCard: View {
             }
             if let launch = agents.share?.launch {
                 if editing {
-                    TextEditor(text: $text)
+                    TextEditor(text: Binding(get: { words }, set: { draftCopy.edit($0) }))
                         .textStyle(.body)
                         .scrollContentBackground(.hidden)
                         .padding(6)
@@ -158,20 +178,21 @@ private struct VersionOneCard: View {
                         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
                         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md)
                             .strokeBorder(Theme.lineStrong, lineWidth: Theme.Stroke.hairline))
+                        .disabled(!draftCopy.loaded)
                 } else {
-                    Text(text.isEmpty ? launch.name : (text.split(separator: "\n").first.map(String.init) ?? launch.name))
+                    Text(draftCopy.manualText == nil ? launch.name : (words.split(separator: "\n").first.map(String.init) ?? "Post copy is empty"))
                         .textStyle(.headline)
                         .foregroundStyle(Theme.text)
-                    Text(text.isEmpty ? launch.oneLine : text.split(separator: "\n").dropFirst().joined(separator: "\n"))
+                    Text(draftCopy.manualText == nil ? launch.oneLine : words.split(separator: "\n").dropFirst().joined(separator: "\n"))
                         .textStyle(.body)
                         .foregroundStyle(Theme.text)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if asking {
+                if draftCopy.asking {
                     ApprovalCard(agent: "Sharer", question: PostApprovalText.question(to: "Version One"),
                                  quote: words, options: PostApprovalText.options(scope: rules.scope),
-                                 onAnswer: answer, onLater: { asking = false })
-                } else if posted {
+                                 onAnswer: answer, onLater: { draftCopy.asking = false })
+                } else if draftCopy.posted {
                     Text("Copied. Version One is open in your browser: paste it into your launch and post.")
                         .textStyle(.caption)
                         .foregroundStyle(Theme.textMuted)
@@ -184,11 +205,11 @@ private struct VersionOneCard: View {
                     }
                 } else {
                     HStack(spacing: Theme.Space.sm) {
-                        Button("Approve and post") { approve() }
+                        Button("Copy and open Version One") { approve() }
                             .buttonStyle(PillButtonStyle(kind: .primary, size: .small))
-                            .disabled(words.isEmpty)
+                            .disabled(words.isEmpty || !draftCopy.loaded)
                         Button(editing ? "Done" : "Edit") {
-                            if !editing, text.isEmpty { text = draft }
+                            if !editing, draftCopy.manualText == nil { draftCopy.edit(draft) }
                             editing.toggle()
                         }
                         .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
@@ -198,30 +219,37 @@ private struct VersionOneCard: View {
                 Text("The Sharer's draft has no Version One launch yet.")
                     .textStyle(.body)
                     .foregroundStyle(Theme.textMuted)
-                Button("Write a launch") { agents.runSharer(launch: true) }
+                Button("Write a launch") { if PostCopy.canDraft(for: take) { agents.runSharer(launch: true) } }
                     .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
-                    .disabled(agents.sharerRun.isRunning)
+                    .disabled(!PostCopy.canDraft(for: take) || agents.sharerRun.isRunning)
+            }
+            if let problem = draftCopy.problem {
+                Text(problem).textStyle(.caption).foregroundStyle(Theme.error)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(draftCopy.loaded ? "Retry saving copy" : "Retry loading copy") {
+                    if draftCopy.loaded { draftCopy.save() } else { draftCopy.reload() }
+                }.buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
             }
             RunStatus(run: agents.sharerRun)
         }
         .padding(Theme.Space.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
-        .statusOutline(posted ? .accepted : .proposed, cornerRadius: Theme.Radius.lg)
+        .statusOutline(draftCopy.posted ? .accepted : .proposed, cornerRadius: Theme.Radius.lg)
         .onChange(of: agents.share) { _, _ in
-            // A fresh draft replaces your edits and asks again.
-            text = ""
-            posted = false
+            // Generated copy never discards an explicit manual edit.
+            draftCopy.asking = false
+            draftCopy.posted = false
         }
     }
 
     private func approve() {
         editing = false
-        if rules.allows(Self.host) { post() } else { asking = true }
+        if rules.allows(Self.host) { post() } else { draftCopy.asking = true }
     }
 
     private func answer(_ answer: ApprovalAnswer) {
-        asking = false
+        draftCopy.asking = false
         switch answer {
         case .yes: post()
         case .yesAlways:
@@ -243,7 +271,7 @@ private struct VersionOneCard: View {
         }
         copy(words)
         open()
-        posted = true
+        draftCopy.posted = true
     }
 
     private func copy(_ words: String) {
@@ -269,10 +297,19 @@ private struct NetworkRow: View {
     @ObservedObject var queue: ExportQueue
     @ObservedObject var rules: PostRulesStore
 
-    @State private var open = false
-    @State private var asking = false
-    @State private var posted = false
-    @State private var text = ""
+    @StateObject private var copy: PostDraftControl
+    let onMount: ((ShareTarget, PostDraftControl) -> Void)?
+
+    init(take: Take, target: ShareTarget, agents: AgentsModel, queue: ExportQueue,
+         rules: PostRulesStore, onMount: ((ShareTarget, PostDraftControl) -> Void)? = nil) {
+        self.take = take
+        self.target = target
+        self.agents = agents
+        self.queue = queue
+        self.rules = rules
+        self.onMount = onMount
+        _copy = StateObject(wrappedValue: PostDraftControl(take: take, destination: target.network))
+    }
 
     private var files: [ExportPreset: URL] {
         var files = queue.batch(for: take)?.files ?? [:]
@@ -286,7 +323,7 @@ private struct NetworkRow: View {
 
     private var file: (preset: ExportPreset, url: URL)? { target.file(from: files) }
     private var draft: String { target.text(in: agents.share) ?? "" }
-    private var words: String { text.isEmpty ? draft : text }
+    private var words: String { copy.manualText ?? draft }
 
     private var exporting: Double? {
         guard let batch = queue.batch(for: take), batch.isRunning,
@@ -297,7 +334,7 @@ private struct NetworkRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
             Button {
-                withAnimation(Theme.Motion.enter) { open.toggle() }
+                withAnimation(Theme.Motion.enter) { copy.open.toggle() }
             } label: {
                 HStack(spacing: Theme.Space.sm) {
                     Image(systemName: FinishedPanel.icon(target))
@@ -315,12 +352,12 @@ private struct NetworkRow: View {
                     Spacer(minLength: Theme.Space.sm)
                     if let exporting {
                         BuilderRing(state: .exporting(exporting))
-                    } else if posted {
+                    } else if copy.posted {
                         StateChip(.accepted, "Opened")
-                    } else if !draft.isEmpty {
+                    } else if !words.isEmpty {
                         StateChip(.proposed, "Draft")
                     }
-                    Image(systemName: open ? "chevron.up" : "chevron.down")
+                    Image(systemName: copy.open ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Theme.textMuted)
                 }
@@ -329,14 +366,15 @@ private struct NetworkRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel("\(target.title), \(subtitle)")
 
-            if open { detail }
+            if copy.open { detail }
         }
         .padding(.horizontal, Theme.Space.md)
         .padding(.vertical, 10)
         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
-        .statusOutline(posted ? .accepted : .proposed, cornerRadius: Theme.Radius.lg,
-                       lineWidth: open ? Theme.Stroke.ring : Theme.Stroke.hairline)
-        .onChange(of: agents.share) { _, _ in text = ""; posted = false }
+        .statusOutline(copy.posted ? .accepted : .proposed, cornerRadius: Theme.Radius.lg,
+                       lineWidth: copy.open ? Theme.Stroke.ring : Theme.Stroke.hairline)
+        .onAppear { onMount?(target, copy) }
+        .onChange(of: agents.share) { _, _ in copy.asking = false; copy.posted = false }
     }
 
     private var subtitle: String {
@@ -346,7 +384,7 @@ private struct NetworkRow: View {
 
     @ViewBuilder
     private var detail: some View {
-        TextEditor(text: Binding(get: { words }, set: { text = $0 }))
+        TextEditor(text: Binding(get: { words }, set: { copy.edit($0) }))
             .textStyle(.body)
             .scrollContentBackground(.hidden)
             .padding(6)
@@ -354,11 +392,18 @@ private struct NetworkRow: View {
             .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md)
                 .strokeBorder(Theme.lineStrong, lineWidth: Theme.Stroke.hairline))
-            .disabled(posted)
-        if asking {
+            .disabled(copy.posted || !copy.loaded)
+        if let problem = copy.problem {
+            Text(problem).textStyle(.caption).foregroundStyle(Theme.error)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(copy.loaded ? "Retry saving copy" : "Retry loading copy") {
+                if copy.loaded { copy.save() } else { copy.reload() }
+            }.buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
+        }
+        if copy.asking {
             ApprovalCard(agent: "Sharer", question: PostApprovalText.question(to: target.title),
                          quote: words, options: PostApprovalText.options(scope: rules.scope),
-                         onAnswer: answer, onLater: { asking = false })
+                         onAnswer: answer, onLater: { copy.asking = false })
         } else if file == nil {
             HStack(spacing: Theme.Space.sm) {
                 Button(exporting == nil ? "Export \(target.preferred.first?.title ?? "")" : "Exporting…") { export() }
@@ -372,14 +417,16 @@ private struct NetworkRow: View {
             }
         } else {
             HStack(spacing: Theme.Space.sm) {
-                Button(posted ? "Open \(target.title) again" : "Post to \(target.title)") {
-                    if posted || rules.allows(target.destination) { post() } else { asking = true }
+                Button(copy.posted ? "Open \(target.title) again" : "Copy and open \(target.title)") {
+                    if copy.posted || rules.allows(target.destination) { post() } else { copy.asking = true }
                 }
                 .buttonStyle(PillButtonStyle(kind: .primary, size: .small))
+                .disabled(!copy.loaded)
                 if agents.share == nil {
-                    Button("Draft with Sharer") { agents.runSharer() }
+                    Button("Draft with Sharer") { if PostCopy.canDraft(for: take) { agents.runSharer() } }
                         .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
-                        .disabled(agents.sharerRun.isRunning)
+                        .disabled(!PostCopy.canDraft(for: take) || agents.sharerRun.isRunning)
+                        .help("Automatic post drafts need at least \(SharerAgent.minimumWords) kept words. You can write your own copy above.")
                 }
                 if rules.allows(target.destination) {
                     Button("Ask every time") { rules.forget(target.destination) }
@@ -402,7 +449,7 @@ private struct NetworkRow: View {
     }
 
     private func answer(_ answer: ApprovalAnswer) {
-        asking = false
+        copy.asking = false
         switch answer {
         case .yes: post()
         case .yesAlways:
@@ -427,7 +474,7 @@ private struct NetworkRow: View {
         }
         if let url = file?.url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         NSWorkspace.shared.open(target.composer(text: words.isEmpty ? nil : words))
-        posted = true
+        copy.posted = true
     }
 }
 

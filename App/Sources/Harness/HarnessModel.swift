@@ -41,9 +41,9 @@ final class TaskWorkspace: ObservableObject {
     let thumbnail: ThumbnailModel
     private var loaded = false
 
-    init(take: Take) {
+    init(take: Take, renderPhase: EditorModel.Phase? = nil) {
         self.take = take
-        editor = EditorModel(take: take)
+        editor = EditorModel(take: take, renderPhase: renderPhase)
         clips = ClipsModel(take: take, editor: editor)
         thumbnail = ThumbnailModel(take: take, editor: editor, clips: clips)
     }
@@ -81,6 +81,9 @@ final class HarnessModel: ObservableObject {
     @Published private(set) var workspace: TaskWorkspace?
     @Published private(set) var panels: PanelLayoutBook
     @Published var problem: String?
+    @Published var preparingRecording = false
+    @Published var presentingExport = false
+    @Published var clarification: String?
     /// What's typed in the composer.
     @Published var draft = ""
     /// Bumped to put the cursor in the composer.
@@ -90,8 +93,28 @@ final class HarnessModel: ObservableObject {
 
     private var desk: Desk { AIServices.shared.desk }
     private var watching: [Task<Void, Never>] = []
+    private var drafts: [String: String] = [:]
+
+    /// Native render diagnostics use an isolated snapshot, never the live Desk.
+    let isFixture: Bool
+    let library: TakeLibrary
+
+    init(snapshot: DeskSnapshot, takes: [Take], page: HarnessPage, renderPhase: EditorModel.Phase? = nil) {
+        isFixture = true
+        library = TakeLibrary(folder: takes.first?.folder.deletingLastPathComponent()
+                              ?? FileManager.default.temporaryDirectory.appendingPathComponent("vision-empty-render-library"))
+        panels = PanelLayoutBook()
+        self.snapshot = snapshot
+        self.takes = takes
+        titles = Dictionary(uniqueKeysWithValues: takes.map { ($0.name, $0.displayTitle()) })
+        self.page = page
+        project = snapshot.projects.first?.id
+        workspace = snapshot.task(page.taskID ?? UUID())?.take.map { TaskWorkspace(take: $0, renderPhase: renderPhase) }
+    }
 
     private init() {
+        isFixture = false
+        library = .standard
         panels = PanelLayoutBook.decode(UserDefaults.standard.data(forKey: "harness.panels"))
         refreshTakes()
         watchDesk()
@@ -106,7 +129,8 @@ final class HarnessModel: ObservableObject {
     }
 
     func refreshTakes() {
-        let latest = TakeLibrary.standard.takes()
+        guard !isFixture else { return }
+        let latest = library.takes()
         var names: [String: String] = [:]
         for take in latest { names[take.name] = take.displayTitle() }
         if latest != takes { takes = latest }
@@ -128,17 +152,30 @@ final class HarnessModel: ObservableObject {
 
     /// A take's task, made if the take has none yet (one recorded before
     /// tasks existed, or picked from the Library).
-    func open(_ take: Take, panel: PanelKind? = nil) {
-        if let existing = snapshot.tasks.first(where: { $0.takeFolders.contains(take.folder) }) {
-            open(existing.id, panel: panel)
-            return
-        }
-        let desk = self.desk
-        let project = self.project
+    func open(_ take: Take, panel: PanelKind? = nil, then ask: String? = nil, mode: HarnessMode = .tasks) {
+        let projectID = project
+        let chosenAskMode = askMode
         Task {
-            let task = await desk.taskForRecording(take, in: project)
-            self.snapshot = await desk.snapshot
-            self.open(task.id, panel: panel)
+            let task = await desk.taskForRecording(take, in: projectID)
+            snapshot = await desk.snapshot
+            open(task.id, panel: panel)
+            self.mode = mode
+            if let ask {
+                self.askMode = chosenAskMode
+                self.send(ask)
+            }
+        }
+    }
+
+    func importVideo() {
+        let projectID = project
+        VideoImporter.shared.choose { take in
+            Task {
+                let task = await self.desk.taskForRecording(take, in: projectID)
+                self.snapshot = await self.desk.snapshot
+                self.refreshTakes()
+                self.open(task.id)
+            }
         }
     }
 
@@ -176,6 +213,15 @@ final class HarnessModel: ObservableObject {
         Task { await desk.archive(taskID) }
     }
 
+    func restore(_ taskID: UUID) {
+        let desk = self.desk
+        Task {
+            await desk.archive(taskID, false)
+            snapshot = await desk.snapshot
+            open(taskID)
+        }
+    }
+
     // MARK: Panels
 
     var layout: PanelLayout {
@@ -190,7 +236,7 @@ final class HarnessModel: ObservableObject {
         } else {
             panels.last = next
         }
-        UserDefaults.standard.set(panels.encoded(), forKey: "harness.panels")
+        if !isFixture { UserDefaults.standard.set(panels.encoded(), forKey: "harness.panels") }
     }
 
     // MARK: Asking
@@ -201,12 +247,28 @@ final class HarnessModel: ObservableObject {
     func send(_ raw: String) {
         let input = ComposerInput.parse(raw, candidates: mentionCandidates)
         let text = input.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if case let .open(name) = AskRouter.route(text) {
-            if let take = input.mentions.first { open(take) }
-            openCommand(name, rest: text)
+        guard !text.isEmpty else { return }
+        let desk = self.desk
+        let route = AskRouter.route(text)
+        if case let .clarify(message) = route {
+            draft = raw
+            clarification = message
             return
         }
-        let desk = self.desk
+        if case let .open(name) = route {
+            if let take = input.mentions.first {
+                let projectID = project
+                Task {
+                    let task = await desk.taskForRecording(take, in: projectID)
+                    snapshot = await desk.snapshot
+                    open(task.id)
+                    openCommand(name, rest: text)
+                }
+            } else {
+                openCommand(name, rest: text)
+            }
+            return
+        }
         if let take = input.mentions.first {
             Task {
                 let task = await desk.taskForRecording(take, in: self.project)
@@ -229,13 +291,24 @@ final class HarnessModel: ObservableObject {
     }
 
     private func openCommand(_ name: String, rest: String) {
+        if ["edit", "sound", "review", "captions", "music", "export"].contains(name), workspace == nil {
+            problem = "Open a task with a video, or import or record one first."
+            return
+        }
         switch name {
+        case "export": presentingExport = true
+        case "library": page = .library; mode = .tasks
         case "record":
-            Task { await ScreenRecorder.shared.toggle() }
-        case "edit":
-            if workspace != nil { mode = .editor }
-        case "sound":
-            if workspace != nil { mode = .sound }
+            if ScreenRecorder.shared.phase.isLive {
+                Task { await ScreenRecorder.shared.toggle() }
+            } else { preparingRecording = true }
+        case "import": importVideo()
+        case "edit", "sound":
+            guard workspace != nil else {
+                problem = "Open a task with a video, or import or record one first."
+                return
+            }
+            mode = name == "edit" ? .editor : .sound
         case "review":
             mode = .tasks
             updateLayout { $0.show(.changes) }
@@ -243,7 +316,8 @@ final class HarnessModel: ObservableObject {
             if let take = workspace?.take {
                 var settings = take.loadCaptionSettings()
                 settings.isOn = true
-                try? take.saveCaptionSettings(settings)
+                do { try take.saveCaptionSettings(settings) }
+                catch { problem = "Couldn't save captions: \(error.localizedDescription)" }
             }
             updateLayout { $0.show(.captions) }
         case "music":
@@ -253,6 +327,17 @@ final class HarnessModel: ObservableObject {
         default:
             problem = "There's no /\(name) command. Type / to see them all."
         }
+    }
+
+    func retryRequest(before cellID: UUID, in taskID: UUID) {
+        guard let task = snapshot.task(taskID), let index = task.cells.firstIndex(where: { $0.id == cellID }) else { return }
+        let ask = task.cells[..<index].reversed().compactMap { cell -> (String, AskMode)? in
+            if case let .ask(text, mode) = cell.kind { return (text, mode) }
+            return nil
+        }.first
+        guard let (text, mode) = ask else { return }
+        let desk = self.desk
+        Task { await desk.submit(text, to: taskID, mode: mode) }
     }
 
     /// ↑ in the composer, or × on a queued ask.
@@ -339,6 +424,15 @@ final class HarnessModel: ObservableObject {
     }
 
     private func pageChanged(from old: HarnessPage) {
+        func key(_ page: HarnessPage) -> String {
+            switch page {
+            case .newTask: return "new"
+            case .library: return "library"
+            case let .task(id): return id.uuidString
+            }
+        }
+        drafts[key(old)] = draft
+        draft = drafts[key(page)] ?? ""
         if page.taskID == nil { mode = .tasks }
         if let task {
             project = task.projectID
@@ -352,7 +446,7 @@ final class HarnessModel: ObservableObject {
         let take = task?.take
         guard workspace?.take != take else { return }
         workspace?.close()
-        workspace = take.map(TaskWorkspace.init(take:))
+        workspace = take.map { TaskWorkspace(take: $0) }
         if workspace == nil, mode != .tasks { mode = .tasks }
     }
 

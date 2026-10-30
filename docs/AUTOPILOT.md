@@ -142,3 +142,9 @@ The action opens `visionone://demo/rerecord?name=…&release=…&request=<id>` f
 - Reusing last take's voice: the run notes whether the script is unchanged (`voiceFits`), but lining an old voice up with new clicks comes with the teleprompter and redo-a-sentence work.
 - A browser driver (Playwright) for web demos that need more than the accessibility tree.
 - Menu bar menus as targets.
+
+## Accessibility preflight and failed starts
+
+The Autopilot surface and Access settings show Accessibility readiness separately from screen/mic/camera access. The direct Settings action opens macOS Privacy & Security → Accessibility. Each demo publishes its own start failure and preserves the failed board job, so an unsuccessful preflight is visible without manufacturing a run/capture.
+
+At 9e1d8ed, human-granted Accessibility enabled one actual Activity Monitor Wait-only run and resulting capture/task. At 64625f6, the updated adhoc binary was untrusted: native AX controls/text showed readiness, Run produced the named needs-Accessibility error without capture, and the direct Settings button opened the correct page. No permission toggles changed in that pass. The screenshot returned white, so that check establishes text/controls/route, not visual parity. Multi-step click/type/reconnect remains unverified. The deterministic denied-preflight native fixture passed at 5f0fbab / CI40953770394, including the retained failed board job and published visible-feedback state.

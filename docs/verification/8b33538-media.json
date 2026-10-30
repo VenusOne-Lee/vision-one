@@ -1,0 +1,51 @@
+{
+  "brandYellowPixels": 3596,
+  "cameraGreenPixels": 31922,
+  "captionWhitePixels": 12112,
+  "checks": [
+    "actual MP4 decode",
+    "accepted-cut duration",
+    "separate camera",
+    "caption pixels",
+    "brand overlay",
+    "timed sidecars",
+    "invalid import",
+    "silent import",
+    "stale mic start/callback",
+    "square and 4:5 MP4 dimensions",
+    "manual fixed framing",
+    "fit framing",
+    "silent import edit/undo/redo/export"
+  ],
+  "decodedAudioPeak": 0.13038228452205658,
+  "dimensions": [
+    1080,
+    1920
+  ],
+  "duration": 2.5,
+  "earlyRedPixels": 2006100,
+  "laterBluePixels": 1174503,
+  "previewAudioPeak": 0.1253771185874939,
+  "remaining": [
+    "real capture and permissions",
+    "native UI light/dark walkthrough",
+    "human inspection of framing, caption placement and audible mix"
+  ],
+  "sourceCommit": "8b335382aeed17308c33acafee4817ba1cc55fd1",
+  "workflowRun": "https://github.com/VenusOne-Lee/vision-one/actions/runs/40915635962",
+  "artifactID": 12916995345,
+  "sha256": {
+    "fit-portrait.mp4": "f4385a60d6a3c4677814d480caaf131f3b5a0e15c02fefa123c32d3b9a8b4b04",
+    "fixed-portrait.mp4": "0c7971a503cecfa68ded90e9f146ec3e7946a1a3e09457b109e6918c2ab55f58",
+    "portrait-with-captions.mp4": "fcd665ba06d16f47b9da84740f4446df9ac1b990408198902a2b12a591bbfc40",
+    "portrait.mp4": "d82c956f477198dd4fe4a7726fca18d6c4408a0f121624c72f1bb558e9952326",
+    "silent-import-edited.mp4": "fece08ab2d7c8e4e3ec196cb2ed6bba72a40af996e962c2a749159a1865932c8",
+    "square.mp4": "5cb0bf54cd88e830fcee01d2db93d4e35eaa3325eccb750efddd4a65fc81324d"
+  },
+  "cloudInspection": [
+    "Independent ffprobe and full ffmpeg decode passed for all six valid MP4 outputs. The deliberately invalid import fixture was excluded from decode-success checks.",
+    "Square is 1080x1080; 4:5 is 1080x1350; portrait follow/fixed/fit are 1080x1920. All are 2.5 seconds.",
+    "Silent imported-video edit exports at 320x180 for 2.5 seconds with no audio track.",
+    "Decoded fixed PNG preserves the right-side blue crop. Decoded fit PNG contains both full source regions with camera inside the letterboxed screen."
+  ]
+}

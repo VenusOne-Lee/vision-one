@@ -123,6 +123,8 @@ final class AgentsModel: ObservableObject {
                 try pack.write(for: take)
                 share = pack
                 sharerRun = .done("")
+            } catch let reason as SharerAgent.TooLittleSaid {
+                sharerRun = .done(reason.recoveryMessage)
             } catch {
                 sharerRun = .failed(AgentsModel.message(for: error))
             }

@@ -38,12 +38,56 @@ struct TransportBar<Accessory: View>: View {
     @ObservedObject var model: EditorModel
     @Binding var zoom: Double
     var showsZoom = true
+    var isCompact = false
+    @State private var showingDetails = false
     /// Extra controls at the right end, such as Show tracks.
     @ViewBuilder var accessory: () -> Accessory
 
     var body: some View {
-        HStack(spacing: Theme.Space.sm) {
-            HStack(spacing: 2) {
+        if isCompact {
+            VStack(spacing: 4) {
+                HStack(spacing: 8) {
+                    playback
+                    timecode
+                    Spacer(minLength: 0)
+                    Button(showingDetails ? "Hide details" : "Details") { showingDetails.toggle() }
+                        .buttonStyle(.secondary)
+                }.frame(height: 36)
+                if showingDetails {
+                    HStack {
+                        length
+                        Spacer()
+                        if showsZoom { zoomControls(slider: false) }
+                    }
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        HStack(spacing: 8) { accessory() }.fixedSize()
+                    }.frame(height: 32)
+                }
+            }
+        } else { adaptive }
+    }
+
+    private var adaptive: some View {
+        ViewThatFits(in: .horizontal) {
+            wide.fixedSize(horizontal: true, vertical: false)
+            VStack(spacing: 6) {
+                HStack(spacing: 8) { playback; timecode; Spacer(minLength: 0) }
+                HStack(spacing: 8) {
+                    length
+                    Spacer(minLength: 0)
+                    if showsZoom { zoomControls(slider: false) }
+                }
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(spacing: 8) { accessory() }.fixedSize()
+                }
+                .frame(height: 32)
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var playback: some View {
+        HStack(spacing: 2) {
                 ToolbarIcon(systemImage: "backward.end.fill", help: "Go to the start") { model.seekToStart() }
                 ToolbarIcon(systemImage: "backward.frame.fill", help: "Back one frame (← in the timeline)") {
                     model.stepFrames(-1)
@@ -65,6 +109,11 @@ struct TransportBar<Accessory: View>: View {
                 }
                 ToolbarIcon(systemImage: "forward.end.fill", help: "Go to the end") { model.seekToEnd() }
             }
+    }
+
+    private var wide: some View {
+        HStack(spacing: Theme.Space.sm) {
+            playback
             timecode
             length
             if let span = model.selection {
@@ -190,9 +239,16 @@ struct EditorNotice: View {
 /// when one is. Made on demand, kept when closed, and its frame is saved.
 @MainActor
 final class EditorWindowController: NSObject, NSWindowDelegate {
-    static let shared = EditorWindowController()
-    private var window: NSWindow?
-    private var model: HarnessModel { HarnessModel.shared }
+    static let shared = EditorWindowController(model: .shared)
+    private(set) var window: NSWindow?
+    private let model: HarnessModel
+
+    init(model: HarnessModel) {
+        self.model = model
+        super.init()
+    }
+
+    var workspaceUndoManager: UndoManager? { model.undoManager }
 
     /// The take open in the editor, if any, for windows that act on it.
     var currentTake: Take? { model.workspace?.take }
@@ -257,11 +313,12 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
 
     /// The take in the editor full mode.
     func edit(_ take: Take) {
-        open(take)
-        model.mode = .editor
+        model.refreshTakes()
+        model.open(take, mode: .editor)
+        present()
     }
 
-    private func present() {
+    func present() {
         if window == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1320, height: 820),

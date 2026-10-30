@@ -14,7 +14,8 @@ struct SoundFullMode<Rail: View>: View {
 
     @AppStorage("sound.asideWidth") private var asideWidth = 320.0
     @AppStorage("sound.aside") private var asideRaw = SoundAside.mix.rawValue
-    @AppStorage("sound.videoHeight") private var videoHeight = 240.0
+    @State private var compactPane = "Mix"
+    @State private var tracksOverride: Bool?
 
     init(model: EditorModel, onBack: @escaping () -> Void, @ViewBuilder rail: @escaping () -> Rail) {
         self.model = model
@@ -25,17 +26,41 @@ struct SoundFullMode<Rail: View>: View {
     private var aside: SoundAside { SoundAside(rawValue: asideRaw) ?? .mix }
 
     var body: some View {
-        GeometryReader { geometry in
-            HStack(spacing: 0) {
-                main
-                    .frame(minWidth: 420, maxWidth: .infinity)
-                    .layoutPriority(1)
-                if geometry.size.width >= 760 {
-                    SideResizeHandle(width: $asideWidth, range: 260...min(560, geometry.size.width * 0.45))
-                    asidePanel.frame(width: asideWidth)
+        GeometryReader { outer in
+        let tracksVisible = tracksOverride ?? (outer.size.height >= 540)
+        HStack(spacing: 0) {
+            rail()
+            VStack(spacing: 0) {
+                GeometryReader { geometry in
+                    if geometry.size.width < 760 {
+                        VStack(spacing: 0) {
+                            HStack {
+                                SegmentedTabs(selection: $compactPane, options: ["Preview", "Mix"]) { $0 }
+                                Spacer()
+                                Button(tracksVisible ? "Hide tracks" : "Show tracks") { tracksOverride = !tracksVisible }
+                                    .buttonStyle(.secondary)
+                            }.padding(8).background(Theme.paper)
+                            if compactPane == "Preview" { main }
+                            else { asidePanel }
+                        }
+                    } else {
+                        HStack(spacing: 0) {
+                            main.frame(minWidth: 380, maxWidth: .infinity).layoutPriority(1)
+                            SideResizeHandle(width: $asideWidth, range: 260...min(560, geometry.size.width * 0.45))
+                            asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 430)))
+                        }
+                    }
                 }
-                rail()
+                if model.phase == .ready {
+                    Divider().overlay(Theme.line)
+                    if tracksVisible {
+                        ScrollView { MixLanes(model: model).padding(12) }
+                            .frame(height: min(225, outer.size.height * 0.28))
+                    }
+                    AskBar(model: model).padding(12)
+                }
             }
+        }
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
@@ -60,19 +85,23 @@ struct SoundFullMode<Rail: View>: View {
         case .ready:
             VStack(spacing: 0) {
                 HStack(spacing: Theme.Space.md) {
-                    sectionLabel("ENERGY")
-                    EnergyDial(energy: model.sound.energy) { model.setEnergy($0) }
+                    Text("Sound mix").textStyle(.bodyStrong)
                     Spacer(minLength: Theme.Space.sm)
-                    LoudnessMeter(lufs: model.voiceLoudness)
+                    LoudnessMeter(lufs: model.voiceLoudness, status: model.audioLevelsState.message)
+                    if case .failed = model.audioLevelsState {
+                        Button("Retry audio") { Task { await model.loadLevels() } }
+                            .buttonStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 PlayerSurface(player: model.player)
+                    .overlay { CaptionLayer(model: model) }
                     .background(Theme.text)
                     .onTapGesture { model.togglePlay() }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
                     .frame(maxWidth: .infinity)
-                    .frame(height: videoHeight)
+                    .frame(minHeight: 100, maxHeight: .infinity)
                     .padding(.horizontal, 12)
                 TransportBar(model: model, zoom: .constant(1), showsZoom: false) {
                     if !model.laneMix.isDefault {
@@ -84,12 +113,7 @@ struct SoundFullMode<Rail: View>: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
-                TimelineResizeBar(height: Binding(get: { 520 - videoHeight }, set: { videoHeight = 520 - $0 }),
-                                  range: 160...420)
-                ScrollView {
-                    MixLanes(model: model)
-                        .padding([.horizontal, .bottom], 12)
-                }
+
             }
         }
     }
@@ -286,7 +310,7 @@ private struct VoiceWave: View {
             }
             .overlay {
                 if model.levels == nil {
-                    Text("Reading the mic…")
+                    Text(model.audioLevelsState.message)
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.textMuted)
                 }
@@ -328,6 +352,7 @@ private struct LaneResizeEdge: View {
 /// The voice's loudness against what platforms aim for.
 struct LoudnessMeter: View {
     let lufs: Float?
+    let status: String
 
     var body: some View {
         HStack(spacing: Theme.Space.sm) {
@@ -350,7 +375,7 @@ struct LoudnessMeter: View {
                 }
                 .frame(width: 120, height: 8)
             } else {
-                Text("Loudness after the mic is read")
+                Text(status)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textMuted)
             }
@@ -365,9 +390,26 @@ struct LoudnessMeter: View {
 private struct MixSettings: View {
     @ObservedObject var model: EditorModel
     @State private var sliderStart: SoundPlan?
+    @State private var sourceStart: RecordedMix?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.md) {
+            sectionLabel("ENERGY")
+            EnergyDial(energy: model.sound.energy) { model.setEnergy($0) }
+            Text("Calm suggests no effects; Lively suggests a few; Viral suggests more. Your accepted effects stay in place.")
+                .textStyle(.caption).foregroundStyle(Theme.textMuted)
+            Divider().overlay(Theme.line)
+            HStack {
+                Text("Voice clarity").textStyle(.bodyStrong)
+                Spacer()
+                Button("Open…") { VoiceToolsWindowController.shared.show(for: model.take) }
+                    .buttonStyle(.secondary)
+            }
+            sourceLevel("VOICE LEVEL", value: model.recordedMix.voiceDB, isVoice: true)
+            sourceLevel("SYSTEM AUDIO LEVEL", value: model.recordedMix.systemDB, isVoice: false)
+            Text("Source levels are saved for preview and export. Voice clarity tools are available from Task tools → Voice tools.")
+                .textStyle(.caption).foregroundStyle(Theme.textMuted)
+            Divider().overlay(Theme.line)
             let bed = model.sound.music
             slider("MUSIC LEVEL", value: bed?.levelDB ?? MusicBed.defaultLevelDB, range: -30...(-6),
                    action: "Music Level", help: "How loud the music is while nobody is talking") { plan, value in
@@ -398,6 +440,21 @@ private struct MixSettings: View {
                     .foregroundStyle(Theme.error)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    private func sourceLevel(_ title: String, value: Double, isVoice: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack { sectionLabel(title); Spacer(); Text("\(Int(value)) dB").textStyle(.caption) }
+            Slider(value: Binding(get: { value }, set: { level in
+                var mix = model.recordedMix
+                if isVoice { mix.voiceDB = level } else { mix.systemDB = level }
+                model.previewRecordedMix(mix)
+            }), in: -60...6, step: 1, onEditingChanged: { editing in
+                if editing { sourceStart = model.recordedMix }
+                else { model.applyRecordedMix(model.recordedMix, from: sourceStart); sourceStart = nil }
+            })
+            .accessibilityLabel(title.capitalized)
         }
     }
 
@@ -458,24 +515,29 @@ private struct MusicPicker: View {
             if let preview {
                 IconButton("Play \(title)", systemImage: "play.fill") { EffectAudition.play(preview) }
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 13, weight: .medium))
-                Text(summary).font(.system(size: 11)).foregroundStyle(Theme.textMuted).lineLimit(1)
+            Button(action: pick) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title).font(.system(size: 13, weight: .medium))
+                        Text(summary).font(.system(size: 11)).foregroundStyle(Theme.textMuted).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    if isOn { Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)) }
+                }
+                .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: 0)
-            if isOn {
-                Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold))
-            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(title)
+            .accessibilityValue(isOn ? "Selected" : "Not selected")
+            .accessibilityAddTraits(isOn ? .isSelected : [])
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(isOn ? Theme.canvas : Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(isOn ? Theme.text : Theme.line))
-        .contentShape(Rectangle())
-        .onTapGesture(perform: pick)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
     }
+
 }
 
 /// Every placed effect, dashed until kept, plus adding your own.

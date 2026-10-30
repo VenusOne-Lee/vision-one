@@ -35,6 +35,8 @@ struct EditorFullMode<Rail: View>: View {
     /// Space is down; a hold past `holdToTalk` starts listening.
     @State private var spaceDown = false
     @State private var comparing = false
+    @State private var compactPane = "Canvas"
+    @State private var timelineOverride: Bool?
 
     static var holdToTalk: Duration { .milliseconds(350) }
 
@@ -65,30 +67,35 @@ struct EditorFullMode<Rail: View>: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            if geometry.size.width < 760 {
-                // Narrow: the aside goes under the stage.
-                VSplitView {
-                    HStack(spacing: 0) {
-                        ToolStrip(model: model, tool: $toolRaw)
-                        stage
+        GeometryReader { outer in
+        HStack(spacing: 0) {
+            rail()
+            VStack(spacing: 0) {
+                GeometryReader { geometry in
+                    if geometry.size.width < 760 {
+                        VStack(spacing: 0) {
+                            if showAside {
+                                HStack {
+                                    SegmentedTabs(selection: $compactPane, options: ["Canvas", "Transcript & changes"]) { $0 }
+                                    Spacer()
+                                }.padding(8).background(Theme.paper)
+                            }
+                            if !showAside || compactPane == "Canvas" { stage(height: outer.size.height) }
+                            else { asidePanel }
+                        }
+                    } else {
+                        HStack(spacing: 0) {
+                            stage(height: outer.size.height).frame(minWidth: 380, maxWidth: .infinity).layoutPriority(1)
+                            if showAside {
+                                SideResizeHandle(width: $asideWidth, range: 260...min(640, geometry.size.width * 0.5))
+                                asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 470)))
+                            }
+                        }
                     }
-                    .frame(minHeight: 320)
-                    if showAside { asidePanel.frame(minHeight: 180) }
                 }
-            } else {
-                HStack(spacing: 0) {
-                    ToolStrip(model: model, tool: $toolRaw)
-                    stage
-                        .frame(minWidth: 380, maxWidth: .infinity)
-                        .layoutPriority(1)
-                    if showAside {
-                        SideResizeHandle(width: $asideWidth, range: 260...min(640, geometry.size.width * 0.5))
-                        asidePanel.frame(width: asideWidth)
-                    }
-                    rail()
-                }
+                if model.phase == .ready { editingFooter(height: outer.size.height) }
             }
+        }
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
@@ -117,8 +124,9 @@ struct EditorFullMode<Rail: View>: View {
     // MARK: Stage
 
     @ViewBuilder
-    private var stage: some View {
+    private func stage(height: CGFloat) -> some View {
         VStack(spacing: 0) {
+            ToolStrip(model: model, tool: $toolRaw)
             switch model.phase {
             case .loading:
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -128,7 +136,7 @@ struct EditorFullMode<Rail: View>: View {
             case .ready:
                 video
                     .padding([.horizontal, .top], 12)
-                TransportBar(model: model, zoom: $zoom) {
+                TransportBar(model: model, zoom: $zoom, isCompact: height < 600) {
                     VersionMenu(model: model.versions) { comparing = true }
                         .sheet(isPresented: $comparing) {
                             CompareView(versions: model.versions, take: model.take) { comparing = false }
@@ -154,14 +162,7 @@ struct EditorFullMode<Rail: View>: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
-                TimelineResizeBar(height: $timelineHeight)
-                EditorTimeline(model: model, effects: model.effects, filmstrip: filmstrip, zoom: $zoom,
-                               showWaveform: showWaveform, showEffects: showTracks, showSound: showTracks,
-                               cutsOnRelease: tool == .cut)
-                    .frame(height: timelineHeight)
-                    .padding(.horizontal, 12)
-                AskBar(model: model)
-                    .padding(12)
+
             }
             if let saveError = model.saveError {
                 EditorNotice(title: "Edits not saved", message: saveError, isError: true)
@@ -169,6 +170,27 @@ struct EditorFullMode<Rail: View>: View {
             }
         }
         .background(Theme.canvas)
+    }
+
+    private func editingFooter(height: CGFloat) -> some View {
+        let timelineVisible = timelineOverride ?? (height >= 540)
+        return VStack(spacing: 0) {
+            HStack {
+                Button(timelineVisible ? "Hide timeline" : "Show timeline") { timelineOverride = !timelineVisible }
+                    .buttonStyle(.secondary)
+                Spacer()
+            }.padding(.horizontal, 12).padding(.top, 4)
+            if timelineVisible {
+                TimelineResizeBar(height: $timelineHeight)
+                EditorTimeline(model: model, effects: model.effects, filmstrip: filmstrip, zoom: $zoom,
+                               showWaveform: showWaveform, showEffects: showTracks, showSound: showTracks,
+                               cutsOnRelease: tool == .cut)
+                    .frame(height: min(timelineHeight, max(80, height * 0.22)))
+                    .padding(.horizontal, 12)
+            }
+                AskBar(model: model)
+                    .padding(12)
+        }.background(Theme.canvas)
     }
 
     private var video: some View {
@@ -192,7 +214,7 @@ struct EditorFullMode<Rail: View>: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .frame(minHeight: 160)
+            .frame(minHeight: 60)
             .layoutPriority(1)
     }
 
@@ -224,11 +246,23 @@ struct EditorFullMode<Rail: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: Theme.Space.sm) {
                 SegmentedTabs(selection: Binding(get: { aside }, set: { asideRaw = $0.rawValue }),
-                              options: asides) { pane in
+                              options: [EditorAside.transcript, .changes]) { pane in
                     pane == .changes && model.proposedChangeCount > 0
                         ? "\(pane.title) \(model.proposedChangeCount)" : pane.title
                 }
                 Spacer(minLength: 0)
+                if asides.count > 2 {
+                    Menu {
+                        ForEach(asides.filter { $0 != .transcript && $0 != .changes }) { pane in
+                            Button(pane.title) { asideRaw = pane.rawValue }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 24, height: 24)
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                    .accessibilityLabel("More editor panels")
+                    .help("Steps, clips and thumbnails")
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -286,12 +320,14 @@ struct ToolStrip: View {
     @Binding var tool: String
 
     var body: some View {
-        VStack(spacing: 4) {
+        HStack(spacing: 4) {
             ForEach(EditorTool.allCases) { option in
-                IconButton(option.title, systemImage: option.systemImage,
-                           shortcut: option.key.uppercased(), isOn: option.rawValue == tool) {
-                    tool = option.rawValue
+                Button { tool = option.rawValue } label: {
+                    Label(option.title, systemImage: option.systemImage)
+                        .font(.system(size: 12, weight: .medium))
                 }
+                .buttonStyle(TabPillStyle(isOn: option.rawValue == tool))
+                .accessibilityAddTraits(option.rawValue == tool ? .isSelected : [])
                 .help("\(option.title) (\(option.key.uppercased())): \(option.help)")
             }
             Spacer(minLength: Theme.Space.sm)
@@ -304,11 +340,10 @@ struct ToolStrip: View {
             }
             .disabled(!model.undoManager.canRedo)
         }
-        .padding(.vertical, 10)
-        .frame(width: 44)
-        .frame(maxHeight: .infinity)
+        .padding(.horizontal, 12)
+        .frame(height: 44)
         .background(Theme.paper)
-        .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
 
     private var undoTitle: String {
@@ -476,9 +511,40 @@ struct TranscriptPane: View {
                              message: "Vision One is writing out what you said. The words appear here as soon as it's done, and you can play the take meanwhile.",
                              isError: false)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .missing:
+                VStack(spacing: Theme.Space.md) {
+                    EditorNotice(title: "No transcript yet",
+                                 message: "Create a transcript on this Mac. The speech model downloads on first use.",
+                                 isError: false)
+                    Button("Create transcript") { model.retryTranscript() }.buttonStyle(.secondary)
+                    Text("Playback, timeline edits and export remain available.")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .noAudio:
+                ScrollView {
+                    VStack(spacing: Theme.Space.sm) {
+                        EditorNotice(title: "No audio in this video",
+                                     message: "A transcript needs speech. Keep editing this silent video, or start with a video that includes audio.",
+                                     isError: false)
+                        Button("Import a video with audio…") { HarnessModel.shared.importVideo() }
+                            .buttonStyle(.secondary)
+                        Button("Open recording setup…") { HarnessModel.shared.preparingRecording = true }
+                            .buttonStyle(.secondary)
+                        Text("Playback, timeline edits and export remain available.")
+                            .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(Theme.Space.md)
+                }
             case let .failed(message):
-                EditorNotice(title: "Transcript unavailable", message: message, isError: true)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: Theme.Space.md) {
+                    EditorNotice(title: "Transcript unavailable", message: message, isError: true)
+                    Button("Retry this transcript") { model.retryTranscript() }.buttonStyle(.secondary)
+                    Text("Playback, timeline edits and export remain available.")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
                 if model.words.isEmpty {
                     EditorNotice(title: "No words found",

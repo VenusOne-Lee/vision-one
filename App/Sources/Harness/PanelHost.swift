@@ -177,7 +177,8 @@ struct PanelContent: View {
             case .changes:
                 ChangesPanel(model: workspace.editor, effects: workspace.editor.effects)
             case .clips:
-                ClipsPane(model: workspace.clips)
+                DeliveryPanel(workspace: workspace, model: model)
+                    .id(workspace.take.folder)
             case .sound:
                 SoundPanelContent(model: workspace.editor)
             case .post:
@@ -269,9 +270,11 @@ struct CaptionsPanel: View {
     let take: Take
     @State private var settings = CaptionSettings()
     @State private var loaded = false
+    @State private var problem: String?
 
     var body: some View {
         ScrollView {
+            if let problem { Text(problem).textStyle(.caption).foregroundStyle(Theme.error).padding(Theme.Space.md) }
             CaptionControls(settings: $settings)
                 .padding(Theme.Space.md)
         }
@@ -280,7 +283,15 @@ struct CaptionsPanel: View {
             loaded = true
         }
         .onChange(of: settings) { _, value in
-            if loaded { try? take.saveCaptionSettings(value) }
+            guard loaded else { return }
+            do {
+                try take.saveCaptionSettings(value)
+                problem = nil
+                NotificationCenter.default.post(name: .takeStyleChanged, object: take.folder)
+            } catch { problem = "Couldn't save captions: \(error.localizedDescription)" }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .takeStyleChanged)) { note in
+            if note.object as? URL == take.folder { settings = take.loadCaptionSettings() }
         }
     }
 }

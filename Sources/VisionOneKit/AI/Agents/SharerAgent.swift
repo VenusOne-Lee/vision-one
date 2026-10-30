@@ -76,6 +76,10 @@ public struct SharerAgent: Sendable {
     public struct TooLittleSaid: LocalizedError, Equatable, Sendable {
         public let words: Int
 
+        public var recoveryMessage: String {
+            "No post drafts generated: \(words) kept words; at least \(SharerAgent.minimumWords) are needed. Your video is unchanged. Open Post and expand a network to write your own copy."
+        }
+
         public var errorDescription: String? {
             "Too little was said to write posts (\(words) word\(words == 1 ? "" : "s")). Talk through what you're showing for at least 15 seconds, or write the title yourself."
         }

@@ -380,3 +380,36 @@ final class MzansiLexiconTests: XCTestCase {
         XCTAssertTrue(MzansiLexicon.vocabularyPrompt.contains("Gqeberha"))
     }
 }
+
+extension TakeCaptionsTests {
+    func testVisibilityTogglePreservesNewerSettingsFromAnotherPane() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let take = Take(folder: folder)
+        try take.saveCaptionSettings(CaptionSettings())
+        let cached = take.loadCaptionSettings()
+        var newer = CaptionSettings(isOn: false, style: .keyword, burnIn: false, writeFiles: false,
+                                    keywordNames: ["Vision One"], sizeScale: 1.4, position: 0.35,
+                                    wordsAtATime: 3, language: .zulu)
+        try take.saveCaptionSettings(newer)
+        XCTAssertNotEqual(cached, newer)
+        newer.isOn = true
+        XCTAssertEqual(try take.setCaptionVisibility(true), newer)
+        XCTAssertEqual(take.loadCaptionSettings(), newer)
+        // Reopening the pane and toggling again preserves the same settings.
+        newer.isOn = false
+        XCTAssertEqual(try Take(folder: folder).setCaptionVisibility(false), newer)
+    }
+
+    func testVisibilityToggleDoesNotReplaceUnreadableSettings() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let take = Take(folder: folder)
+        let original = Data("incomplete settings".utf8)
+        try original.write(to: take.captionSettingsURL)
+        XCTAssertThrowsError(try take.setCaptionVisibility(false))
+        XCTAssertEqual(try Data(contentsOf: take.captionSettingsURL), original)
+    }
+}

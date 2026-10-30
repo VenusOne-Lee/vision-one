@@ -175,7 +175,7 @@ struct PeopleVersionsView: View {
             }
             Spacer()
             Picker("Format", selection: $model.preset) {
-                ForEach([ExportPreset.hd1080, .hd720, .whatsapp, .vertical, .square]) { preset in
+                ForEach([ExportPreset.hd1080, .hd720, .whatsapp, .vertical, .square, .portrait]) { preset in
                     Text(preset.title).tag(preset)
                 }
             }

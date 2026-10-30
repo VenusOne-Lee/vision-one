@@ -118,7 +118,7 @@ struct VersionMenu: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text(model.main.name).lineLimit(1)
+                Text(model.main.name).lineLimit(1).fixedSize()
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
             }
             .font(.system(size: 12, weight: .medium))

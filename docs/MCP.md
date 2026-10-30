@@ -46,7 +46,7 @@ your agent ──stdio──▶ Vision One --mcp ──Unix socket──▶ Visi
                        (the bridge)        your user only     tools · resources · approvals
 ```
 
-- The agent starts `Vision One --mcp`. That's the app's own binary acting as a small bridge: it connects to the running app over `~/Library/Application Support/Vision One/mcp.sock` and passes messages both ways. A side-by-side test build (bundle id ending `.dev`) uses `mcp-dev.sock` instead, so it never clashes with the installed release. If Vision One isn't running, the bridge opens it in the background and waits up to 8 seconds.
+- The agent starts `Vision One --mcp`. That's the app's own binary acting as a small bridge: it connects to the running app over `~/Library/Application Support/Vision One/mcp.sock` and passes messages both ways. Side-by-side builds use separate sockets: bundle ids ending `.dev` use `mcp-dev.sock`, and those ending `.verification` use `mcp-verification.sock`, so their bridges cannot connect to the installed release. If Vision One isn't running, the bridge opens it in the background and waits up to 8 seconds.
 - The socket file is readable only by your Mac user (0600). There's no network port, so web pages can't reach it.
 - Turning off **Let coding agents use Vision One** closes the socket. The bridge then answers every request with a plain error saying so.
 - One server, one session per connected agent. Each session knows the agent's name from MCP `clientInfo` ("Claude Code", "Codex").

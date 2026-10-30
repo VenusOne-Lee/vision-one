@@ -15,6 +15,8 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
     case vertical
     /// 1:1 at 1080×1080, the whole video, following the cursor.
     case square
+    /// 4:5 for LinkedIn and Instagram feeds.
+    case portrait
 
     public var id: String { rawValue }
 
@@ -23,6 +25,7 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
         switch self {
         case .vertical: return .vertical
         case .square: return .square
+        case .portrait: return .portrait
         default: return nil
         }
     }
@@ -37,6 +40,7 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
             case VideoFormat.landscape.rawValue: preset = .hd1080
             case VideoFormat.vertical.rawValue: preset = .vertical
             case VideoFormat.square.rawValue: preset = .square
+            case VideoFormat.portrait.rawValue: preset = .portrait
             default: preset = nil
             }
             if let preset, !presets.contains(preset) { presets.append(preset) }
@@ -52,6 +56,7 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
         case .whatsapp: return "WhatsApp"
         case .vertical: return "Vertical"
         case .square: return "Square"
+        case .portrait: return "Portrait 4:5"
         }
     }
 
@@ -63,6 +68,7 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
         case .whatsapp: return "Under 16 MB"
         case .vertical: return "TikTok, Reels, Shorts, Status"
         case .square: return "X, Instagram grid"
+        case .portrait: return "LinkedIn and Instagram feed"
         }
     }
 
@@ -75,6 +81,7 @@ public enum ExportPreset: String, CaseIterable, Codable, Sendable, Identifiable 
         case .whatsapp: return " (WhatsApp)"
         case .vertical: return " (Vertical)"
         case .square: return " (Square)"
+        case .portrait: return " (Portrait)"
         }
     }
 
@@ -172,7 +179,7 @@ public enum ExportPlanner {
         case .whatsapp:
             return try sizeLimited(source: source, duration: duration,
                                    limit: preset.sizeLimitBytes ?? 16_000_000)
-        case .vertical, .square:
+        case .vertical, .square, .portrait:
             // Social apps re-encode at their own sizes, so like clips these
             // render at the format's full size and at most 30 fps.
             let format = preset.format ?? .landscape

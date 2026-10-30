@@ -33,6 +33,9 @@ final class Transcriber: ObservableObject {
     private let engine = ParakeetEngine()
     private var queue: [Take] = []
     private var running = false
+    @Published private(set) var activeTakeName: String?
+
+    func isWorking(on take: Take) -> Bool { activeTakeName == take.name || queue.contains(take) }
 
     /// A few seconds said while holding Space in the editor, as text.
     /// Uses the same on-device model as transcripts; loads it if needed.
@@ -47,7 +50,7 @@ final class Transcriber: ObservableObject {
     }
 
     func transcribe(_ take: Take) {
-        guard !queue.contains(take) else { return }
+        guard !queue.contains(take), activeTakeName != take.name else { return }
         queue.append(take)
         runQueue()
     }
@@ -64,6 +67,12 @@ final class Transcriber: ObservableObject {
         guard let latest = failures.latest else { return }
         let take = failedTakes[latest.takeName]
             ?? Take(folder: TakeLibrary.standard.folder.appendingPathComponent(latest.takeName, isDirectory: true))
+        retry(take)
+    }
+
+    func retry(_ take: Take) {
+        // The owned silent source cannot gain speech by retrying transcription.
+        if (try? TranscriptFailure.read(from: take.transcriptFailedURL))?.reason == .noAudio { return }
         try? FileManager.default.removeItem(at: take.transcriptFailedURL)
         failures.clear(take.name)
         failedTakes[take.name] = nil
@@ -74,6 +83,7 @@ final class Transcriber: ObservableObject {
         guard !running, !queue.isEmpty else { return }
         running = true
         let take = queue.removeFirst()
+        activeTakeName = take.name
         Task {
             await run(take)
             running = false
@@ -82,6 +92,8 @@ final class Transcriber: ObservableObject {
     }
 
     private func run(_ take: Take) async {
+        activeTakeName = take.name
+        defer { activeTakeName = nil }
         failures.clear(take.name)
         failedTakes[take.name] = nil
         activity = .transcribing(takeName: take.name)
@@ -111,8 +123,10 @@ final class Transcriber: ObservableObject {
             // first, so auto-clean's own retake guesses don't overlap.
             try? ScriptRetakes.run(on: take, transcript: transcript,
                                     sourceDuration: audio.videoDuration ?? transcript.duration)
+            var cleanup = CleanupSettings()
+            if let pause = AppliedTemplate.style(for: take)?.keptPause { cleanup.keptPause = pause }
             try? AutoClean.run(on: take, transcript: transcript, sourceDuration: audio.videoDuration,
-                               loudness: loudness)
+                               loudness: loudness, detector: CleanupDetector(settings: cleanup))
             // An agent recording: propose skipping the long waits.
             try? AgentWaiting.propose(on: take, transcript: transcript,
                                       sourceDuration: audio.videoDuration ?? transcript.duration)
@@ -121,14 +135,16 @@ final class Transcriber: ObservableObject {
         } catch {
             let message = Self.describe(error)
             if (error as? TakeAudio.ReadError) == .noAudio {
-                // Recording again is the only fix, so don't try it again on
-                // every launch. Retry in the menu still works.
+                // Keep the permanent marker and offer import/recording recovery
+                // in the task rather than a global Retry that cannot help.
                 try? TranscriptFailure(reason: .noAudio, message: message).write(to: take.transcriptFailedURL)
                 // Agent recordings often have no sound; the waits can
                 // still be skipped.
                 if let seconds = try? await AVURLAsset(url: take.screenURL).load(.duration).seconds, seconds > 0 {
                     try? AgentWaiting.propose(on: take, transcript: nil, sourceDuration: seconds)
                 }
+                activity = .idle
+                return
             }
             failedTakes[take.name] = take
             failures.record(message, for: take.name)
@@ -224,7 +240,7 @@ enum TakeAudio {
 
         var errorDescription: String? {
             switch self {
-            case .noAudio: return "This take has no sound. Turn on the mic and record again."
+            case .noAudio: return "This video has no audio to transcribe. You can still trim, add effects and export it. Import a version with audio if you need a transcript."
             case .unreadable: return "The recording couldn't be read. It may still be saving; try again."
             }
         }

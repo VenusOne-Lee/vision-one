@@ -14,9 +14,9 @@ final class ScriptCoachModel: ObservableObject {
     let player = SpeechPlayer()
     private var pending: Task<Void, Never>?
 
-    init() {
+    init(learnPace: Bool = true) {
         recheck()
-        coach.learnPace()
+        if learnPace { coach.learnPace() }
     }
 
     var flags: [ScriptFlag] { report.flags.filter { !dismissed.contains($0.id) } }
@@ -47,6 +47,8 @@ final class ScriptCoachModel: ObservableObject {
     /// Asks the ladder (on this Mac first) for easier ways to say the flagged lines.
     func suggestRewrites() {
         guard let request = ScriptCoach().rewriteRequest(coach.script, flags: flags, tone: coach.tone) else { return }
+        guard !rewriting else { return }
+        let requestedText = coach.scriptText
         rewriting = true
         problem = nil
         let ladder = AIServices.shared.ladder()
@@ -54,7 +56,16 @@ final class ScriptCoachModel: ObservableObject {
             defer { rewriting = false }
             do {
                 let rewrites = try await ladder.complete(request).decode([ScriptCoach.Rewrite].self)
-                report = ScriptCoach().applying(rewrites, to: report)
+                guard coach.scriptText == requestedText else {
+                    problem = "Your script changed while the coach was thinking. Ask again for the current version."
+                    return
+                }
+                let updated = ScriptCoach().applying(rewrites, to: report, script: coach.script)
+                guard updated.flags != report.flags else {
+                    problem = "The coach returned no usable changes for these lines. Try again, or edit the script yourself."
+                    return
+                }
+                report = updated
             } catch {
                 problem = CoachServices.message(for: error)
             }
@@ -73,7 +84,10 @@ final class ScriptCoachModel: ObservableObject {
         player.stop()
         UserDefaults.standard.set(coach.scriptText, forKey: CoachServices.scriptKey)
         ScriptCoachWindowController.shared.close()
-        Task { await ScreenRecorder.shared.record() }
+        ScriptStore.shared.reload()
+        ScriptStore.shared.showsPrompter = true
+        EditorWindowController.shared.show()
+        HarnessModel.shared.preparingRecording = true
     }
 }
 
@@ -81,6 +95,7 @@ final class ScriptCoachModel: ObservableObject {
 /// read on the right. The divider drags; both sides fold to fit.
 struct ScriptCoachView: View {
     @ObservedObject var model: ScriptCoachModel
+    @Environment(\.workspaceRender) private var workspaceRender
     @ObservedObject private var coach = CoachServices.shared
     @ObservedObject private var player: SpeechPlayer
 
@@ -103,7 +118,7 @@ struct ScriptCoachView: View {
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
         .themed()
-        .task { await coach.refresh() }
+        .task { if !workspaceRender { await coach.refresh() } }
     }
 
     // MARK: Toolbar
@@ -124,7 +139,7 @@ struct ScriptCoachView: View {
             Button("Record with the script") { model.record() }
                 .buttonStyle(.primary)
                 .disabled(coach.script.isEmpty)
-                .help("Shows the prompter and starts recording")
+                .help("Checks source and audio before recording with the prompter")
         }
         .padding(.horizontal, Theme.Space.md)
         .frame(height: Theme.Size.toolbar)

@@ -1,0 +1,612 @@
+{
+  "commit": "859180f2720fbdcbdff67b035052eaeb2caeae60",
+  "run": 40923474305,
+  "artifact": 12919422422,
+  "count": 66,
+  "files": [
+    {
+      "file": "agents-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "2f845b0a5a03c3ee7e2e0be116ebbb6f5061dcf8d30579be00972da03ee43d6f",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "agents-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "7ed57f2f0de9acf2b3b4ee5a4db4f1b2fa26d7ce8cd9490df524e7d7b91627c4",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "agents-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "db93ef58688aef333995839ca9042ff8d88b4faa2204aefc36527909e2082229",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "agents-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "12beb469e75f0fc32c50c431a34dadc5b2b3c3ec979be12f49a71230e8021ee2",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "autopilot-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "d408a9c99930d0c34bd02af11834410c02838a221fec0a43c6b6ed85ce52ea89",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "autopilot-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "684bead6a942f8e1ff7f3b6161dfa938966eac6e81d12dcf6e7e49866bd21a55",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "autopilot-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "19b4c65397ee5a0dbeadce1a65ed3d0e36fafc79c46747b35b29d22a8d0d6a71",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "autopilot-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "e01f218cbec2c3ff2f305107978eeb87ae4f507e29430c114c59b96b12bf3274",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "delivery-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "5c2411b787e7a8d35c3c4d1d9afa35e0bb01c142581f077b5ef04d3641dd34b9",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "delivery-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "33a5a39b7a62e8b08724476411859347fef6bae0bd3b5c35b48c3af82d90d4ca",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "delivery-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "f9bb3ed650fa3aae742acb868fa8b4e533b40730bfb8081eaec1e652b3a5e855",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "delivery-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "55bf17e9fb207a20b4ee515a2c48c30cd7cb6e5f353ded16a95f633363947807",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "editor-dark-minimum.png",
+      "dimensions": [
+        760,
+        520
+      ],
+      "sha256": "81dfa7085e1a9d8282ec32e24a5cbc0073cdebadfdab5af74f109f59198bba47",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "editor-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "c57b46b641367842bfd83273e148409c5019191d1432aa4f8135f47683b57974",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "editor-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "f07bf8eb21a0280dba08a6346ae232889f9a1cc60f6c2776f1a33668541caac1",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "editor-light-minimum.png",
+      "dimensions": [
+        760,
+        520
+      ],
+      "sha256": "b468a91b3b0d9f34749aa1f87defbbdcfefcfc2f29caa13288532af91408a20e",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "editor-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "39ef3d07b97046479e85ee5e6ea7c254543ee6b292e79a8fadfa0b717dd9506d",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "editor-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "c1fd82d0f7113e3218cb10d87b758f67d5f23e89e43e89cae16df01844ef26b4",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "error-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "3c3f58f2425fb1f88887f591f44c32717c69581ea30289948a1bb4b7550dca65",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "error-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "e51905f85e1e338bf4b8a9133ce9b1d347be43f4f78e9d0b623059ba1b0ad249",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "error-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "2f911ea24dce43596edbdb191c0f142ca96379c3e1efde8316cefc31d88936d5",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "error-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "f014cfe8426a9ac5f0d212ede0eb50202120437df228d4fb3220d12778935348",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "loading-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "3baf10538a230a9112119b304651d0f9bc51fc2f7726c071ddb25ca6639f2802",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "loading-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "1eeb838ee228a5f110bea1b537e1c543d922dd05e91f311726cdc12669a7f628",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "loading-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "d8a841e677a258a0e18d58cfd759df9914e827bb3933a9322e786ae3e860034e",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "loading-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "571c047caa687dccef22d49a6e787c50f7bc32cfe631c290cfa80054fb3e63ca",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "new-task-dark-minimum.png",
+      "dimensions": [
+        760,
+        520
+      ],
+      "sha256": "f7858ecda8358ae32303850ae8989ce7be70fc79759574f6192c9a0476cbf333",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "new-task-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "b6ed795b8f32cb111f7f543c080e8b4f960db3e7cca194c25ca340797a67974a",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "new-task-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "2a60be98a063d94cad975af6f5e63b2a12cd8ad18104b484d8a4dc1ece506455",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "new-task-light-minimum.png",
+      "dimensions": [
+        760,
+        520
+      ],
+      "sha256": "040cf85eeef6f3cb6b6c801919dafbe13d651ffadf95a6f48c80894f2c8fce26",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "new-task-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "b54bb728266a765fb129919cbf4dc61114560128c7771449ee823ad3392e6d39",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "new-task-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "cfce4f6890d351c780116db977ffccac635d1ef503280d91d27a005f1c7f4395",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "pending-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "b8324824983e8a0ca482802016b3dec1ade9f7c8f930045639d7a60a91acb66e",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "pending-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "8de0975885367bde020223bb89b39fdeaaeebab12440abe22f8ac5ff4f06db4c",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "pending-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "01bdf0c85ddf6fa0eb45a6d527b036522a10e1ef558d2df144b5feb5d7ac9f69",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "pending-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "6dbf85777a69d089b92276f046cf09d9b8afe7e220f2c5d6f8da0fa4ede1ed5e",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "recording-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "abdfdf372bcfd70cd7ba63a586604183e068d64bbb8e98708a1d12adb13ad620",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "recording-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "b4aa93d7039b1d44ddcfaae51d94a008d20963929ec489742dd1cd9b804080d5",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "recording-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "6f4c50d23929cb284f5beb5712c5ab65fecf50442ee09d4ae49f147465a6fb86",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "recording-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "f79bc53cbe297346d81132ce49f022f5a2960808fd0d689331eda921f39a9ea9",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "rehearse-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "1717a9cf5e3ebe659039e1f237823ca345d629d3b1f871623b6c3ed1fe88a405",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "rehearse-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "dff13013c7e34091641c10527fbb6700711eb9c386e287bcb84db6368767384b",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "rehearse-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "99ee72fb96e33148c20d53d0726185e23f4de6d41289f4030838ebee55dfb5d6",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "rehearse-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "7f67a53c6d1309b05ec70c7d183ebec3620661cc5153607cf2e393c1c1ecee58",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "script-coach-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "75f8ff00f06352be7052a272e1294ab25f7d5c2d70bb8f75155b03c52ddcf2c4",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "script-coach-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "1ce1e2e81c01fbc3061dcbe01287d8536d162398d499ac9f0fcaa9a9dbe6fa8e",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "script-coach-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "e055ee4fb027e2b2873700ad00c4a3545e8c1e0ae853fdbdba5fa3219690c1fa",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "script-coach-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "43b51dd57d46c13447ba6f53eb18c24d97829b595cf81335000ed52381ccbde0",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "sound-dark-minimum.png",
+      "dimensions": [
+        760,
+        520
+      ],
+      "sha256": "23eee591b38af7f48257a23128de04871266e83ad14c7560d2163ac7170ef433",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "sound-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "9ca0151dddc70760ccce12bef04ebe91659f38ad3e4a823941916d17c4c964b1",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "sound-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "895ff1c7626250e57571d17b63a40cc8fb4dbb6542f2c148413f32dce53085b8",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "sound-light-minimum.png",
+      "dimensions": [
+        760,
+        520
+      ],
+      "sha256": "54f2d179c44caedfeea9cc55fd99942ca98aff9cbdafbb45dba607c0f619e321",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "sound-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "fd1f0d6d426866655b64f53516249981b3d3b7fb5a6b1032bb1a5da0a9d3558f",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "sound-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "758351997d368cc50fe9d35b2d1da4aea33b20c8b239f4fb1b6d230f05172314",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "task-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "8425d74cd7e28a21c6a4562150cf6fe3af94f63ef9851acac87e375486acb003",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "task-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "f0c31f6f86d4bedfc1fc56e3987264e7c89d315cf763673f4e4afc44ef5c0464",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "task-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "6b003e4307918066d1cdf7029b92403c9fc554a41c00016f8329290e6a7e6759",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "task-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "da5d554f0d03dfa8e6a5fe8ca32c1d9c0bae85f9e68b3bf08d1f9a8e010bfa19",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "task-tools-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "ac74943137605ed63c9eaa74f8405e7bdb9c89432903dbf0cde00601f9f9b990",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "task-tools-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "59e09608793095c15553147893d4c41b5eefe1061561bdfbeb97a3f4c806240e",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "task-tools-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "194cab15336f8b15e6f9d6ce35debb30ba40adacbd96c7f085c32099edaf6391",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "task-tools-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "6943be3715f5d52697b5eaf28d2fdb42a0757fd1f9b1954989888d89f21fb229",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "voice-tools-dark-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "6adc6779329e45ad02d624a5d603f81a010e3343b1b86d0f8e08fb90088a76db",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "voice-tools-dark-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "67ba99cbc8b2161a888e0f9ef8e3cdd27f82db35d7b4e108e9b33d45b8f6cc7f",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "voice-tools-light-narrow.png",
+      "dimensions": [
+        900,
+        640
+      ],
+      "sha256": "a47ef5d078446a96e072aa25c8b08de20d98ac2ed8357594c07791aa884557f0",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    },
+    {
+      "file": "voice-tools-light-wide.png",
+      "dimensions": [
+        1512,
+        982
+      ],
+      "sha256": "2f59d17c5144d5d2d0d816494c57ab32babf7ce5497ecb5220fde92d07908dfc",
+      "inspection": "Opened and visually inspected; static fixture evidence only"
+    }
+  ],
+  "observed_open_findings": [
+    "Sound at minimum height gives too much space to optional tracks; fixed later, awaiting image inspection",
+    "Expanded editor collapses Transcript/Changes into menu with optional panels; fixed later, awaiting image inspection"
+  ],
+  "limits": [
+    "Recording preview/device state is a static permission-safe fixture; no capture started",
+    "Video is exact decoded fixture frame via actual AVPlayerItem composition, not live layer capture",
+    "Advanced-tool idle and setup states only, no provider requests",
+    "No VoiceOver/focus/hardware/audible acceptance claimed"
+  ]
+}
