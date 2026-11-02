@@ -21,6 +21,7 @@ public struct AutopilotPolicy: Equatable, Sendable {
         "com.apple.Automator",
         "com.apple.installer",
         "za.co.versionone.visionone",
+        "za.co.versionone.visionone.dev",
     ]
 
     /// Longest a run may take before it stops by itself.
@@ -73,6 +74,7 @@ public struct AutopilotPolicy: Equatable, Sendable {
             "com.apple.keychainaccess": "Keychain Access", "com.apple.Passwords": "Passwords",
             "com.1password.1password": "1Password", "com.apple.finder": "Finder",
             "za.co.versionone.visionone": "Vision One",
+            "za.co.versionone.visionone.dev": "Vision One Dev",
         ]
         if let name = known[bundleID] { return name }
         return bundleID.split(separator: ".").last.map(String.init) ?? bundleID

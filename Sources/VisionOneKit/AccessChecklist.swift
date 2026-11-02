@@ -5,24 +5,37 @@ public enum AccessKind: String, CaseIterable, Sendable {
     case screen
     case microphone
     case camera
+    /// Autopilot's clicks and the keys shown in agent recordings.
+    case accessibility
 
     public var title: String {
         switch self {
         case .screen: return "Screen Recording"
         case .microphone: return "Microphone"
         case .camera: return "Camera"
+        case .accessibility: return "Accessibility"
         }
     }
 
-    /// Only needed for the camera bubble and Camera only, so setup is
-    /// done without it.
-    public var isOptional: Bool { self == .camera }
+    /// Setup is done without these: the camera is for the bubble and
+    /// Camera only, Accessibility for Autopilot and agent recordings.
+    public var isOptional: Bool { self == .camera || self == .accessibility }
+
+    /// Once turned off, these come back only by a switch in System
+    /// Settings. Microphone and Camera get macOS's own prompt again once
+    /// Vision One clears its old entry.
+    public var needsSettingsSwitch: Bool { self == .screen || self == .accessibility }
+
+    /// First-run setup asks for these. Accessibility is asked where it's
+    /// used (Autopilot, Record an Agent) and lives in Settings › Access.
+    public var isInSetup: Bool { self != .accessibility }
 
     public var why: String {
         switch self {
         case .screen: return "To record your screen and the sound your Mac plays."
         case .microphone: return "To record your voice for the transcript."
         case .camera: return "Optional. To show you in the camera bubble, or record just you."
+        case .accessibility: return "Optional. For Autopilot, and to show keys pressed in agent recordings."
         }
     }
 }
@@ -31,7 +44,7 @@ public enum AccessState: Equatable, Sendable {
     /// macOS hasn't asked yet; pressing Allow shows the system prompt.
     case notAsked
     case granted
-    /// Turned off. Only System Settings can turn it back on.
+    /// Turned off. Vision One clears its old entry and asks again.
     case denied
 }
 

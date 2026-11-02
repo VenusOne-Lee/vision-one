@@ -255,6 +255,9 @@ final class ScreenRecorder: NSObject, ObservableObject {
         access.refresh()
         guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
             phase = .failed(message: CameraOnlyError.noAccess.localizedDescription)
+            // Turned off earlier: clear the old entry and ask again, so
+            // the next press of Record just works.
+            if access.checklist.state(of: .camera) == .denied { access.request(.camera) }
             return false
         }
         guard let camera = CaptureDevices.shared.cameraForCameraOnly() else {
