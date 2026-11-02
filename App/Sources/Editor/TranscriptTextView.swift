@@ -2,6 +2,13 @@ import AppKit
 import SwiftUI
 import VisionOneKit
 
+/// The words picked in the transcript and where they are on screen.
+@MainActor
+final class TranscriptSelection: ObservableObject {
+    @Published var words: ClosedRange<Int>?
+    @Published var anchor: CGPoint?
+}
+
 /// The transcript as one native text view: real selection, keyboard and
 /// accessibility, and fast with thousands of words. It is read-only;
 /// Delete cuts the selected words instead of editing text.
@@ -10,6 +17,10 @@ import VisionOneKit
 /// dashed outlines the design uses for proposed cuts and pauses.
 struct TranscriptTextView: NSViewRepresentable {
     @ObservedObject var model: EditorModel
+    /// Where the selected words are, for the floating Cut words button.
+    var selection: TranscriptSelection? = nil
+    /// Words to mark as search matches.
+    var search = ""
 
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
 
@@ -44,12 +55,28 @@ struct TranscriptTextView: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         scroll.documentView = textView
+        scroll.contentView.postsBoundsChangedNotifications = true
+        let coordinator = context.coordinator
+        coordinator.scroll = scroll
+        coordinator.observers = [
+            NotificationCenter.default.addObserver(forName: NSTextView.didChangeSelectionNotification, object: textView,
+                                                   queue: .main) { _ in MainActor.assumeIsolated { coordinator.publishSelection() } },
+            NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scroll.contentView,
+                                                   queue: .main) { _ in MainActor.assumeIsolated { coordinator.publishSelection() } },
+        ]
         return scroll
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.selection = selection
         context.coordinator.bind(model)
+        context.coordinator.search = search
         context.coordinator.update()
+    }
+
+    static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
+        coordinator.observers.forEach(NotificationCenter.default.removeObserver)
+        coordinator.observers = []
     }
 
     @MainActor
@@ -62,6 +89,11 @@ struct TranscriptTextView: NSViewRepresentable {
         private var renderedTranscriptRevision = -1
         private var renderedFixes: [VoiceEdits.WordFix]?
         private var underlined: Int?
+        weak var selection: TranscriptSelection?
+        weak var scroll: NSScrollView?
+        var observers: [NSObjectProtocol] = []
+        var search = ""
+        private var renderedSearch = ""
 
         init(model: EditorModel) {
             self.model = model
@@ -95,7 +127,51 @@ struct TranscriptTextView: NSViewRepresentable {
                 let kept = selection.filter { $0.rangeValue.upperBound <= storage.length }
                 textView.selectedRanges = kept.isEmpty ? [NSValue(range: NSRange(location: 0, length: 0))] : kept
             }
+            if renderedSearch != search { highlightSearch(storage: storage) }
             updatePlayingWord(storage: storage)
+        }
+
+        /// Soft fill on every word matching the search, and scroll to the first.
+        private func highlightSearch(storage: NSTextStorage) {
+            renderedSearch = search
+            storage.beginEditing()
+            for range in wordRanges { storage.removeAttribute(.backgroundColor, range: range) }
+            let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+            var first: NSRange?
+            if !query.isEmpty {
+                let text = storage.string as NSString
+                var location = 0
+                while location < text.length {
+                    let found = text.range(of: query, options: .caseInsensitive,
+                                           range: NSRange(location: location, length: text.length - location))
+                    guard found.location != NSNotFound else { break }
+                    storage.addAttribute(.backgroundColor, value: NSColor(Theme.selectionSoft), range: found)
+                    if first == nil { first = found }
+                    location = found.location + max(found.length, 1)
+                }
+            }
+            storage.endEditing()
+            if let first { textView?.scrollRangeToVisible(first) }
+        }
+
+        /// Tells the pane which words are picked and where they sit, so
+        /// Cut words can float just under them.
+        func publishSelection() {
+            guard let selection else { return }
+            guard let words = selectedWords(), let textView, let scroll,
+                  let layout = textView.layoutManager, let container = textView.textContainer else {
+                if selection.words != nil { selection.words = nil; selection.anchor = nil }
+                return
+            }
+            let range = textView.selectedRange()
+            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            var rect = layout.boundingRect(forGlyphRange: glyphs, in: container)
+            rect.origin.x += textView.textContainerOrigin.x
+            rect.origin.y += textView.textContainerOrigin.y
+            let inClip = textView.convert(rect, to: scroll.contentView)
+            let bounds = scroll.contentView.bounds
+            selection.words = words
+            selection.anchor = CGPoint(x: max(8, inClip.minX - bounds.minX), y: inClip.maxY - bounds.minY + 6)
         }
 
         /// Ink underline on the word being spoken. Only touches two words,

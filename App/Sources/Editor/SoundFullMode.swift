@@ -54,7 +54,7 @@ struct SoundFullMode<Rail: View>: View {
                 if model.phase == .ready {
                     Divider().overlay(Theme.line)
                     if tracksVisible {
-                        ScrollView { MixLanes(model: model).padding(12) }
+                        ScrollView { MixLanes(model: model).padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 12) }
                             .frame(height: min(300, outer.size.height * 0.32))
                     }
                     HStack(spacing: Theme.Space.md) {
@@ -405,11 +405,16 @@ struct MixLanes: View {
             let width = max(geometry.size.width - Self.headerWidth - 8, 1)
             let duration = max(model.edits.sourceDuration, 0.001)
             let x = Self.headerWidth + CGFloat(model.sourceTime / duration) * width
-            Rectangle()
-                .fill(Theme.text)
-                .frame(width: 1.5, height: geometry.size.height)
-                .offset(x: x)
-                .allowsHitTesting(false)
+            ZStack(alignment: .top) {
+                Rectangle()
+                    .fill(Theme.text)
+                    .frame(width: 1.5, height: geometry.size.height)
+                PlayheadBadge(text: PlayheadBadge.stamp(model.edits.outputTime(forSource: model.sourceTime) ?? 0))
+                    .offset(y: -9)
+            }
+            .frame(width: 56)
+            .offset(x: x - 28)
+            .allowsHitTesting(false)
         }
     }
 }

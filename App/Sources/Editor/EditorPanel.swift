@@ -9,6 +9,8 @@ struct EditorPanel: View {
     var onExpand: (() -> Void)?
 
     @AppStorage("editorPanel.pane") private var paneRaw = EditorAside.transcript.rawValue
+    @State private var search = ""
+    @State private var searching = false
 
     private var pane: EditorAside {
         let picked = EditorAside(rawValue: paneRaw) ?? .transcript
@@ -35,6 +37,7 @@ struct EditorPanel: View {
                     }
                     .fixedSize()
                     Spacer(minLength: 0)
+                    if pane == .transcript { TranscriptSearchButton(query: $search, isOpen: $searching) }
                 }
                 .padding(.horizontal, Theme.Space.md)
                 .padding(.top, Theme.Space.md)
@@ -42,7 +45,7 @@ struct EditorPanel: View {
                 Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
                 switch pane {
                 case .changes: ChangesPanel(model: model, effects: model.effects)
-                default: TranscriptPane(model: model)
+                default: TranscriptPane(model: model, search: search)
                 }
             }
         }

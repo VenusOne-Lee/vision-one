@@ -157,3 +157,96 @@ struct Scrubber: View {
         return Double(min(1, max(0, x / width))) * total
     }
 }
+
+/// The magnifier beside Transcript | Changes: opens a field that marks
+/// every match in the transcript.
+struct TranscriptSearchButton: View {
+    @Binding var query: String
+    @Binding var isOpen: Bool
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if isOpen {
+                TextField("Search transcript", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.custom(BundledFont.sansRegular, size: 13))
+                    .focused($focused)
+                    .frame(minWidth: 80, maxWidth: 180)
+                    .onExitCommand { query = ""; isOpen = false }
+                    .onAppear { focused = true }
+            }
+            IconButton(isOpen ? "Close search" : "Search transcript",
+                       systemImage: isOpen ? "xmark" : "magnifyingglass", shortcut: "⌘F") {
+                if isOpen { query = "" }
+                isOpen.toggle()
+            }
+            .keyboardShortcut("f", modifiers: .command)
+        }
+        .padding(.leading, isOpen ? 10 : 0)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.md).fill(isOpen ? Theme.canvas : .clear))
+    }
+}
+
+/// The same black bar for a plain movie (a rendered clip): play, time,
+/// scrubber, mute and speed.
+struct MoviePlayerBar: View {
+    let player: AVPlayer
+    @State private var time = 0.0
+    @State private var duration = 0.0
+    @State private var playing = false
+    @State private var muted = false
+    @State private var speed: Float = 1
+    @State private var observer: Any?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Button { playing ? player.pause() : player.play() } label: {
+                Image(systemName: playing ? "pause.fill" : "play.fill")
+                    .font(.system(size: 17, weight: .semibold)).frame(width: 24, height: 24).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(playing ? "Pause" : "Play")
+            Text("\(PlayheadBadge.stamp(time))  /  \(PlayheadBadge.stamp(duration))")
+                .font(.system(size: 13, weight: .medium).monospacedDigit()).fixedSize()
+            Scrubber(value: time, total: duration, tint: .white) { value, _ in
+                time = value
+                player.seek(to: CMTime(seconds: value, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+            }
+            .frame(minWidth: 60)
+            Button { muted.toggle(); player.isMuted = muted } label: {
+                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .font(.system(size: 14)).frame(width: 22, height: 22).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(muted ? "Unmute" : "Mute")
+            Menu {
+                ForEach([0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { rate in
+                    Button { speed = rate; player.defaultRate = rate; if playing { player.rate = rate } } label: {
+                        MenuCheck(rate == 1 ? "1×" : String(format: "%g×", rate), isOn: rate == speed)
+                    }
+                }
+            } label: {
+                Text(speed == 1 ? "1×" : String(format: "%g×", speed)).font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
+            }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+            .accessibilityLabel("Speed")
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, Theme.Space.md)
+        .frame(height: 46)
+        .background(Color.black.opacity(0.92))
+        .task {
+            if let item = player.currentItem, let seconds = try? await item.asset.load(.duration).seconds, seconds.isFinite {
+                duration = seconds
+            }
+            observer = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 10), queue: .main) { now in
+                MainActor.assumeIsolated {
+                    time = now.seconds.isFinite ? now.seconds : 0
+                    playing = player.rate != 0
+                }
+            }
+        }
+        .onDisappear { if let observer { player.removeTimeObserver(observer) }; observer = nil }
+    }
+}

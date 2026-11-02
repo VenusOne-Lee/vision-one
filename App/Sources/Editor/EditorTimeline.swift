@@ -148,7 +148,8 @@ struct EditorTimeline: View {
                        x: x, width: width, height: trackHeight)
         }
         .overlay(alignment: .topLeading) {
-            TimelinePlayhead(x: x(model.sourceTime))
+            TimelinePlayhead(x: x(model.sourceTime),
+                             label: PlayheadBadge.stamp(model.edits.outputTime(forSource: model.sourceTime) ?? 0))
                 .gesture(scrub(width: width))
         }
         .coordinateSpace(.named("timeline"))
@@ -483,6 +484,7 @@ struct TimelineTrack: View, Equatable {
 /// to grab.
 struct TimelinePlayhead: View {
     let x: CGFloat
+    var label: String?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -490,14 +492,38 @@ struct TimelinePlayhead: View {
                 .fill(Theme.text)
                 .frame(width: 2)
                 .frame(maxHeight: .infinity)
-            PlayheadHandle()
-                .fill(Theme.text)
-                .frame(width: 13, height: 15)
+            if let label {
+                PlayheadBadge(text: label)
+            } else {
+                PlayheadHandle()
+                    .fill(Theme.text)
+                    .frame(width: 13, height: 15)
+            }
         }
-        .frame(width: 18)
+        .frame(width: label == nil ? 18 : 56)
         .contentShape(Rectangle())
-        .offset(x: x - 9)
+        .offset(x: x - (label == nil ? 9 : 28))
         .help("Drag to scrub")
+    }
+}
+
+/// "00:24" in an ink pill on top of the playhead.
+struct PlayheadBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.custom(BundledFont.monoMedium, size: 11))
+            .foregroundStyle(Theme.paper)
+            .padding(.horizontal, 6)
+            .frame(height: 18)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.text))
+            .fixedSize()
+    }
+
+    static func stamp(_ seconds: Double) -> String {
+        let s = max(0, Int(seconds))
+        return String(format: "%02d:%02d", s / 60, s % 60)
     }
 }
 

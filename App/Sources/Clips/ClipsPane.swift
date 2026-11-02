@@ -531,8 +531,11 @@ private struct DeliveryMovie: View {
     var body: some View {
         Group {
             if let player {
-                if workspaceRender { VerificationPlayerFrame(player: player) }
-                else { VideoPlayer(player: player) }
+                VStack(spacing: 0) {
+                    PlayerSurface(player: player)
+                        .onTapGesture { player.rate == 0 ? player.play() : player.pause() }
+                    MoviePlayerBar(player: player)
+                }
             }
             else { ProgressView() }
         }

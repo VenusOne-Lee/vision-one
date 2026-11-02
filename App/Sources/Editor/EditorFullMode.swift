@@ -37,6 +37,8 @@ struct EditorFullMode<Rail: View>: View {
     @State private var comparing = false
     @State private var compactPane = "Canvas"
     @State private var timelineOverride: Bool?
+    @State private var search = ""
+    @State private var searching = false
 
     static var holdToTalk: Duration { .milliseconds(350) }
 
@@ -260,6 +262,7 @@ struct EditorFullMode<Rail: View>: View {
                 }
                 .fixedSize()
                 Spacer(minLength: 0)
+                if aside == .transcript { TranscriptSearchButton(query: $search, isOpen: $searching) }
                 if asides.count > 2 {
                     Menu {
                         ForEach(asides.filter { $0 != .transcript && $0 != .changes }) { pane in
@@ -281,7 +284,7 @@ struct EditorFullMode<Rail: View>: View {
                 RedoCard(model: model, sentence: target).id(target.start)
             }
             switch aside {
-            case .transcript: TranscriptPane(model: model)
+            case .transcript: TranscriptPane(model: model, search: search)
             case .changes: ChangesPanel(model: model, effects: model.effects)
             case .steps: AgentStepsPane(model: model)
             case .clips:
@@ -589,6 +592,8 @@ struct TimelineResizeBar: View {
 /// The transcript, or why it isn't there yet.
 struct TranscriptPane: View {
     @ObservedObject var model: EditorModel
+    var search = ""
+    @StateObject private var selection = TranscriptSelection()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -641,7 +646,13 @@ struct TranscriptPane: View {
                                  isError: false)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    TranscriptTextView(model: model)
+                    TranscriptTextView(model: model, selection: selection, search: search)
+                        .overlay(alignment: .topLeading) {
+                            if let words = selection.words, let anchor = selection.anchor {
+                                CutWordsButton(model: model, words: words)
+                                    .offset(x: min(anchor.x, 260), y: anchor.y)
+                            }
+                        }
                 }
             }
         }
@@ -685,5 +696,64 @@ private struct SteerLogStrip: View {
         }
         .padding(10)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+}
+
+/// Floats under picked transcript words: Cut words, with a menu for
+/// marking them as a proposal or taking out the fillers inside.
+struct CutWordsButton: View {
+    @ObservedObject var model: EditorModel
+    let words: ClosedRange<Int>
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button { model.toggleCut(words: words) } label: {
+                Label("Cut words", systemImage: "scissors")
+                    .font(.custom(BundledFont.sansMedium, size: 13))
+                    .padding(.leading, 12).padding(.trailing, 10)
+                    .frame(height: 34)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Cut the picked words (Delete)")
+            Rectangle().fill(Theme.line).frame(width: 1, height: 20)
+            Menu {
+                Button("Mark as proposed") { model.proposeCut(words: words) }
+                Button("Remove fillers here") { model.acceptFillers(in: words) }
+            } label: {
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                    .frame(width: 30, height: 34).contentShape(Rectangle())
+            }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+            .accessibilityLabel("More ways to cut")
+        }
+        .foregroundStyle(Theme.text)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.lg).fill(Theme.paper))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg).strokeBorder(Theme.lineStrong, lineWidth: Theme.Stroke.hairline))
+        .floatShadow()
+        .fixedSize()
+    }
+}
+
+extension EditorModel {
+    /// Leaves the picked words in, with a dashed cut over them to decide later.
+    func proposeCut(words range: ClosedRange<Int>) {
+        guard let span = EditList.span(deleting: range, of: wordSpans, sourceDuration: edits.sourceDuration) else { return }
+        var next = edits
+        next.add(Cut(span: span, reason: Cut.Reason.word, state: .proposed))
+        apply(next, actionName: "Propose Cut")
+    }
+
+    /// Accepts the suggested filler cuts inside the picked words.
+    func acceptFillers(in range: ClosedRange<Int>) {
+        guard range.upperBound < wordSpans.count else { return }
+        let start = wordSpans[range.lowerBound].start, end = wordSpans[range.upperBound].end
+        var next = edits
+        for cut in next.cuts where cut.state == .proposed && cut.reason == Cut.Reason.filler
+            && cut.start < end && cut.end > start {
+            next.setState(.accepted, for: cut.id)
+        }
+        guard next != edits else { NSSound.beep(); return }
+        apply(next, actionName: "Remove Fillers")
     }
 }
