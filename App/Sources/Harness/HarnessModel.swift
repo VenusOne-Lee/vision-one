@@ -24,8 +24,8 @@ enum HarnessMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .tasks: return "Tasks"
-        case .editor: return "Editor"
+        case .tasks: return "Task"
+        case .editor: return "Edit"
         case .sound: return "Sound"
         }
     }
