@@ -249,7 +249,7 @@ enum CameraOnlyError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noAccess:
-            return "Camera only needs the camera. Turn on Camera for Vision One in System Settings → Privacy & Security → Camera, then try again."
+            return "Camera only needs the camera. Choose Allow when macOS asks, then press Record again."
         case .noCamera:
             return "No camera found. Plug one in, or bring your iPhone close for Continuity Camera."
         case .cameraUnavailable:

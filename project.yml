@@ -81,3 +81,12 @@ targets:
         # App/Resources/Assets.xcassets; source SVGs in docs/icon.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SPARKLE_PUBLIC_KEY: ""
+      # Builds made on a Mac are "Vision One Dev", a separate app beside
+      # the installed release. macOS ties each permission to a bundle id
+      # and signature, so sharing the release's id with an Apple
+      # Development signature made switches look on but do nothing.
+      # Releases build Release and keep the real id.
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: za.co.versionone.visionone.dev
+          APP_DISPLAY_NAME: Vision One Dev

@@ -1,10 +1,12 @@
 import AppKit
+import ApplicationServices
 import AVFoundation
 import CoreGraphics
 import ScreenCaptureKit
 import VisionOneKit
 
-/// Reads and requests Screen Recording, Microphone and Camera access, and keeps
+/// Reads and requests Screen Recording, Microphone, Camera and
+/// Accessibility access, and keeps
 /// the checklist fresh while the setup window is open so it notices the
 /// moment access is turned on in System Settings.
 @MainActor
@@ -15,6 +17,7 @@ final class AccessCenter: ObservableObject {
 
     private var timer: Timer?
     private static let askedScreenKey = "askedForScreenRecording"
+    private static let askedAccessibilityKey = "askedForAccessibility"
     /// ScreenCaptureKit said yes while CGPreflight still says no.
     private var screenLive = false
     private var probing = false
@@ -23,7 +26,7 @@ final class AccessCenter: ObservableObject {
         let screen = Self.currentScreenState()
         checklist = AccessChecklist(
             states: [.screen: screen, .microphone: Self.currentState(for: .audio),
-                     .camera: Self.currentState(for: .video)],
+                     .camera: Self.currentState(for: .video), .accessibility: Self.currentAccessibilityState()],
             screenAtLaunch: screen
         )
     }
@@ -32,6 +35,7 @@ final class AccessCenter: ObservableObject {
         checklist.states[.screen] = screenLive ? .granted : Self.currentScreenState()
         checklist.states[.microphone] = Self.currentState(for: .audio)
         checklist.states[.camera] = Self.currentState(for: .video)
+        checklist.states[.accessibility] = Self.currentAccessibilityState()
         probeScreen()
     }
 
@@ -59,15 +63,29 @@ final class AccessCenter: ObservableObject {
     /// adds this copy afresh and opens System Settings on it, so the only
     /// thing left is one switch.
     private func resetScreenAccess() {
-        if let id = Bundle.main.bundleIdentifier {
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-            task.arguments = ["reset", "ScreenCapture", id]
-            if (try? task.run()) != nil { task.waitUntilExit() }
-        }
+        Self.resetEntry(for: .screen)
         CGRequestScreenCaptureAccess()
         openSettings(for: .screen)
         refresh()
+    }
+
+    /// Removes Vision One's entry for `kind` from macOS's privacy list.
+    /// A switch tied to an older or differently signed copy looks on but
+    /// does nothing, and a "Don't Allow" can't be asked again; after this
+    /// macOS treats Vision One as new and asks once more.
+    private static func resetEntry(for kind: AccessKind) {
+        guard let id = Bundle.main.bundleIdentifier else { return }
+        let service: String
+        switch kind {
+        case .screen: service = "ScreenCapture"
+        case .microphone: service = "Microphone"
+        case .camera: service = "Camera"
+        case .accessibility: service = "Accessibility"
+        }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        task.arguments = ["reset", service, id]
+        if (try? task.run()) != nil { task.waitUntilExit() }
     }
 
     /// Checks once a second while the setup window is open.
@@ -84,8 +102,9 @@ final class AccessCenter: ObservableObject {
         timer = nil
     }
 
-    /// Shows the system prompt the first time. After that only System
-    /// Settings can change it, so it opens the right page there.
+    /// Shows the system prompt the first time. Once off, it clears the
+    /// old entry and asks again: macOS's own prompt for the mic and camera,
+    /// one switch in System Settings for Screen Recording and Accessibility.
     func request(_ kind: AccessKind) {
         switch (kind, checklist.state(of: kind)) {
         case (_, .granted):
@@ -106,10 +125,32 @@ final class AccessCenter: ObservableObject {
                     CaptureDevices.shared.refresh()
                 }
             }
+        case (.accessibility, .notAsked):
+            UserDefaults.standard.set(true, forKey: Self.askedAccessibilityKey)
+            // Shows macOS's prompt, which adds Vision One to the list.
+            _ = Self.askForAccessibility()
+            refresh()
         case (.screen, .denied):
             resetScreenAccess()
-        case (_, .denied):
-            openSettings(for: kind)
+        case (.accessibility, .denied):
+            Self.resetEntry(for: .accessibility)
+            _ = Self.askForAccessibility()
+            openSettings(for: .accessibility)
+            refresh()
+        case (.microphone, .denied), (.camera, .denied):
+            Self.resetEntry(for: kind)
+            let asked = Date()
+            AVCaptureDevice.requestAccess(for: kind == .camera ? .video : .audio) { granted in
+                Task { @MainActor in
+                    AccessCenter.shared.refresh()
+                    if kind == .camera { CaptureDevices.shared.refresh() }
+                    // An answer this fast means macOS showed no prompt:
+                    // fall back to the switch in System Settings.
+                    if !granted, Date().timeIntervalSince(asked) < 0.5 {
+                        AccessCenter.shared.openSettings(for: kind)
+                    }
+                }
+            }
         }
     }
 
@@ -119,6 +160,7 @@ final class AccessCenter: ObservableObject {
         case .screen: pane = "Privacy_ScreenCapture"
         case .microphone: pane = "Privacy_Microphone"
         case .camera: pane = "Privacy_Camera"
+        case .accessibility: pane = "Privacy_Accessibility"
         }
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") {
             NSWorkspace.shared.open(url)
@@ -159,6 +201,17 @@ final class AccessCenter: ObservableObject {
     private static func currentScreenState() -> AccessState {
         if CGPreflightScreenCaptureAccess() { return .granted }
         return UserDefaults.standard.bool(forKey: askedScreenKey) ? .denied : .notAsked
+    }
+
+    /// AXIsProcessTrusted is live: a switch turned on shows at once.
+    private static func currentAccessibilityState() -> AccessState {
+        if AXIsProcessTrusted() { return .granted }
+        return UserDefaults.standard.bool(forKey: askedAccessibilityKey) ? .denied : .notAsked
+    }
+
+    private static func askForAccessibility() -> Bool {
+        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        return AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
     private static func currentState(for media: AVMediaType) -> AccessState {

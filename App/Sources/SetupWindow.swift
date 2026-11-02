@@ -135,8 +135,8 @@ struct AccessOverview: View {
                     AccessRow(kind: kind, state: access.checklist.state(of: kind)) {
                         access.request(kind)
                     } openSettings: {
-                        // Screen Recording resets a stale entry first.
-                        if kind == .screen { access.request(kind) } else { access.openSettings(for: kind) }
+                        // Clears a stale entry first, then asks again.
+                        access.request(kind)
                     }
                 }
             }
@@ -181,7 +181,7 @@ private struct AccessRow: View {
                 Text(kind.title).font(.system(size: 13, weight: .semibold))
                 Text(detail)
                     .font(.system(size: 12))
-                    .foregroundStyle(state == .denied ? Theme.error : Theme.textMuted)
+                    .foregroundStyle(Theme.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
@@ -191,7 +191,8 @@ private struct AccessRow: View {
             case .notAsked:
                 Button("Allow", action: allow).buttonStyle(PillButtonStyle(kind: .primary))
             case .denied:
-                Button("Open Settings", action: openSettings).buttonStyle(PillButtonStyle(kind: .secondary))
+                Button(kind.needsSettingsSwitch ? "Open Settings" : "Ask again", action: openSettings)
+                    .buttonStyle(PillButtonStyle(kind: .secondary))
             }
         }
         .padding(Theme.Space.md)
@@ -208,7 +209,11 @@ private struct AccessRow: View {
         switch state {
         case .granted: return kind.why
         case .notAsked: return kind.why
-        case .denied: return "Turned off. Switch on Vision One in System Settings."
+        case .denied:
+            return kind.needsSettingsSwitch
+                ? "Turned off. Open Settings and switch on Vision One."
+                : "Turned off. Ask again and choose Allow."
+
         }
     }
 }

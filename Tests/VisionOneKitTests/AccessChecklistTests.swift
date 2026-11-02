@@ -73,6 +73,18 @@ final class OnboardingFlowTests: XCTestCase {
         XCTAssertFalse(OnboardingFlow(checklist: list, welcomeSeen: true).isReady(list))
     }
 
+    func testAccessibilityIsNeverASetupStepOrRequired() {
+        XCTAssertFalse(AccessKind.accessibility.isInSetup)
+        XCTAssertTrue(AccessKind.accessibility.isOptional)
+        let flow = OnboardingFlow(checklist: fresh, welcomeSeen: false)
+        XCTAssertFalse(flow.steps.contains(.access(.accessibility)))
+        XCTAssertTrue(OnboardingFlow(checklist: ready, welcomeSeen: true).isOverview)
+    }
+
+    func testOnlyScreenAndAccessibilityNeedTheSettingsSwitch() {
+        XCTAssertEqual(AccessKind.allCases.filter(\.needsSettingsSwitch), [.screen, .accessibility])
+    }
+
     func testReturningUserLandsOnWhatIsMissing() {
         let list = AccessChecklist(states: [.screen: .granted, .microphone: .denied, .camera: .notAsked],
                                    screenAtLaunch: .granted)

@@ -68,11 +68,11 @@ struct AccessStep: View {
                 if state == .denied {
                     // Screen Recording reads as "denied" as soon as it's been
                     // asked, so it gets a calm note rather than an error.
-                    Text(kind == .screen
+                    Text(kind.needsSettingsSwitch
                          ? "Press Open System Settings and switch on Vision One. This moves on by itself."
-                         : "Switch on Vision One in System Settings. This moves on by itself.")
+                         : "It's off right now. Press Ask again and choose Allow.")
                         .font(.system(size: 12))
-                        .foregroundStyle(kind == .screen ? Theme.textMuted : Theme.error)
+                        .foregroundStyle(Theme.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -109,9 +109,13 @@ struct AccessStep: View {
 
     private var dismissTitle: String { kind.isOptional ? "Skip" : "Later" }
     private var dismissLabel: String { kind.isOptional ? "Skip \(kind.title)" : "Set up later" }
-    private var allowTitle: String { state == .denied ? "Open System Settings" : "Allow" }
+    private var allowTitle: String {
+        guard state == .denied else { return "Allow" }
+        return kind.needsSettingsSwitch ? "Open System Settings" : "Ask again"
+    }
     private var allowLabel: String {
-        state == .denied ? "Open System Settings for \(kind.title)" : "Allow \(kind.title)"
+        guard state == .denied else { return "Allow \(kind.title)" }
+        return kind.needsSettingsSwitch ? "Open System Settings for \(kind.title)" : "Ask again for \(kind.title)"
     }
 
     private var title: String {
@@ -119,6 +123,7 @@ struct AccessStep: View {
         case .screen: return "Let Vision One see your screen"
         case .microphone: return "Let Vision One hear you"
         case .camera: return "Show your face, if you like"
+        case .accessibility: return "Let Vision One use your Mac for you"
         }
     }
 }

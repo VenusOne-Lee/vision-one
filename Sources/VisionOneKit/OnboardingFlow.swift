@@ -22,7 +22,7 @@ public struct OnboardingFlow: Equatable, Sendable {
 
     public init(checklist: AccessChecklist, welcomeSeen: Bool, askScreen: Bool = true) {
         self.askScreen = askScreen
-        let kinds = AccessKind.allCases.filter { askScreen || $0 != .screen }
+        let kinds = AccessKind.allCases.filter { $0.isInSetup && (askScreen || $0 != .screen) }
         let needed = kinds.filter { !$0.isOptional }
         if welcomeSeen && needed.allSatisfy({ checklist.state(of: $0) == .granted }) {
             self.steps = []
