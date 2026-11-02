@@ -14,6 +14,19 @@ extension EnvironmentValues {
     }
 }
 
+/// Verification windows draw far off every screen and never take focus,
+/// so a local run doesn't flash on someone's display. Bitmap caching
+/// still renders them.
+@MainActor
+enum VerificationWindow {
+    static func hide(_ window: NSWindow) {
+        window.setFrameOrigin(NSPoint(x: -40_000, y: -40_000))
+        window.hasShadow = false
+        window.ignoresMouseEvents = true
+        window.collectionBehavior.insert(.transient)
+    }
+}
+
 @MainActor
 enum WorkspaceRenderEvidence {
     static weak var captionOwner: DeliveryCaptionControl?
@@ -235,6 +248,7 @@ enum WorkspaceVerification {
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
+        VerificationWindow.hide(window)
         window.orderFrontRegardless()
         defer {
             model.workspace?.close()
@@ -299,6 +313,7 @@ enum WorkspaceVerification {
         window.isReleasedWhenClosed = false
         window.contentView = host
         window.setContentSize(size)
+        VerificationWindow.hide(window)
         window.orderFrontRegardless()
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
         // Let production .task loads, SwiftUI layout and AppKit drawing settle.

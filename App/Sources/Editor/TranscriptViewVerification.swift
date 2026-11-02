@@ -130,6 +130,7 @@ enum TranscriptViewVerification {
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
+        VerificationWindow.hide(window)
         window.orderFrontRegardless()
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
         try await wait("A transcript did not mount") { textView(in: host)?.string.contains("Alpha") == true }

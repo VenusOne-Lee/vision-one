@@ -39,6 +39,7 @@ enum PostDraftVerification {
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
+        VerificationWindow.hide(window)
         window.orderFrontRegardless()
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
         let first = try await mounted(fixture, take: a)

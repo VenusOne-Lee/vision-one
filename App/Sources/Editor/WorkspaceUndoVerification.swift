@@ -47,7 +47,8 @@ enum WorkspaceUndoVerification {
         for _ in 0..<100 {
             if NSApp.isActive && window.isKeyWindow && NSApp.keyWindow === window { break }
             NSApp.activate(ignoringOtherApps: true)
-            window.orderFrontRegardless()
+            VerificationWindow.hide(window)
+        window.orderFrontRegardless()
             window.makeKeyAndOrderFront(nil)
             try await Task.sleep(for: .milliseconds(50))
         }
