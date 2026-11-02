@@ -129,8 +129,17 @@ struct WorkspaceMoreMenu: View {
             }
             if model.workspace != nil, model.mode == .tasks {
                 Section("Review") {
-                    ForEach([PanelKind.clips, .thumbnail, .post], id: \.self) { kind in
+                    ForEach([PanelKind.video, .clips, .thumbnail, .post, .sound, .captions, .formats], id: \.self) { kind in
                         Button(kind.title) { model.updateLayout { $0.show(kind) } }
+                    }
+                    Menu("Show below the video") {
+                        ForEach([PanelKind.changes, .clips, .sound, .post, .captions, .thumbnail, .formats], id: \.self) { kind in
+                            Button(kind.title) { model.updateLayout { $0.show(.video); $0.splitWith(kind) } }
+                        }
+                        if model.layout.split != nil {
+                            Divider()
+                            Button("Nothing below") { model.updateLayout { $0.toggleSplit() } }
+                        }
                     }
                     Button(model.layout.isHidden ? "Show review" : "Hide review") {
                         model.updateLayout { $0.isHidden.toggle() }
@@ -166,7 +175,8 @@ struct WorkspaceMoreMenu: View {
                 .frame(width: Theme.Size.controlLarge, height: Theme.Size.controlLarge)
                 .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("More")

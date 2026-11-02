@@ -28,30 +28,27 @@ struct TaskThreadView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Theme.Space.md) {
                         let activity = task.cells.filter { isActivity($0) }
-                        ForEach(task.cells.filter { !isActivity($0) }) { cell in
+                        ForEach(task.cells.filter { !isActivity($0) && !isFirstTake($0) }) { cell in
                             ThreadCellView(cell: cell, task: task, model: model)
                                 .id(cell.id)
                         }
-                        if model.layout.selected == .clips, let workspace = model.workspace {
-                            DeliveryReview(workspace: workspace)
-                        }
-                        if !activity.isEmpty {
-                            DisclosureGroup("\(activity.count) completed updates", isExpanded: $showActivity) {
-                                ForEach(activity) { cell in
-                                    ThreadCellView(cell: cell, task: task, model: model)
-                                }
+                        if let workspace = model.workspace {
+                            if [.clips, .thumbnail, .post].contains(model.layout.selected) {
+                                DeliveryReview(workspace: workspace)
+                            } else if workspace.editor.phase == .ready {
+                                TaskProposals(editor: workspace.editor,
+                                              review: { reviewChanges() },
+                                              captions: { model.updateLayout { $0.show(.captions) } })
                             }
-                            .textStyle(.caption)
-                            .foregroundStyle(Theme.textMuted)
                         }
-                        if task.cells.count <= 2, task.take != nil { firstSteps }
+                        if !activity.isEmpty { completedSteps(activity) }
                         StatusCell(snapshot: model.snapshot, task: task) { model.stopRunning() }
                         if !task.queued.isEmpty {
                             QueuedCell(asks: task.queued) { model.editQueued(at: $0, to: nil) }
                         }
                         Color.clear.frame(height: 1).id("end")
                     }
-                    .frame(maxWidth: 720, alignment: .leading)
+                    .frame(maxWidth: 640, alignment: .leading)
                     .padding(.horizontal, Theme.Space.lg)
                     .padding(.vertical, Theme.Space.lg)
                     .frame(maxWidth: .infinity)
@@ -62,7 +59,7 @@ struct TaskThreadView: View {
                 .onAppear { proxy.scrollTo("end", anchor: .bottom) }
             }
             Composer(model: model)
-                .frame(maxWidth: 720)
+                .frame(maxWidth: 640)
                 .padding(.horizontal, Theme.Space.lg)
                 .padding(.bottom, Theme.Space.md)
                 .frame(maxWidth: .infinity)
@@ -70,13 +67,42 @@ struct TaskThreadView: View {
         .background(Theme.paper)
     }
 
-    /// Before any agent has run: the asks most people start with, dashed
-    /// because they're only suggestions.
-    private var firstSteps: some View {
+    private func isFirstTake(_ cell: TaskCell) -> Bool {
+        if case let .take(folder) = cell.kind { return folder == task.takeFolders.first }
+        return false
+    }
+
+    /// Changes in the review column, Transcript | Changes set to Changes.
+    private func reviewChanges() {
+        UserDefaults.standard.set(EditorAside.changes.rawValue, forKey: "editorPanel.pane")
+        model.updateLayout { $0.isHidden = false; $0.show(.video) }
+    }
+
+    /// "✓ 3 completed steps", folded.
+    private func completedSteps(_ activity: [TaskCell]) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            Text("Try").textStyle(.label).foregroundStyle(Theme.textFaint)
-            FlowChips(chips: ["Make it 60 seconds", "/clips 3", "/captions", "/share Version One"]) { chip in
-                model.send(chip)
+            Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
+            Button { showActivity.toggle() } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle").font(.system(size: 17))
+                    Text("\(activity.count) completed \(activity.count == 1 ? "step" : "steps")")
+                        .font(.custom(BundledFont.sansMedium, size: 14))
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .rotationEffect(.degrees(showActivity ? 180 : 0))
+                }
+                .foregroundStyle(Theme.text)
+                .padding(.horizontal, Theme.Space.sm)
+                .frame(height: 36)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(showActivity ? "Shown" : "Hidden")
+            if showActivity {
+                ForEach(activity) { cell in
+                    ThreadCellView(cell: cell, task: task, model: model)
+                }
             }
         }
     }

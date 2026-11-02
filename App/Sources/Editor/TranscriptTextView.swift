@@ -27,7 +27,7 @@ struct TranscriptTextView: NSViewRepresentable {
         textView.isRichText = true
         textView.drawsBackground = true
         textView.backgroundColor = NSColor(Theme.paper)
-        textView.textContainerInset = NSSize(width: 20, height: 16)
+        textView.textContainerInset = NSSize(width: 26, height: 20)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
@@ -102,6 +102,17 @@ struct TranscriptTextView: NSViewRepresentable {
         /// so it can run every frame.
         private func updatePlayingWord(storage: NSTextStorage) {
             let playing = model.playingWordIndex
+            if let layout = textView?.layoutManager as? DashedLayoutManager {
+                let paragraph = playing.flatMap { index in
+                    index < wordRanges.count
+                        ? storage.attribute(.transcriptParagraph, at: wordRanges[index].location, effectiveRange: nil) as? Int
+                        : nil
+                } ?? (wordRanges.isEmpty ? nil : 0)
+                if layout.activeParagraph != paragraph {
+                    layout.activeParagraph = paragraph
+                    textView?.needsDisplay = true
+                }
+            }
             guard playing != underlined else { return }
             storage.beginEditing()
             if let old = underlined, old < wordRanges.count {
@@ -170,6 +181,7 @@ struct TranscriptTextView: NSViewRepresentable {
 @MainActor
 enum TranscriptRenderer {
     static let minimumPause = 0.6
+    static let textIndent: CGFloat = 76
 
     static func render(model: EditorModel) -> (NSAttributedString, [NSRange]) {
         let text = NSMutableAttributedString()
@@ -177,9 +189,13 @@ enum TranscriptRenderer {
         guard let transcript = model.transcript else { return (text, ranges) }
         let marks = model.wordMarks
 
+        // Timestamp at the left, the paragraph hanging beside it.
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineHeightMultiple = 1.5
-        paragraph.paragraphSpacing = 14
+        paragraph.lineHeightMultiple = 1.35
+        paragraph.paragraphSpacing = 18
+        paragraph.tabStops = [NSTextTab(textAlignment: .left, location: TranscriptRenderer.textIndent)]
+        paragraph.defaultTabInterval = TranscriptRenderer.textIndent
+        paragraph.headIndent = TranscriptRenderer.textIndent
         let serif = Theme.transcriptFont(size: 17)
         let base: [NSAttributedString.Key: Any] = [
             .font: serif,
@@ -187,6 +203,8 @@ enum TranscriptRenderer {
             .paragraphStyle: paragraph,
         ]
         let mono = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        let stampFont = NSFont(name: BundledFont.monoRegular, size: 13)
+            ?? NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
         // Words re-said in an AI copy of the voice, always labelled.
         let fixes = Dictionary(model.voiceEdits.fixes.map { ($0.wordID, $0) }, uniquingKeysWith: { _, last in last })
 
@@ -194,10 +212,18 @@ enum TranscriptRenderer {
         var previousEnd: Double?
         for (s, segment) in transcript.segments.enumerated() {
             if s > 0 { text.append(NSAttributedString(string: "\n", attributes: base)) }
-            // Paragraph timecode.
-            text.append(NSAttributedString(string: Timecode.string(from: segment.start) + "\n", attributes: [
-                .font: mono, .foregroundColor: NSColor(Theme.textMuted), .paragraphStyle: paragraph,
+            let paragraphStart = text.length
+            // Paragraph timecode, "00:24", then a tab to the text column.
+            let seconds = max(0, Int(segment.start.rounded(.down)))
+            text.append(NSAttributedString(string: String(format: "%02d:%02d", seconds / 60, seconds % 60), attributes: [
+                .font: stampFont, .foregroundColor: NSColor(Theme.textMuted), .paragraphStyle: paragraph,
+                .transcriptStamp: s, .baselineOffset: 2,
             ]))
+            text.append(NSAttributedString(string: "\t", attributes: base))
+            defer {
+                text.addAttribute(.transcriptParagraph, value: s,
+                                  range: NSRange(location: paragraphStart, length: text.length - paragraphStart))
+            }
             for word in segment.words {
                 if let previousEnd, word.start - previousEnd >= minimumPause {
                     let pause = TimeSpan(start: previousEnd, end: word.start)
@@ -259,6 +285,10 @@ extension NSAttributedString.Key {
     /// Draws a dashed rounded outline around the run: the design's mark
     /// for "proposed, not done yet".
     static let dashedOutline = NSAttributedString.Key("VisionOneDashedOutline")
+    /// The segment a run belongs to, so the playing paragraph can be shaded.
+    static let transcriptParagraph = NSAttributedString.Key("VisionOneTranscriptParagraph")
+    /// A paragraph's timestamp, outlined when its paragraph is playing.
+    static let transcriptStamp = NSAttributedString.Key("VisionOneTranscriptStamp")
 }
 
 enum DashedOutline: Int {
@@ -269,10 +299,40 @@ enum DashedOutline: Int {
 
 /// Draws the dashed outlines after the normal background.
 final class DashedLayoutManager: NSLayoutManager {
+    /// The segment being played: a soft block behind it, a dashed box
+    /// round its timestamp.
+    var activeParagraph: Int?
+
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
-        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
-        guard let storage = textStorage, let container = textContainers.first else { return }
+        guard let storage = textStorage, let container = textContainers.first else {
+            return super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+        }
         let characters = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        if let activeParagraph {
+            storage.enumerateAttribute(.transcriptParagraph, in: characters) { value, range, _ in
+                guard value as? Int == activeParagraph else { return }
+                let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                var box = boundingRect(forGlyphRange: glyphs, in: container)
+                box.origin.x = 0
+                box.size.width = container.size.width
+                let path = NSBezierPath(roundedRect: box.offsetBy(dx: origin.x, dy: origin.y).insetBy(dx: -8, dy: -6),
+                                        xRadius: 8, yRadius: 8)
+                NSColor(Theme.canvas).setFill()
+                path.fill()
+            }
+            storage.enumerateAttribute(.transcriptStamp, in: characters) { value, range, _ in
+                guard value as? Int == activeParagraph else { return }
+                let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                let rect = boundingRect(forGlyphRange: glyphs, in: container)
+                let path = NSBezierPath(roundedRect: rect.offsetBy(dx: origin.x, dy: origin.y).insetBy(dx: -5, dy: -1),
+                                        xRadius: 5, yRadius: 5)
+                path.lineWidth = 1
+                path.setLineDash([3, 2], count: 2, phase: 0)
+                NSColor(Theme.text).setStroke()
+                path.stroke()
+            }
+        }
+        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
         storage.enumerateAttribute(.dashedOutline, in: characters) { value, range, _ in
             guard let raw = value as? Int, let kind = DashedOutline(rawValue: raw) else { return }
             let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)

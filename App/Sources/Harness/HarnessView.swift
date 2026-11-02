@@ -247,6 +247,7 @@ struct HarnessView: View {
                                 range: 320...max(320, Double(geometry.size.width - 340)), inverted: true)
                             PanelHost(model: model, workspace: workspace) { fullPanel = $0 }
                                 .padding(.top, WindowChrome.titleBarHeight)
+                                .background(Theme.paper)
                                 .frame(width: stageWidth)
                                 .task(id: workspace.take.name) { await workspace.load() }
                         }
