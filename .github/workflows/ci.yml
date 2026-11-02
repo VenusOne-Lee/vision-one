@@ -21,10 +21,30 @@ jobs:
         run: xcodegen generate
 
       - name: Build app (unsigned)
+        id: native-build
         run: |
           xcodebuild -project VisionOne.xcodeproj -scheme VisionOne \
             -configuration Debug -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO build
+            CODE_SIGNING_ALLOWED=NO -derivedDataPath build/DerivedData build
+
+      - name: Verify actual rendered media
+        timeout-minutes: 10
+        run: |
+          'build/DerivedData/Build/Products/Debug/Vision One.app/Contents/MacOS/Vision One' --verify-media "$RUNNER_TEMP/vision-media"
+
+      - name: Render native workspace fixtures
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        timeout-minutes: 5
+        run: |
+          'build/DerivedData/Build/Products/Debug/Vision One.app/Contents/MacOS/Vision One' --verify-workspace "$RUNNER_TEMP/vision-media"
+
+      - name: Preserve media verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-verification
+          path: ${{ runner.temp }}/vision-media
+          if-no-files-found: ignore
 
   release-rehearsal-guard:
     # The release rehearsal signs with the real keys, so it must never be

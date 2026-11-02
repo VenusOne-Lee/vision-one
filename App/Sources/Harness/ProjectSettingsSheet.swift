@@ -34,13 +34,14 @@ struct ProjectSettingsSheet: View {
                     nameField
                     notesField
                     presetField
+                    mediaDefaultsField
                     sourcesField
                 }
                 .padding(.bottom, Theme.Space.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         })
-        .frame(width: 520, height: 620)
+        .frame(width: 520, height: min(620, max(340, (NSScreen.main?.visibleFrame.height ?? 800) - 120)))
         .foregroundStyle(Theme.text)
         .themed()
     }
@@ -94,6 +95,28 @@ struct ProjectSettingsSheet: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .fixedSize()
+        }
+    }
+
+    private var mediaDefaultsField: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.sm) {
+            sectionLabel("NEW VIDEO DEFAULTS")
+            TemplatePicker(selection: Binding(
+                get: { draft.mediaDefaults?.templateID ?? "" },
+                set: { id in
+                    var defaults = draft.mediaDefaults ?? ProjectMediaDefaults()
+                    defaults.templateID = id.isEmpty ? nil : id
+                    draft.mediaDefaults = defaults
+                }))
+            Toggle("Captions on new videos", isOn: Binding(
+                get: { draft.mediaDefaults?.captions ?? true },
+                set: { on in
+                    var defaults = draft.mediaDefaults ?? ProjectMediaDefaults()
+                    defaults.captions = on
+                    draft.mediaDefaults = defaults
+                })).toggleStyle(.ink)
+            Text("Applies when a recording or import first joins this project. Existing videos keep their edits and overrides.")
+                .textStyle(.caption).foregroundStyle(Theme.textMuted)
         }
     }
 

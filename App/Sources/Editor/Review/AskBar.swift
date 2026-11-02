@@ -24,46 +24,25 @@ final class AskModel: ObservableObject {
     func go(on editor: EditorModel) {
         let typed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty, !isRunning else { return }
-        let take = editor.take
-        // What it's for, as the Agents window picks it: the take's own
-        // plan, else the next purpose chosen, else a demo.
-        let next = UserDefaults.standard.string(forKey: "ai.nextPurpose").flatMap(Purpose.named) ?? .demo
-        let plan = TakePlan.load(for: take) ?? TakePlan(purpose: next)
-        let presetName = UserDefaults.standard.string(forKey: "ai.preset") ?? ""
-        let preset = PresetLibrary.standard.all().first { $0.name == presetName }
-        let brief = plan.purpose.brief(preset: preset)
-        // "/copy make a punchier version": try it in a copy, so the
-        // main cut stays safe, then ask for the rest there.
-        var ask = typed
-        if ask.lowercased().hasPrefix("/copy") {
-            let rest = String(ask.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
-            editor.versions.tryCopy(note: rest.isEmpty ? nil : rest)
-            guard !rest.isEmpty else {
-                text = ""
-                run = .done("Made \(editor.versions.main.name). The cut you had is kept as a copy; compare them from the version menu.")
-                return
-            }
-            ask = rest
-        }
-        if SilenceCut.isSilenceAsk(ask) {
+        if SilenceCut.isSilenceAsk(typed) {
             cutSilence(on: editor)
             return
         }
-        let goal = EditorAgent.Goal.parse(ask)
-        run = .running(goal.targetSeconds.map { "Cutting to about \(Timecode.short(from: $0))…" } ?? "Reading every sentence…")
-        let agent = EditorAgent(ladder: AIServices.shared.ladder())
-        Task { [weak self, weak editor] in
-            do {
-                let added = try await agent.run(on: take, brief: brief, goal: goal, energy: plan.energy)
-                editor?.pickUpOutsideCuts()
-                self?.run = .done(added.isEmpty
-                    ? "Every sentence earns its place, so there's nothing new to cut. To take out quiet parts, ask “cut the silence”."
-                    : "\(added.count) suggested \(added.count == 1 ? "cut" : "cuts"), dashed in Changes until you accept.")
-                if !added.isEmpty { self?.text = "" }
-            } catch {
-                self?.run = .failed(AgentsModel.message(for: error))
-            }
+        switch AskRouter.route(typed) {
+        case let .clarify(message):
+            run = .failed(message)
+        case .open:
+            HarnessModel.shared.open(editor.take, then: typed, mode: .editor)
+            text = ""
+            run = .done("Opened the requested tool for this task.")
+        case .plan:
+            // The task owns routing, plan approvals, retry/cancel, jobs and
+            // proposed results, including compound asks and alternate cuts.
+            HarnessModel.shared.open(editor.take, then: typed)
+            text = ""
+            run = .done("Review the plan and results in this task.")
         }
+
     }
 }
 
@@ -94,32 +73,43 @@ extension AskModel {
 /// ink-bordered capsule, with a small line saying what happened.
 struct AskBar: View {
     @ObservedObject var model: EditorModel
+    var placeholder = "Ask for an edit, or hold Space to talk…"
     @StateObject private var ask = AskModel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: Theme.Space.sm) {
-                Text("Ask")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-                    .fixedSize()
+            HStack(spacing: Theme.Space.md) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Theme.text)
+                    .accessibilityHidden(true)
                 TextField("Ask", text: $ask.text,
-                          prompt: Text("Make a 45 second TikTok, hook first"))
+                          prompt: Text(placeholder))
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(.custom(BundledFont.sansRegular, size: 14))
                     .labelsHidden()
                     .onSubmit { ask.go(on: model) }
                     .disabled(ask.isRunning)
-                Button("Go") { ask.go(on: model) }
-                    .buttonStyle(PillButtonStyle(kind: .primary))
-                    .disabled(ask.isRunning || ask.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .help("The Editor suggests cuts for what you asked. They arrive dashed in Changes.")
+                    .accessibilityLabel("Ask for an edit")
+                let empty = ask.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                Button { ask.go(on: model) } label: {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.paper)
+                        .frame(width: 34, height: 34)
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.lg)
+                            .fill(empty || ask.isRunning ? Theme.textFaint : Theme.text))
+                }
+                .buttonStyle(.plain)
+                .disabled(ask.isRunning || empty)
+                .accessibilityLabel("Send")
+                .help("The Editor suggests cuts for what you asked. They arrive dashed in Changes.")
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 5)
-            .padding(.vertical, 5)
-            .background(Theme.paper, in: Capsule())
-            .overlay(Capsule().strokeBorder(Theme.text, lineWidth: 1.5))
+            .padding(.leading, 18)
+            .padding(.trailing, 8)
+            .padding(.vertical, 8)
+            .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg).strokeBorder(Theme.lineStrong, lineWidth: Theme.Stroke.hairline))
             status
                 .padding(.horizontal, 14)
         }

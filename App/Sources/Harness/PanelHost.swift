@@ -13,13 +13,11 @@ struct PanelHost: View {
     var body: some View {
         let layout = model.layout
         VStack(spacing: 0) {
-            tabBar(layout)
-            Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
             if let selected = layout.selected {
                 if let split = layout.split {
                     GeometryReader { proxy in
                         VStack(spacing: 0) {
-                            PanelContent(kind: selected, workspace: workspace, model: model)
+                            panel(selected)
                                 .frame(height: proxy.size.height * layout.splitFraction)
                             DragDivider(axis: .horizontal, value: splitBinding(height: proxy.size.height),
                                         range: 0...Double(proxy.size.height))
@@ -29,82 +27,57 @@ struct PanelHost: View {
                         }
                     }
                 } else {
-                    PanelContent(kind: selected, workspace: workspace, model: model)
+                    panel(selected)
                         .frame(maxHeight: .infinity)
                 }
             } else {
-                EmptyState("No panels open", message: "Add the video, changes, clips or sound with +.")
+                panel(.video)
             }
         }
         .background(Theme.paper)
     }
 
+    /// The video with Transcript | Changes by default; Clips | Thumbnail |
+    /// Post as delivery; anything else (sound, captions, formats) with a
+    /// title and a way back to the video.
+    @ViewBuilder
+    private func panel(_ kind: PanelKind) -> some View {
+        switch kind {
+        case .video, .changes:
+            EditorPanel(model: workspace.editor, onExpand: { model.mode = .editor })
+                .onAppear {
+                    if kind == .changes {
+                        UserDefaults.standard.set(EditorAside.changes.rawValue, forKey: "editorPanel.pane")
+                    }
+                }
+        case .clips, .thumbnail, .post:
+            VStack(spacing: 0) {
+                SegmentBar(selection: Binding(get: { kind }, set: { next in model.updateLayout { $0.show(next) } }),
+                           options: [PanelKind.clips, .thumbnail, .post]) { $0.title }
+                    .padding(.horizontal, Theme.Space.md)
+                    .padding(.top, Theme.Space.md)
+                    .padding(.bottom, Theme.Space.sm)
+                PanelContent(kind: kind, workspace: workspace, model: model)
+            }
+        default:
+            VStack(spacing: 0) {
+                HStack(spacing: Theme.Space.sm) {
+                    Label(kind.title, systemImage: kind.symbol).textStyle(.headline)
+                    Spacer()
+                    Button("Back to video") { model.updateLayout { $0.show(.video) } }
+                        .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
+                }
+                .padding(.horizontal, Theme.Space.md)
+                .frame(height: Theme.Size.toolbar)
+                Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
+                PanelContent(kind: kind, workspace: workspace, model: model)
+            }
+        }
+    }
+
     private func splitBinding(height: CGFloat) -> Binding<Double> {
         Binding(get: { model.layout.splitFraction * Double(height) },
                 set: { value in model.updateLayout { $0.setSplitFraction(value / max(Double(height), 1)) } })
-    }
-
-    // MARK: Tabs
-
-    private func tabBar(_ layout: PanelLayout) -> some View {
-        HStack(spacing: 2) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 2) {
-                    ForEach(layout.tabs, id: \.self) { kind in
-                        PanelTab(kind: kind, isOn: kind == layout.selected, isSplit: kind == layout.split,
-                                 badge: badge(for: kind)) {
-                            model.updateLayout { $0.show(kind) }
-                        } close: {
-                            model.updateLayout { $0.close(kind) }
-                        }
-                        .draggable(kind.rawValue)
-                        .dropDestination(for: String.self) { items, _ in
-                            guard let raw = items.first, let moved = PanelKind(rawValue: raw),
-                                  let index = layout.tabs.firstIndex(of: kind) else { return false }
-                            model.updateLayout { $0.move(moved, to: index) }
-                            return true
-                        }
-                        .contextMenu {
-                            Button("Show below") { model.updateLayout { $0.splitWith(kind) } }
-                            Button("Fill the window") { expand(kind) }
-                            Divider()
-                            Button("Close") { model.updateLayout { $0.close(kind) } }
-                        }
-                    }
-                }
-            }
-            Menu {
-                ForEach(layout.addable, id: \.self) { kind in
-                    Button { model.updateLayout { $0.show(kind) } } label: {
-                        Label(kind.title, systemImage: kind.symbol)
-                    }
-                }
-            } label: {
-                Image(systemName: "plus").font(.system(size: 12, weight: .medium))
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .disabled(layout.addable.isEmpty)
-            .help("Add a panel")
-            IconButton(layout.split == nil ? "Split" : "Unsplit", systemImage: "rectangle.split.1x2",
-                       isOn: layout.split != nil) {
-                model.updateLayout { $0.toggleSplit() }
-            }
-            .disabled(layout.tabs.count < 2)
-            IconButton("Fill the window", systemImage: "arrow.up.left.and.arrow.down.right") {
-                if let selected = layout.selected { expand(selected) }
-            }
-            .disabled(layout.selected == nil)
-            IconButton("Hide panel", systemImage: "xmark", shortcut: "⌥⌘B") {
-                model.updateLayout { $0.isHidden = true }
-            }
-        }
-        .padding(.horizontal, Theme.Space.sm)
-        .frame(height: Theme.Size.toolbar)
     }
 
     private func splitHeader(_ kind: PanelKind) -> some View {
@@ -177,7 +150,8 @@ struct PanelContent: View {
             case .changes:
                 ChangesPanel(model: workspace.editor, effects: workspace.editor.effects)
             case .clips:
-                ClipsPane(model: workspace.clips)
+                DeliveryPanel(workspace: workspace, model: model)
+                    .id(workspace.take.folder)
             case .sound:
                 SoundPanelContent(model: workspace.editor)
             case .post:
@@ -269,9 +243,11 @@ struct CaptionsPanel: View {
     let take: Take
     @State private var settings = CaptionSettings()
     @State private var loaded = false
+    @State private var problem: String?
 
     var body: some View {
         ScrollView {
+            if let problem { Text(problem).textStyle(.caption).foregroundStyle(Theme.error).padding(Theme.Space.md) }
             CaptionControls(settings: $settings)
                 .padding(Theme.Space.md)
         }
@@ -280,7 +256,15 @@ struct CaptionsPanel: View {
             loaded = true
         }
         .onChange(of: settings) { _, value in
-            if loaded { try? take.saveCaptionSettings(value) }
+            guard loaded else { return }
+            do {
+                try take.saveCaptionSettings(value)
+                problem = nil
+                NotificationCenter.default.post(name: .takeStyleChanged, object: take.folder)
+            } catch { problem = "Couldn't save captions: \(error.localizedDescription)" }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .takeStyleChanged)) { note in
+            if note.object as? URL == take.folder { settings = take.loadCaptionSettings() }
         }
     }
 }

@@ -31,6 +31,8 @@ public struct ScriptFlag: Equatable, Sendable, Identifiable {
     /// A shorter or easier way to say it. Replaces `phrase` when set,
     /// otherwise the whole line. Nil when only a model can suggest one.
     public var suggestion: String?
+    /// Model rewrites replace the whole line, even when the original flag names a phrase.
+    public var suggestionReplacesLine = false
 
     public init(kind: Kind, line: Int, title: String, detail: String, phrase: String? = nil, suggestion: String? = nil) {
         self.kind = kind
@@ -333,6 +335,8 @@ public struct ScriptCoach: Sendable {
                          You coach people who record short product videos. Rewrite each numbered line so it is easy to say \
                          out loud in one breath: short words, under 18 words, no tongue-twisters, same meaning, \(tone.rawValue) tone. \
                          Keep names, links and prices exactly as written. If a line should be two sentences, write both.
+                         Return the complete replacement line in say, not just the flagged phrase.
+                         Copy each supplied line number exactly into line; do not renumber lines.
                          """,
                          input: input, format: .json(shape: #"[{"line": 2, "say": "See the queue before you leave."}]"#))
     }
@@ -343,11 +347,19 @@ public struct ScriptCoach: Sendable {
     }
 
     /// Model rewrites as suggestions on the flags of their line.
-    public func applying(_ rewrites: [Rewrite], to report: ScriptReport) -> ScriptReport {
+    public func applying(_ rewrites: [Rewrite], to report: ScriptReport, script: Script? = nil) -> ScriptReport {
         var report = report
-        for rewrite in rewrites where !rewrite.say.trimmingCharacters(in: .whitespaces).isEmpty {
-            for i in report.flags.indices where report.flags[i].line == rewrite.line && report.flags[i].phrase == nil {
-                report.flags[i].suggestion = rewrite.say
+        for rewrite in rewrites {
+            let replacement = rewrite.say.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !replacement.isEmpty else { continue }
+            if let script {
+                guard let line = script.lines.first(where: { $0.id == rewrite.line }),
+                      replacement != line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                else { continue }
+            }
+            for i in report.flags.indices where report.flags[i].line == rewrite.line {
+                report.flags[i].suggestion = replacement
+                report.flags[i].suggestionReplacesLine = true
             }
         }
         return report
@@ -359,11 +371,12 @@ extension Script {
     /// the whole line replaced. Audio tags elsewhere stay where they are.
     public func applying(_ flag: ScriptFlag) -> Script {
         guard let suggestion = flag.suggestion, let line = lines.first(where: { $0.id == flag.line }) else { return self }
-        let target = flag.phrase ?? line.text
+        let replacesPhrase = flag.phrase != nil && !flag.suggestionReplacesLine
+        let target = replacesPhrase ? flag.phrase! : line.text
         // Search from the line's own text so the same phrase in another line isn't touched.
         guard let lineRange = text.range(of: line.text) ?? text.range(of: target) else { return self }
         var newText = text
-        if flag.phrase != nil, let phraseRange = text.range(of: target, range: lineRange) {
+        if replacesPhrase, let phraseRange = text.range(of: target, range: lineRange) {
             newText.replaceSubrange(phraseRange, with: suggestion)
         } else {
             newText.replaceSubrange(lineRange, with: suggestion)

@@ -179,3 +179,37 @@ final class AgentJobTests: XCTestCase {
         XCTAssertEqual(AgentRunner.automaticAgents(for: TakePlan(purposeID: "bugReport", energy: .viral)), [.editor, .sharer])
     }
 }
+
+extension AgentJobTests {
+    func testNoSpeechShareFinishesWithoutDraftsOrProviderFailure() async throws {
+        let take = Take(folder: folder)
+        try Transcript(language: "en", engine: "empty", duration: 3, segments: []).write(to: take.transcriptURL)
+        let board = AgentJobBoard()
+        let gate = OutboundGate(approver: FixedApprover(.allowOnce))
+        let ladder = AILadder(providers: [FakeProvider(.chatGPT, rung: .chatGPT) { _ in
+            XCTFail("No-speech post copy must not contact the provider")
+            return "invalid"
+        }], gate: gate)
+        let runner = AgentRunner(board: board, ladder: ladder)
+        let job = await runner.share(take, brief: Purpose.demo.brief())
+        XCTAssertEqual(job.state, .done)
+        XCTAssertNil(job.error)
+        XCTAssertTrue(job.changes.isEmpty)
+        XCTAssertTrue(job.receipt?.contains("write your own copy") == true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: take.shareURL.path))
+    }
+
+    func testRealShareDraftFailureRemainsRetryableFailure() async throws {
+        let take = Take(folder: folder)
+        let words = (0..<50).map { TranscriptWord(id: $0, text: "Word", start: Double($0), end: Double($0) + 0.8) }
+        try Transcript(language: "en", engine: "fixture", duration: 50, segments: [.init(words: words)]).write(to: take.transcriptURL)
+        let board = AgentJobBoard()
+        let gate = OutboundGate(approver: FixedApprover(.allowOnce))
+        let ladder = AILadder(providers: [FakeProvider(.chatGPT, rung: .chatGPT) { _ in "not valid draft JSON" }], gate: gate)
+        let runner = AgentRunner(board: board, ladder: ladder)
+        let job = await runner.share(take, brief: Purpose.demo.brief())
+        XCTAssertEqual(job.state, .failed)
+        XCTAssertNotNil(job.error)
+        XCTAssertTrue(job.changes.isEmpty)
+    }
+}

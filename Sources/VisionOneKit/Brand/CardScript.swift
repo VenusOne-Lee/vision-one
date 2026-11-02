@@ -122,7 +122,12 @@ public enum CardScript {
     /// file or inline data, so a template can't phone home or change
     /// between renders.
     public static let blockNetworkRules = """
-    [{"trigger":{"url-filter":"^(https?|wss?|ftp)://"},"action":{"type":"block"}}]
+    [{"trigger":{"url-filter":"^http://"},"action":{"type":"block"}},
+    {"trigger":{"url-filter":"^https://"},"action":{"type":"block"}},
+    {"trigger":{"url-filter":"^ws://"},"action":{"type":"block"}},
+    {"trigger":{"url-filter":"^wss://"},"action":{"type":"block"}},
+    {"trigger":{"url-filter":"^ftp://"},"action":{"type":"block"}},
+    {"trigger":{"url-filter":"^ftps://"},"action":{"type":"block"}}]
     """
 
     /// Frame times for a card: one per frame from 0, quantised to the
@@ -131,5 +136,22 @@ public enum CardScript {
         let fps = max(1, frameRate)
         let count = max(1, Int((max(0, duration) * Double(fps)).rounded()))
         return (0..<count).map { Double($0) / Double(fps) }
+    }
+}
+
+/// Accumulates paint evidence across the whole animation. A fade may end
+/// on a flat frame even though earlier frames contain the intended card.
+public struct CardPaintEvidence: Sendable {
+    public private(set) var hasPaint = false
+    public init() {}
+    public mutating func observe(_ pixels: Data) {
+        guard !hasPaint, pixels.count >= 4 else { return }
+        hasPaint = pixels.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) -> Bool in
+            let first = (bytes[0], bytes[1], bytes[2])
+            for i in stride(from: 0, to: bytes.count - 3, by: 4) {
+                if (bytes[i], bytes[i + 1], bytes[i + 2]) != first { return true }
+            }
+            return false
+        }
     }
 }

@@ -35,11 +35,16 @@ struct SourcesRow: View {
             Menu {
                 content()
             } label: {
-                Text(value)
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(value).lineLimit(1)
+                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.text)
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
             .fixedSize()
         }
     }

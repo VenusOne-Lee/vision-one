@@ -23,6 +23,7 @@ struct VideoExporter {
         case reader(Error?)
         case writer(Error?)
         case blurs(Error)
+        case sound(String)
         /// Still over the preset's size limit after every retry.
         case tooBig(limit: Int64)
 
@@ -33,6 +34,7 @@ struct VideoExporter {
             case let .reader(error): return "Couldn't read the recording. \(error?.localizedDescription ?? "")"
             case let .writer(error): return "Couldn't write the video. \(error?.localizedDescription ?? "")"
             case let .blurs(error): return "Couldn't read this take's blurs, so it wasn't exported. Open it in the editor to check them. \(error.localizedDescription)"
+            case let .sound(message): return "Couldn’t export the selected music or effects. \(message) Choose another sound or remove it, then try again."
             case let .tooBig(limit): return ExportPhase.stillTooBig(limitBytes: limit)
             }
         }
@@ -63,6 +65,8 @@ struct VideoExporter {
     var clip: (format: ClipFormat, framing: ClipFraming)?
     /// Colour of the ring around the camera bubble (the builder's ring).
     var ring: RingColour = .black
+    /// Optional diagnostic stages; normal exports stay quiet.
+    var trace: (@Sendable (String) -> Void)?
 
     /// The part of the screen an export shows.
     enum Crop {
@@ -88,11 +92,16 @@ struct VideoExporter {
     /// called from a background queue with 0...1, and only goes forward,
     /// even when a size-limited export has to go again.
     func run(to outputURL: URL? = nil, progress: @escaping @Sendable (Double) -> Void) async throws -> Output {
+        trace?("load source metadata")
         let asset = AVURLAsset(url: take.screenURL)
+        defer { withExtendedLifetime(asset) {} }
         guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else { throw Failure.noVideo }
         let sourceAudio = try await asset.loadTracks(withMediaType: .audio)
         let assetDuration = try await asset.load(.duration)
-        let naturalSize = try await sourceVideo.load(.naturalSize)
+        let encodedSize = try await sourceVideo.load(.naturalSize)
+        let sourceTransform = try await sourceVideo.load(.preferredTransform)
+        let displayed = CGRect(origin: .zero, size: encodedSize).applying(sourceTransform)
+        let naturalSize = CGSize(width: abs(displayed.width), height: abs(displayed.height))
         let frameRate = try await sourceVideo.load(.nominalFrameRate)
 
         // Without explicit spans, export what the editor kept (edits.json;
@@ -107,7 +116,14 @@ struct VideoExporter {
             edits.sourceDuration = assetDuration.seconds
             timeline = ExportTimeline(edits: edits, frameRate: Double(frameRate))
         }
-        let plan = cards?.plan(bodyDuration: timeline.duration)
+        let appliedLook = AppliedTemplate.look(for: take)
+        let cardMaker: CardMaker? = cards.map { maker in
+            guard let look = appliedLook else { return maker }
+            return CardMaker(brand: AppliedTemplate.cardBrand(for: take, base: maker.brand),
+                             brandFolder: maker.brandFolder, look: look,
+                             templateFolder: AppliedTemplate.folder(for: take), personal: maker.personal)
+        }
+        let plan = cardMaker?.plan(bodyDuration: timeline.duration)
             ?? TemplatePlan(introDuration: nil, bodyDuration: timeline.duration, outroDuration: nil)
         let source = ExportSource(width: Int(naturalSize.width), height: Int(naturalSize.height), frameRate: Double(frameRate))
         var settings: ExportSettings
@@ -124,12 +140,21 @@ struct VideoExporter {
         // the whole video follow the cursor (events.json) through it.
         let crop: Crop?
         if let clip {
-            crop = .fixed(ClipFrame.rect(format: clip.format,
-                                         sourceAspect: naturalSize.height > 0 ? Double(naturalSize.width / naturalSize.height) : 0,
-                                         framing: clip.framing))
+            if let plan = ClipFrame.reframe(format: clip.format, framing: clip.framing,
+                                             sourceWidth: Int(naturalSize.width), sourceHeight: Int(naturalSize.height),
+                                             duration: assetDuration.seconds,
+                                             events: try? EventLog.read(from: take.eventsURL)) {
+                crop = .follow(plan)
+            } else {
+                crop = .fixed(ClipFrame.rect(format: clip.format,
+                                             sourceAspect: naturalSize.height > 0 ? Double(naturalSize.width / naturalSize.height) : 0,
+                                             framing: clip.framing))
+            }
         } else if let format = preset.format {
             let focus = (try? EventLog.read(from: take.eventsURL)).map { ReframePlanner.focus(from: $0) } ?? []
-            crop = .follow(ReframePlanner.plan(format: format, mode: .follow,
+            var mode = appliedLook?.reframe(for: format) ?? .follow
+            if mode == .split, await Self.camera(for: take) == nil { mode = .follow }
+            crop = .follow(ReframePlanner.plan(format: format, mode: mode,
                                                sourceWidth: Int(naturalSize.width), sourceHeight: Int(naturalSize.height),
                                                duration: assetDuration.seconds, focus: focus))
         } else {
@@ -139,18 +164,20 @@ struct VideoExporter {
         // Cards are drawn once at the export's size, then reused if the
         // export has to go again.
         var cardSet = BrandCardSet.empty
-        if plan.hasCards, let cards {
+        if plan.hasCards, let cards = cardMaker {
             cardSet = await cards.make(plan: plan,
                                        size: CGSize(width: settings.width, height: settings.height),
                                        frameRate: settings.frameRate)
             try Task.checkCancellation()
         }
 
+        trace?("load effects and captions")
         let effects = try appliesEffects ? Self.effects(for: take, timeline: timeline) : nil
         let captions = captionRingHex.map {
             CaptionExport.overlays(for: take, timeline: timeline, ringHex: $0, language: captionLanguage)
         } ?? []
-        let allOverlays = captions + overlays
+        let allowedOverlays = appliedLook?.watermark == false ? overlays.filter { !($0 is WatermarkOverlay) } : overlays
+        let allOverlays = captions + allowedOverlays
         let url = outputURL ?? take.exportURL(for: preset)
 
         // A single-pass encoder only roughly meets its average bitrate. If
@@ -162,7 +189,7 @@ struct VideoExporter {
         while true {
             let slice = attempt
             bytes = try await render(timeline: timeline, plan: plan, cards: cardSet,
-                                     sourceVideo: sourceVideo, sourceAudio: sourceAudio,
+                                     sourceVideo: sourceVideo, sourceAudio: sourceAudio, sourceTransform: sourceTransform,
                                      overlays: allOverlays, effects: effects, settings: settings, crop: crop, to: url) { fraction in
                 progress(ExportPlanner.overallProgress(fraction, attempt: slice, of: attempts))
             }
@@ -201,12 +228,12 @@ struct VideoExporter {
 
     /// The take's camera.mov and camera.json, or nil when it has none or
     /// either can't be read (the export then shows the screen alone).
-    static func camera(for take: Take) async -> (track: AVAssetTrack, range: CMTimeRange, info: CameraTrack)? {
+    static func camera(for take: Take) async -> (asset: AVAsset, track: AVAssetTrack, range: CMTimeRange, info: CameraTrack)? {
         guard let info = try? CameraTrack.read(from: take.cameraInfoURL), !info.placements.isEmpty else { return nil }
         let asset = AVURLAsset(url: take.cameraURL)
         guard let track = try? await asset.loadTracks(withMediaType: .video).first,
               let range = try? await track.load(.timeRange), range.duration > .zero else { return nil }
-        return (track, range, info)
+        return (asset, track, range, info)
     }
 
     static func cgColor(_ ring: RingColour) -> CGColor {
@@ -215,10 +242,11 @@ struct VideoExporter {
     }
 
     private func render(timeline: ExportTimeline, plan: TemplatePlan, cards: BrandCardSet,
-                        sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack],
+                        sourceVideo: AVAssetTrack, sourceAudio: [AVAssetTrack], sourceTransform: CGAffineTransform,
                         overlays: [ExportOverlay], effects: FrameEffects?, settings: ExportSettings,
                         crop: Crop?, to url: URL,
                         progress: @escaping @Sendable (Double) -> Void) async throws -> Int64 {
+        trace?("create composition and recorded audio sources")
         let composition = AVMutableComposition()
         guard let video = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw Failure.noVideo
@@ -235,8 +263,10 @@ struct VideoExporter {
         audioSources = await VoiceComposer.sources(audioSources, take: take)
 
         // The camera, on its own track, cut the same way as the screen.
-        // Clips skip it for now: their crop would cut the bubble in half.
-        let camera = clip == nil ? await Self.camera(for: take) : nil
+        // The compositor places the bubble after cropping, in output coordinates.
+        trace?("load separate camera")
+        let camera = await Self.camera(for: take)
+        defer { withExtendedLifetime(camera?.asset) {} }
         var cameraTrack: AVMutableCompositionTrack?
         if camera != nil {
             cameraTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
@@ -246,12 +276,14 @@ struct VideoExporter {
             let range = CMTimeRange(start: Self.time(segment.source.lowerBound),
                                     end: Self.time(segment.source.upperBound))
             let at = Self.time(segment.outputStart)
+            trace?("insert screen \(segment.source.lowerBound)..<\(segment.source.upperBound)")
             try video.insertTimeRange(range, of: sourceVideo, at: at)
             if let camera, let cameraTrack {
                 let wanted = CMTimeRange(start: Self.time(camera.info.cameraTime(forScreen: segment.source.lowerBound)),
                                          end: Self.time(camera.info.cameraTime(forScreen: segment.source.upperBound)))
                 let available = wanted.intersection(camera.range)
                 if available.duration > .zero {
+                    trace?("insert camera \(available.start.seconds)..<\(available.end.seconds)")
                     try cameraTrack.insertTimeRange(available, of: camera.track, at: at + (available.start - wanted.start))
                 }
             }
@@ -261,6 +293,7 @@ struct VideoExporter {
                 let source = audioSources[index]
                 let available = range.intersection(source.range)
                 guard available.duration > .zero else { continue }
+                trace?("insert audio \(index) \(available.start.seconds)..<\(available.end.seconds)")
                 try track.insertTimeRange(available, of: source.track, at: at + (available.start - range.start))
             }
         }
@@ -278,6 +311,7 @@ struct VideoExporter {
             composition.insertEmptyTimeRange(CMTimeRange(start: .zero, duration: bodyStart))
         }
 
+        trace?("build frame instructions")
         var instructions: [FrameInstruction] = []
         if let intro = cards.intro, plan.intro != nil {
             instructions.append(FrameInstruction(timeRange: CMTimeRange(start: .zero, end: bodyStart), card: intro))
@@ -295,10 +329,12 @@ struct VideoExporter {
         case nil:
             cropAt = nil
         }
+        var split = false
+        if case let .follow(plan)? = crop { split = plan.mode == .split }
         var isFit = false
         if case let .fixed(rect)? = crop, rect == .full { isFit = true }
         instructions.append(FrameInstruction(timeRange: CMTimeRange(start: videoStart, end: videoEnd),
-                                             trackID: video.trackID, overlays: overlays,
+                                             trackID: video.trackID, overlays: overlays, sourceTransform: sourceTransform,
                                              overlayTimeOffset: videoStart.seconds, effects: effects,
                                              crop: cropAt,
                                              // "Fit" clips sit on the canvas, ink on paper.
@@ -310,7 +346,7 @@ struct VideoExporter {
                                                                           timeline: timeline, ringColour: Self.cgColor(ring),
                                                                           background: BackgroundRenderer(
                                                                               background: CameraBackground.read(from: take.backgroundURL))) }
-                                             }))
+                                             }, split: split))
         if let outro = cards.outro, let range = plan.outro {
             // Cover the composition to its very end, whatever rounding did.
             let end = CMTimeMaximum(videoEnd + Self.time(range.upperBound - range.lowerBound), composition.duration)
@@ -324,8 +360,11 @@ struct VideoExporter {
         // after the intro so they start with the video.
         let sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
         let words: [TimeSpan] = sound.isEmpty ? [] : ((try? Transcript.read(from: take.transcriptURL))?.words.map(\.span) ?? [])
+        trace?("add music and replacement voices")
         let soundTracks = await SoundComposer.add(sound, timeline: timeline, words: words, to: composition,
                                                   offset: joinOffset)
+        defer { withExtendedLifetime(soundTracks.assets) {} }
+        if let problem = soundTracks.problem { throw Failure.sound(problem) }
         // Sentences said again replace the original voice in their slot.
         let redos = ((try? RedoList.load(from: take.redosURL)) ?? RedoList()).accepted
         let redone = await RedoComposer.add(redos, take: take, timeline: timeline, to: composition, offset: joinOffset)
@@ -339,16 +378,19 @@ struct VideoExporter {
         videoComposition.instructions = instructions
 
         let audioMix = AVMutableAudioMix()
+        let savedMix = RecordedMix.load(for: take)
         let recorded: [AVMutableAudioMixInputParameters] = audio.enumerated().map { index, track in
+            let gain = savedMix.gain(isMicrophone: index == micIndex)
             let parameters = AVMutableAudioMixInputParameters(track: track)
-            RedoComposer.mute(parameters, during: redone.mutes)
+            parameters.setVolume(gain, at: .zero)
+            RedoComposer.mute(parameters, during: redone.mutes, gain: gain)
             // Ramps can't overlap: a word fix inside a redone line is
             // already silent, and a join right beside a redone line or a
             // fixed word keeps their fades.
             let fixMutes = voiceFixes.mutes.filter { fix in
                 !redone.mutes.contains { $0.lowerBound - 0.2 < fix.end && fix.start < $0.upperBound + 0.2 }
             }
-            if index == micIndex { VoiceComposer.mute(fixMutes, on: parameters) }
+            if index == micIndex { VoiceComposer.mute(fixMutes, on: parameters, gain: gain) }
             let quiet = redone.mutes + fixMutes.map { $0.start..<max($0.start, $0.end) }
             let joins = timeline.joins.map { $0 + joinOffset }.filter { join in
                 !quiet.contains { ($0.lowerBound - 0.2)...($0.upperBound + 0.2) ~= join }
@@ -356,13 +398,14 @@ struct VideoExporter {
             for join in joins {
                 let fade = Self.time(Self.joinFade)
                 let t = Self.time(join)
-                parameters.setVolumeRamp(fromStartVolume: 1, toEndVolume: 0, timeRange: CMTimeRange(start: t - fade, duration: fade))
-                parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: 1, timeRange: CMTimeRange(start: t, duration: fade))
+                parameters.setVolumeRamp(fromStartVolume: gain, toEndVolume: 0, timeRange: CMTimeRange(start: t - fade, duration: fade))
+                parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: gain, timeRange: CMTimeRange(start: t, duration: fade))
             }
             return parameters
         }
         audioMix.inputParameters = recorded + soundTracks.parameters + redone.parameters + voiceFixes.parameters
 
+        trace?("encode composed video and audio")
         return try await encode(composition: composition, videoTracks: [video] + (cameraTrack.map { [$0] } ?? []),
                                 audio: audio + soundTracks.tracks + redone.tracks + voiceFixes.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
@@ -444,7 +487,9 @@ struct VideoExporter {
             audioInput = input
         }
 
+        trace?("start reader")
         guard reader.startReading() else { throw Failure.reader(reader.error) }
+        trace?("start writer")
         guard writer.startWriting() else {
             reader.cancelReading()
             throw Failure.writer(writer.error)
@@ -482,8 +527,11 @@ struct VideoExporter {
             throw Failure.writer(writer.error)
         }
 
-        try? FileManager.default.removeItem(at: url)
-        try FileManager.default.moveItem(at: partial, to: url)
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: partial)
+        } else {
+            try FileManager.default.moveItem(at: partial, to: url)
+        }
         progress(1)
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value
         return size ?? 0

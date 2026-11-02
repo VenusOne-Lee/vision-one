@@ -171,6 +171,8 @@ struct BackgroundRow: View {
 /// background.json; the next export draws the new one.
 struct TakeBackgroundMenu: View {
     let take: Take
+    /// Just the icon, in the surrounding colour (the video transport bar).
+    var iconOnly = false
     @State private var background: CameraBackground = .off
 
     var body: some View {
@@ -183,12 +185,22 @@ struct TakeBackgroundMenu: View {
                                     }
                                 })
         } label: {
-            Label(background.isOn ? background.title : "Background", systemImage: "person.and.background.dotted")
-                .font(.system(size: 12))
-                .lineLimit(1)
+            if iconOnly {
+                Image(systemName: "person.and.background.dotted")
+                    .font(.system(size: 14))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            } else {
+                Label(background.isOn ? background.title : "Background", systemImage: "person.and.background.dotted")
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+            }
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(iconOnly ? .hidden : .automatic)
         .fixedSize()
+        .accessibilityLabel("Camera background")
         .help("What shows behind you in the camera bubble when this take is exported")
         .task(id: take.folder) { background = CameraBackground.read(from: take.backgroundURL) }
     }

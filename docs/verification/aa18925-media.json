@@ -1,0 +1,47 @@
+{
+  "brandYellowPixels": 3596,
+  "cameraGreenPixels": 31922,
+  "captionWhitePixels": 12112,
+  "checks": [
+    "actual MP4 decode",
+    "accepted-cut duration",
+    "separate camera",
+    "caption pixels",
+    "brand overlay",
+    "timed sidecars",
+    "invalid import",
+    "silent import",
+    "stale mic start/callback"
+  ],
+  "decodedAudioPeak": 0.13038228452205658,
+  "dimensions": [
+    1080,
+    1920
+  ],
+  "duration": 2.5,
+  "earlyRedPixels": 2006100,
+  "laterBluePixels": 1174492,
+  "previewAudioPeak": 0.1253771185874939,
+  "remaining": [
+    "real capture and permissions",
+    "native UI light/dark walkthrough",
+    "human inspection of framing, caption placement and audible mix"
+  ],
+  "sourceCommit": "aa189253202496b11e739980993e239cd692a888",
+  "workflowRun": "https://github.com/VenusOne-Lee/vision-one/actions/runs/40914321446",
+  "artifactID": 12915920866,
+  "sha256": {
+    "portrait-with-captions.mp4": "4dc62131d9d0ea28b8807828cc557532c679c50acefab8f9980fef7c2bdcec59",
+    "portrait-frame.png": "39ad100cc149be0858684a7ed984ae7e9dee57861fa5a88ab5015653588e7dfd",
+    "portrait-later-frame.png": "5da739336beb240725ec973b4ee82d7160fe8ce72cadde7ff1724eb7ae41e8a1",
+    "portrait-with-captions.srt": "908c166477122998788ddf1a9d0a9147dd967e81ed2440789dd2866b74c538cc",
+    "portrait-with-captions.vtt": "d22fb3fd7ad3f4070f6194bba4145c6be861ad359f6f18e61d097e9655cf4db9"
+  },
+  "cloudInspection": [
+    "Decoded both retained PNGs: camera circle entirely inside upper right, legible caption below video centre, overlay retained at lower left.",
+    "Early/later source regions visibly change from red to predominantly blue.",
+    "Independent ffprobe: H.264 1080x1920, AAC stereo 48000 Hz, both streams 2.5 seconds.",
+    "Independent ffmpeg full decode exited successfully.",
+    "SRT cues begin at 00:00:00,200 and 00:00:01,100 after the cut."
+  ]
+}

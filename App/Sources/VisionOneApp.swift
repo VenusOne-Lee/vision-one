@@ -50,10 +50,20 @@ struct MenuBarLabel: View {
 /// and the Keyboard Shortcuts window agree. The global hot key already
 /// owns ⇧⌘R, so Record only names it in its title instead of binding it
 /// a second time.
+@MainActor
 struct AppCommands: Commands {
     @ObservedObject var recorder: ScreenRecorder
+    @ObservedObject private var undoActions = WorkspaceUndoActions.shared
 
     var body: some Commands {
+        CommandGroup(replacing: .undoRedo) {
+            Button(undoActions.undoTitle) { undoActions.undo(nil) }
+                .keyboardShortcut("z", modifiers: .command)
+                .disabled(!undoActions.canUndo)
+            Button(undoActions.redoTitle) { undoActions.redo(nil) }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(!undoActions.canRedo)
+        }
         // File › New is a new task. The main window's ⌘B and ⌥⌘B live
         // here too, so they show in the menus and never fire twice.
         CommandGroup(replacing: .newItem) {
@@ -61,6 +71,11 @@ struct AppCommands: Commands {
                 .keyboardShortcut(ShortcutMap.newTask)
         }
         CommandGroup(after: .newItem) {
+            Button("Import Video…") {
+                EditorWindowController.shared.show()
+                HarnessModel.shared.importVideo()
+            }.keyboardShortcut("i", modifiers: [.command, .shift])
+
             Button(recorder.phase.isLive ? "Stop Recording  \(ShortcutMap.record.display)"
                                          : "Start Recording  \(ShortcutMap.record.display)") {
                 Task { await recorder.toggle() }

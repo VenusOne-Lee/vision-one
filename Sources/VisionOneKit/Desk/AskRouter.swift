@@ -9,6 +9,9 @@ public struct SlashCommand: Equatable, Sendable {
 
     public static let all: [SlashCommand] = [
         SlashCommand(name: "record", summary: "Record your screen, camera and mic", runsAgents: false),
+        SlashCommand(name: "import", summary: "Import a video into an editable task", runsAgents: false),
+        SlashCommand(name: "export", summary: "Open delivery and export options", runsAgents: false),
+        SlashCommand(name: "library", summary: "Find and resume a video", runsAgents: false),
         SlashCommand(name: "cut", summary: "Cut ums, pauses and retakes", runsAgents: true),
         SlashCommand(name: "captions", summary: "Add or restyle captions", runsAgents: false),
         SlashCommand(name: "clips", summary: "Make short clips for Reels and TikTok", runsAgents: true),
@@ -31,6 +34,8 @@ public struct SlashCommand: Equatable, Sendable {
 
 /// What the composer should do with an ask.
 public enum AskRoute: Equatable, Sendable {
+    /// No supported action was identified. Never default to an unrelated edit.
+    case clarify(String)
     /// Agents to run, in order (shown first under "Plan first").
     case plan(DeskPlan)
     /// A command the window handles itself: "record", "captions", "edit"…
@@ -59,7 +64,29 @@ public enum AskRouter {
             default: return .open(name)
             }
         }
-        return .plan(plan(for: text))
+        // Exact navigation requests should never accidentally start an edit job.
+        let navigation: [String: String] = [
+            "record": "record", "start recording": "record",
+            "open editor": "edit", "open sound": "sound", "open mixer": "sound",
+            "add captions": "captions", "show captions": "captions",
+            "review changes": "review", "show changes": "review",
+            "copy a style": "style", "choose music": "music",
+            "import a video": "import", "import video": "import",
+            "export": "export", "open export": "export", "export video": "export",
+            "library": "library", "open library": "library", "prepare recording": "record"
+        ]
+        if let command = navigation[text.lowercased().trimmingCharacters(in: .punctuationCharacters)] {
+            return .open(command)
+        }
+        let lower = text.lowercased()
+        if ["what is ", "what are ", "how does ", "how do ", "why ", "where "].contains(where: lower.hasPrefix) {
+            return .clarify("Are you asking for instructions or a change to this video? Choose a tool with /, or describe the edit you want applied.")
+        }
+        let plan = plan(for: text)
+        guard !plan.steps.isEmpty else {
+            return .clarify("What would you like to do? Describe the cut, clips, script or post, or use / to choose a tool.")
+        }
+        return .plan(plan)
     }
 
     static func plan(for text: String) -> DeskPlan {
@@ -74,7 +101,7 @@ public enum AskRouter {
                              "description", "chapters"])
         let wantsEdit = has(["cut", "shorter", "tighten", "trim", "make it", "under ", "remove", "drop", "seconds",
                              "minute", " um", "pause", "faster", "edit", "clean"])
-        if wantsEdit || (steps.isEmpty && !wantsClips && !wantsPost) {
+        if wantsEdit {
             steps.append(edit(text))
         }
         if wantsClips { steps.append(clips(count(in: lower) ?? 3)) }

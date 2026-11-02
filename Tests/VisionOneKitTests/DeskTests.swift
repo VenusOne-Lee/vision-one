@@ -284,3 +284,32 @@ final class DeskTests: XCTestCase {
         XCTAssertThrowsError(try ScriptSources.releasesRequest(ScriptSourceRef(.github, "nope"), token: nil, limit: 3))
     }
 }
+
+extension DeskTests {
+    func testImportedSourceTitleReachesTaskAndSurvivesReopening() async throws {
+        let source = folder.appendingPathComponent("Launch walkthrough.mp4")
+        try Data([0, 1, 2, 3]).write(to: source)
+        let take = try VideoImport.copy(source, into: TakeLibrary(folder: folder.appendingPathComponent("library")))
+        let store = folder.appendingPathComponent("desk.json")
+        let desk = await makeDesk(store: store)
+        let task = await desk.taskForRecording(take)
+        XCTAssertEqual(task.title, "Launch walkthrough")
+        XCTAssertEqual(try Data(contentsOf: take.screenURL), Data([0, 1, 2, 3]))
+        await desk.rename(task.id, to: "Final review")
+        try take.setTitle("Later library title")
+        let reopened = await desk.taskForRecording(take)
+        XCTAssertEqual(reopened.id, task.id)
+        XCTAssertEqual(reopened.title, "Final review")
+        let reloadedDesk = await makeDesk(store: store)
+        let reloaded = await reloadedDesk.taskForRecording(take)
+        XCTAssertEqual(reloaded.id, task.id)
+        XCTAssertEqual(reloaded.title, "Final review")
+    }
+
+    func testRecordingFallbackAndExplicitAskTitleRemainAvailable() throws {
+        let take = try makeTake()
+        XCTAssertEqual(Desk.title(for: nil, takes: [take]), "Recording · \(take.name)")
+        try take.setTitle("Imported source title")
+        XCTAssertEqual(Desk.title(for: "/cut the opening", takes: [take]), "Cut the opening")
+    }
+}

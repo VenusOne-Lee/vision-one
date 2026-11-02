@@ -248,6 +248,12 @@ public struct Appearance: Codable, Equatable, Sendable {
         ThemePreset.allCases.first { $0.matches(self) }
     }
 
+    /// Switch lighting without replacing the user's palette and layout choices.
+    /// Tone remains stored while dark so returning to light restores it.
+    public mutating func toggleMode() {
+        mode = mode == .light ? .dark : .light
+    }
+
     public mutating func apply(_ preset: ThemePreset) {
         tone = preset.tone
         buttons = preset.buttons

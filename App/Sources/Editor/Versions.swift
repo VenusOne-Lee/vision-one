@@ -117,16 +117,20 @@ struct VersionMenu: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(model.main.name).lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            HStack(spacing: 18) {
+                Text(model.main.name).lineLimit(1).fixedSize()
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
             }
-            .font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 10)
-            .frame(height: Theme.Size.controlSmall + 2)
-            .overlay(Capsule().strokeBorder(Theme.text, lineWidth: 1))
+            .font(.custom(BundledFont.sansMedium, size: 13))
+            .foregroundStyle(Theme.text)
+            .padding(.horizontal, 14)
+            .frame(height: Theme.Size.controlLarge)
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.lg).fill(Theme.paper))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg).strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
+            .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help("The version you're editing. Try a big change in a copy and this one stays safe.")

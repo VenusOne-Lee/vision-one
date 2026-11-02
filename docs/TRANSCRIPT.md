@@ -1,11 +1,11 @@
 # The transcript format
 
-Every take gets a `transcript.json` next to `screen.mov`. It is made on the Mac, from the mic track, after you stop recording. The editor, filler and pause removal, and captions all read it. The Swift types are in `Sources/VisionOneKit/Transcript.swift`.
+A take with transcribable audio gets `transcript.json` next to `screen.mov`. It is made on the Mac after recording or import. Silent sources retain an editable video and a typed no-audio recovery state instead of a transcript. The editor, filler and pause removal, and captions all read it. The Swift types are in `Sources/VisionOneKit/Transcript.swift`.
 
 ## Rules
 
 - **One clock.** Times are seconds from the take's first video frame: the same clock as `screen.mov` and `events.json`.
-- **Written once.** Editing never changes `transcript.json`. Cuts and other edits live in their own files (`edits.json`) as time ranges, so running a better model later doesn't break saved edits.
+- **One transcription pass at a time.** Editing never changes `transcript.json`. Cuts and other edits live in their own files (`edits.json`) as time ranges, so running a better model later doesn't break saved edits.
 - **Stable ids.** Each word has an integer `id`, unique in the file and in time order. Use ids to point at a word within one transcript; use times for anything saved.
 - **Punctuation stays on the word.** `"So,"` and `"release."`. Words are joined with single spaces. `TranscriptWord.normalized` gives `"so"` for matching.
 - **Verbatim.** Fillers ("um", "uh", "ja", "eish") are kept as words when the engine hears them, so filler removal can find them. A filler the engine drops still leaves a gap in the timings.
@@ -58,7 +58,8 @@ Every take gets a `transcript.json` next to `screen.mov`. It is made on the Mac,
 3. **Parakeet TDT 0.6B v2** runs through [FluidAudio](https://github.com/FluidInference/FluidAudio) (Apache 2.0) on the Neural Engine. It's English only, gives a time for every sub-word token, and does about an hour of audio in 20 to 30 seconds on an M-series Mac. The model (about 0.5 GB) downloads from Hugging Face the first time and is cached after that.
 4. `TranscriptBuilder` (in VisionOneKit) joins the tokens into words, keeps punctuation on the word before it, tidies any overlapping or out-of-order times, and splits sentences into segments.
 5. `transcript.json` is written atomically. Takes queue one at a time, and any take still missing a transcript is picked up on the next launch (`TakeLibrary.untranscribedTakes()`).
-6. Cleanup proposals go into `edits.json`, measured against the length of `screen.mov`, not the audio (see [CLEANUP.md](CLEANUP.md)).
+6. A measured mic loudness envelope is saved in levels.json for waveform, voice-level and silence analysis.
+7. Cleanup proposals go into `edits.json`, measured against the length of `screen.mov`, not the audio (see [CLEANUP.md](CLEANUP.md)).
 
 The menu shows one muted line while this happens ("Writing the transcript…", "Getting the speech model… 43%"). It's never orange, because orange only means a live recording.
 
@@ -71,5 +72,18 @@ The menu shows one muted line while this happens ("Writing the transcript…", "
 ### Not yet
 
 - Other languages (Afrikaans and others) through WhisperKit, with a filler-keeping prompt
-- A mic loudness envelope for sharper pause edges
 - Checking how many "um"s and "uh"s Parakeet keeps on real takes
+
+## Editor recovery and native text ownership
+
+The pane distinguishes active work from an absent file: queued/running work shows Transcript on its way; a missing file with no job shows No transcript yet and Create transcript. Creation runs on this Mac; the speech model downloads on first use. Read/transcription failures show their explanation and Retry this transcript. A successfully read empty result shows No words found. Playback, timeline edits and export remain available in these recovery states.
+
+The native text coordinator rebinds when another editor model is shown and resets the previous take's selection. Transcript replacement advances a revision counter, so equal-word-count changes rebuild text and character ranges without scanning contents on playback ticks. Word clicks and cuts use the replacement timing. Selection/cut actions write edits.json, not transcript.json.
+
+Native CI mounts the production view, switches A→B→A, checks current-take cuts/undo/redo and saved-byte preservation, then replaces equal-count words/times and checks text/ranges/seek/cut timing. Synthetic native key events also exercise Delete, Undo, Redo and Space with first responder assigned. Real-file missing/corrupt/empty states render inside HarnessView. These checks do not establish OS-wide shortcuts, VoiceOver, real speech-model downloads or transcription quality. See [the full evidence matrix](CLOUD-VERIFICATION.md).
+
+## Silent sources and workspace shortcuts
+
+A permanent `TranscriptFailure.reason.noAudio` becomes the editor's typed `noAudio` state. It offers importing a source with audio or opening recording preparation, rather than retrying an immutable silent file. Genuine transient/corrupt failures retain Retry; a valid empty transcript retains No words found and editing/export. The native silent-source regression passed at 208cb79, and the tracking assistant independently exercised these actions' visible recovery state locally.
+
+The Harness Edit commands resolve the current window/editor undo manager at invocation. An editable native text/field editor retains its own typing history. Real local 7869fb6 canvas Cmd-Z/Cmd-Shift-Z and focused Ask typing undo/redo passed. The whole-Harness synthetic task-switch/key/field fixture passed at 5f0fbab / CI40953770394; the older transcript-only synthetic test never established full canvas shortcut acceptance.

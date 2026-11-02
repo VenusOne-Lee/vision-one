@@ -14,6 +14,7 @@ struct CaptionLayer: View {
     @State private var settings = CaptionSettings()
     @State private var track = CaptionTrack(cues: [])
     @State private var showControls = false
+    @State private var saveProblem: String?
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -38,7 +39,7 @@ struct CaptionLayer: View {
                         .padding(Theme.Space.md)
                         .frame(width: 300)
                         .background(Theme.paper)
-                        .environment(\.colorScheme, .light)
+                        .themed()
                 }
                 .help("Caption style, size and files")
         }
@@ -46,16 +47,29 @@ struct CaptionLayer: View {
             settings = model.take.loadCaptionSettings()
             rebuild()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .takeStyleChanged)) { note in
+            guard note.object as? URL == model.take.folder else { return }
+            settings = model.take.loadCaptionSettings()
+            rebuild()
+        }
+        .overlay(alignment: .bottom) {
+            if let saveProblem { Text(saveProblem).textStyle(.caption).foregroundStyle(Theme.error).padding(8).background(Theme.paper) }
+        }
         .onChange(of: model.transcript) { _, _ in rebuild() }
         .onChange(of: model.edits) { _, _ in rebuild() }
         .onChange(of: settings) { _, newValue in
             rebuild()
-            try? model.take.saveCaptionSettings(newValue)
+            do {
+                try model.take.saveCaptionSettings(newValue)
+                saveProblem = nil
+                NotificationCenter.default.post(name: .takeStyleChanged, object: model.take.folder)
+            }
+            catch { saveProblem = "Couldn't save captions: \(error.localizedDescription)" }
         }
     }
 
     private func rebuild() {
-        guard let transcript = model.transcript else {
+        guard let transcript = try? model.take.captionTranscript(language: settings.language) else {
             track = CaptionTrack(cues: [])
             return
         }

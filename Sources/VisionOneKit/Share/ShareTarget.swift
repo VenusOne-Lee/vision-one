@@ -51,12 +51,12 @@ public enum ShareTarget: String, CaseIterable, Sendable, Identifiable {
     public var preferred: [ExportPreset] {
         switch self {
         // Small enough to send on mobile data, then the phone's own shape.
-        case .whatsapp: return [.whatsapp, .vertical, .hd720, .square, .hd1080, .original]
+        case .whatsapp: return [.whatsapp, .vertical, .hd720, .square, .portrait, .hd1080, .original]
         // Square takes the most room in the feed.
-        case .linkedin: return [.square, .hd1080, .vertical, .hd720, .original, .whatsapp]
-        case .x: return [.hd1080, .square, .hd720, .vertical, .original, .whatsapp]
+        case .linkedin: return [.square, .portrait, .hd1080, .vertical, .hd720, .original, .whatsapp]
+        case .x: return [.hd1080, .square, .hd720, .vertical, .portrait, .original, .whatsapp]
         // A vertical upload becomes a Short.
-        case .youtube: return [.hd1080, .original, .hd720, .vertical, .square, .whatsapp]
+        case .youtube: return [.hd1080, .original, .hd720, .vertical, .square, .portrait, .whatsapp]
         }
     }
 

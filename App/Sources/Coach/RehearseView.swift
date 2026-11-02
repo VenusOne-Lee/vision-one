@@ -52,7 +52,7 @@ struct RehearseView: View {
             }
             Button("Record for real") { recordForReal() }
                 .buttonStyle(.primary)
-                .help("Shows the prompter and starts recording")
+                .help("Checks source and audio before recording with the prompter")
         }
         .padding(.horizontal, Theme.Space.md)
         .frame(height: Theme.Size.toolbar)
@@ -64,7 +64,10 @@ struct RehearseView: View {
         talk.stop()
         RehearseWindowController.shared.close()
         UserDefaults.standard.set(coach.scriptText, forKey: CoachServices.scriptKey)
-        Task { await ScreenRecorder.shared.record() }
+        ScriptStore.shared.reload()
+        ScriptStore.shared.showsPrompter = true
+        EditorWindowController.shared.show()
+        HarnessModel.shared.preparingRecording = true
     }
 
     // MARK: Stage

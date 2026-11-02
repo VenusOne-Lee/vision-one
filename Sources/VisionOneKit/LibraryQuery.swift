@@ -118,6 +118,24 @@ public struct LibraryQuery: Equatable, Sendable {
         self.sort = sort
     }
 
+    public mutating func showEveryTake() {
+        search = ""
+        filter = .all
+    }
+
+    public var emptyMessage: String {
+        let text = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            return filter == .all ? "Nothing matches “\(text)”." : "Nothing matches “\(text)” in \(filter.label.lowercased())."
+        }
+        switch filter {
+        case .all: return "No videos to show."
+        case .exported: return "No exported videos yet."
+        case .notExported: return "Every video has been exported."
+        case .toReview: return "No videos need review."
+        }
+    }
+
     public var isSearching: Bool { !terms.isEmpty }
 
     var terms: [String] {
@@ -169,5 +187,35 @@ public struct LibraryQuery: Equatable, Sendable {
 
     static func fold(_ text: String) -> String {
         text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    }
+}
+
+public struct LibraryRenameDraft: Equatable, Sendable {
+    public var text = ""
+    public private(set) var isEditing = false
+    public private(set) var needsRetry = false
+    public init() {}
+
+    public mutating func begin(title: String) {
+        if !needsRetry { text = title }
+        needsRetry = false
+        isEditing = true
+    }
+
+    public mutating func finish(save: (String) throws -> Void) rethrows {
+        isEditing = false
+        do {
+            try save(text)
+            needsRetry = false
+        } catch {
+            needsRetry = true
+            throw error
+        }
+    }
+
+    public mutating func cancel() {
+        isEditing = false
+        needsRetry = false
+        text = ""
     }
 }

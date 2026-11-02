@@ -243,3 +243,28 @@ final class CardScriptTests: XCTestCase {
         XCTAssertEqual(CardVariables.mimeType(forExtension: "png"), "image/png")
     }
 }
+
+extension CardScriptTests {
+    func testOfflineRulesUseLiteralSchemesWithoutDisjunction() throws {
+        let rules = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(CardScript.blockNetworkRules.utf8)) as? [[String: Any]])
+        let filters = rules.compactMap { ($0["trigger"] as? [String: String])?["url-filter"] }
+        XCTAssertEqual(filters, ["^http://", "^https://", "^ws://", "^wss://", "^ftp://", "^ftps://"])
+        XCTAssertTrue(rules.allSatisfy { ($0["action"] as? [String: String])?["type"] == "block" })
+    }
+
+    func testPaintedCardCanEndWithFlatFrame() {
+        var evidence = CardPaintEvidence()
+        var painted = Data(repeating: 255, count: 8192)
+        painted[8188] = 0
+        evidence.observe(painted)
+        evidence.observe(Data(repeating: 255, count: 8192))
+        XCTAssertTrue(evidence.hasPaint)
+    }
+
+    func testOnlyFlatFramesHaveNoPaintEvidence() {
+        var evidence = CardPaintEvidence()
+        evidence.observe(Data(repeating: 0, count: 8192))
+        evidence.observe(Data(repeating: 255, count: 8192))
+        XCTAssertFalse(evidence.hasPaint)
+    }
+}

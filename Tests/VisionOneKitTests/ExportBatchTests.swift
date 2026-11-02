@@ -144,3 +144,20 @@ final class ExportBatchTests: XCTestCase {
         XCTAssertEqual(batch.status(of: .hd720), .cancelled)
     }
 }
+
+extension ExportBatchTests {
+    func testRetryKeepsSuccessfulFilesAndOnlyQueuesUnfinishedOutputs() {
+        var batch = ExportBatch([.hd1080, .vertical])
+        let url = URL(fileURLWithPath: "/tmp/finished.mp4")
+        batch.start(.hd1080)
+        batch.apply(.exporting(preset: .hd1080, progress: 1))
+        batch.apply(.done(preset: .hd1080, url: url, bytes: 123))
+        batch.start(.vertical)
+        batch.apply(.exporting(preset: .vertical, progress: 0.3))
+        batch.apply(.failed(message: "Temporary failure"))
+        batch.retryUnfinished()
+        XCTAssertEqual(batch.exported, [url])
+        XCTAssertEqual(batch.next, .vertical)
+        XCTAssertEqual(batch.status(of: .hd1080), .done(url: url, bytes: 123))
+    }
+}

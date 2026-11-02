@@ -23,6 +23,11 @@ enum AXReader {
         return AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
+    static func openSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     static func app(_ pid: pid_t) -> AXUIElement { AXUIElementCreateApplication(pid) }
 
     /// Chrome, Electron apps and Dia only build their web content's tree

@@ -56,6 +56,23 @@ public enum ClipFrame {
         return ClipFraming(mode: .fixed, centerX: center.x, centerY: center.y)
     }
 
+    /// Shared by preview and rendering. The plan stays on the source clock;
+    /// export maps its edited clock back through the kept segments.
+    public static func reframe(format: ClipFormat, framing: ClipFraming,
+                               sourceWidth: Int, sourceHeight: Int, duration: Double,
+                               events: EventLog?) -> ReframePlan? {
+        guard framing.mode == .follow else { return nil }
+        let shape: VideoFormat
+        switch format {
+        case .vertical: shape = .vertical
+        case .square: shape = .square
+        case .landscape: shape = .landscape
+        }
+        return ReframePlanner.plan(format: shape, mode: .follow,
+                                   sourceWidth: sourceWidth, sourceHeight: sourceHeight,
+                                   duration: duration, focus: events.map { ReframePlanner.focus(from: $0) } ?? [])
+    }
+
     static func median(_ values: [Double]) -> Double {
         let sorted = values.sorted()
         let mid = sorted.count / 2

@@ -388,12 +388,16 @@ struct ErrorAlert: View {
 /// Screen, Window or Area, then what to record within it. Changes are
 /// saved for the next take.
 struct CapturePicker: View {
+    @Environment(\.workspaceRender) private var workspaceRender
     @EnvironmentObject private var recorder: ScreenRecorder
+    @ObservedObject private var access = AccessCenter.shared
     @State private var windows: [WindowCandidate] = []
+    /// Off when the caller shows its own Screen | Window | Area control.
+    var showsModeSwitch = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            ModeSwitch(selection: $recorder.choice.mode)
+            if showsModeSwitch { ModeSwitch(selection: $recorder.choice.mode) }
 
             switch recorder.choice.mode {
             case .screen:
@@ -447,7 +451,7 @@ struct CapturePicker: View {
             .pickerStyle(.menu)
             .frame(maxWidth: 200)
         }
-        .task { windows = await recorder.pickableWindows() }
+        .task(id: access.checklist.state(of: .screen) == .granted) { if !workspaceRender { windows = await recorder.pickableWindows() } }
     }
 
     private var cameraRow: some View {

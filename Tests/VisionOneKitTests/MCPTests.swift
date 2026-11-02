@@ -162,6 +162,7 @@ final class MCPTests: XCTestCase {
     func testDevBuildsUseTheirOwnSocket() {
         XCTAssertEqual(MCPSocketPath.fileName(bundleID: "za.co.versionone.visionone"), "mcp.sock")
         XCTAssertEqual(MCPSocketPath.fileName(bundleID: "za.co.versionone.visionone.dev"), "mcp-dev.sock")
+        XCTAssertEqual(MCPSocketPath.fileName(bundleID: "za.co.versionone.visionone.verification"), "mcp-verification.sock")
         XCTAssertEqual(MCPSocketPath.fileName(bundleID: nil), "mcp.sock")
     }
     #endif

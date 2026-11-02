@@ -1,0 +1,132 @@
+{
+  "reviewer": "tracking assistant in originating session; not the human user",
+  "provenance": "Relayed native QA evidence; local session.json and raw capture media remain private/local.",
+  "complete": false,
+  "implementation": "cloud GitHub connector; executor offline",
+  "checks": [
+    {
+      "commit": "9e1d8ed",
+      "passed": [
+        "Native build/adhoc launch; Setup Later to New task",
+        "Preparation Start disabled without screen permission",
+        "Actual file picker cancel/reopen and silent-video import; live preview",
+        "MacBook Pro microphone meter 0.092 to 0.190; Stop resets zero",
+        "Camera-only capture without screen access: H264 1920x1080 + AAC, 24.017s, resulting task, paused cut persisted",
+        "Activity Monitor window capture: HEVC 3158x2260 + two AAC streams,19.908s; floating Pause/Resume/Recording and cut10.407–14.842",
+        "Remembered area400x225pt to800x450 pixels,6.273s; full screen3600x2338,6.741s; resulting task attachments",
+        "Try in a copy, compare both versions, Keep both",
+        "24-word script rehearsal Start/I'm done/Run again; Record for real preserves script and teleprompter",
+        "After human AX grant, Activity Monitor Wait1s Autopilot: step done0.004–1.166s; capture2.075s and new task"
+      ],
+      "limits": [
+        "Raw media stays local",
+        "No speech accuracy, subjective audio quality or broad permission transition acceptance",
+        "Early keyboard observations with duplicate processes were invalidated",
+        "File-menu pause label remains unverified separately from working floating controls",
+        "Autopilot click/type/reconnect not covered"
+      ]
+    },
+    {
+      "commit": "208cb79",
+      "passed": [
+        "Native rebuild/codesign",
+        "Original silent source + Still water-14dB UI1080p export: H264+AAC2.5s;240000 decoded samples,mean-33.1dB/max-21.4dB",
+        "No captions explanation instead of missing transcript warning; noAudio import/setup actions without Retry",
+        "Separate music selection buttons activate via AX",
+        "Short project default selected/visible/applied on filename-titled import; plan Short/viral/59 and wordByWord captions",
+        "Per-take Subtitle override retained after switching away/back",
+        "Library inline rename persists across restart"
+      ],
+      "limits": [
+        "New adhoc binary prompted mic onboarding again; deferred",
+        "No subjective audible-quality claim",
+        "Only named Short project/default route covered"
+      ]
+    },
+    {
+      "commit": "7869fb6",
+      "passed": [
+        "Native build/codesign",
+        "Actual timeline trim2.5 to2.0; CmdZ restores2.5; CmdShiftZ reapplies2.0",
+        "Focused Ask unsent text undo/redo leaves video2.0 unchanged; timeline focus restores video undo",
+        "Invalid11-byte MP4 shows import error; current task/timeline retained and no extra task",
+        "Library search and Trash/Undo only QA capture:14 to13 to14 with original name/folder"
+      ],
+      "limits": [
+        "No requests sent; no user-created takes touched",
+        "Actual task-switch undo remains covered only by pending native fixture"
+      ]
+    },
+    {
+      "commit": "9243cea",
+      "passed": [
+        "Native build; no-speech Post manual-copy explanation and top Draft disabled",
+        "Manual LinkedIn text works and survives disclosure collapse",
+        "UI Export Square to Exporting then honest Copy and open instructions; H2641080x1080,2.5s,no audio expected"
+      ],
+      "findings": [
+        "Confirmed manual text leaks when switching takes",
+        "Confirmed secondary Draft with Sharer enabled for silent exported take"
+      ],
+      "limits": [
+        "Both findings have cloud source/regression fixes pending CI and local retest",
+        "Temporary test copy cleared",
+        "No copy/open/share handoff clicked"
+      ]
+    },
+    {
+      "commit": "64625f6",
+      "passed": [
+        "Native build/codesign",
+        "Accessibility readiness explanation and direct Settings control",
+        "Untrusted updated binary: Activity Monitor Wait-only run visibly reports needs Accessibility, no capture",
+        "Direct button opens actual macOS Privacy & Security > Accessibility"
+      ],
+      "limits": [
+        "AX controls/text and Settings route evidence only; CUA screenshot returned white",
+        "No permission toggles changed in this pass",
+        "Earlier successful Wait capture remains9e1d8ed-specific"
+      ]
+    }
+  ],
+  "remaining": [
+    "Documentation follow-up CI has its own status; 5f0fbab full source suite passed",
+    "Individual inspection of newly generated no-audio/Post/Autopilot PNGs",
+    "Actual Post A-to-B-to-A/relaunch and secondary no-speech Draft retest",
+    "Representative audible/media/framing quality",
+    "Provider/model-backed requests, transcription retry/download, voice/languages and external handoffs",
+    "VoiceOver, focus order, OS reduced motion, scrolling/resizing and auxiliary dialogs",
+    "Complex automation, device/permission transitions and File-menu pause-label observation"
+  ],
+  "cloudFollowup": {
+    "commit": "084234a",
+    "run": 40953600794,
+    "packageTests": 851,
+    "nativeBuild": "passed",
+    "media": "passed",
+    "workspaceStep": "failed only workspaceUndo (older redo fixture)",
+    "nativeChecksPassed": [
+      "mounted Post A-to-B-to-A identity and manual-copy persistence",
+      "approval-state reset and other-take bytes unchanged",
+      "explicit empty copy and unreadable file preservation",
+      "save failure retains draft and retry saves",
+      "Autopilot denied preflight board/error feedback",
+      "no-speech Post recovery"
+    ],
+    "generatedImages": 104,
+    "visualReview": "New images not yet independently inspected",
+    "remainingLocalPostRetest": true,
+    "latestComplete": {
+      "commit": "5f0fbab",
+      "run": 40953770394,
+      "allJobs": "success",
+      "tests": 851,
+      "generatedImages": 104,
+      "artifact": 12932493730,
+      "artifactSHA256": "5f1419b506ee64936306ba21901ae16c8cf9f6c06e51cf6a96a742bdcff450b1",
+      "nativeHarnessCanvasMenuKeyTaskSwitchFieldUndoRedo": "passed",
+      "postAutopilotNoSpeech": "passed",
+      "newImageInspection": "pending"
+    }
+  }
+}

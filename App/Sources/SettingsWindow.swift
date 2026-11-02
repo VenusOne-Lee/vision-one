@@ -63,8 +63,10 @@ struct SettingsView: View {
                     AgentsSettingsView(service: MCPService.shared)
                 case .access:
                     ScrollView {
-                        SetupView(access: AccessCenter.shared)
-                            .frame(maxWidth: .infinity)
+                        VStack(spacing: Theme.Space.md) {
+                            AutopilotAccessibilityPanel().padding(Theme.Space.md)
+                            SetupView(access: AccessCenter.shared).frame(maxWidth: .infinity)
+                        }
                     }
                 }
             }

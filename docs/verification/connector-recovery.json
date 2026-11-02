@@ -1,0 +1,64 @@
+{
+  "scope": "Focused connector recovery; full Producer Workspace acceptance remains unfinished",
+  "branch": "codex/producer-workspace-overhaul",
+  "reconstructionBase": "27fafb9fedbd65d2700dca122743eee1a2ecd47e",
+  "uncommittedWorkspaceRecovered": false,
+  "executorError": "409 Conflict, environment_offline: Environment is not connected.",
+  "latestValidatedApplicationCommit": "9e1d8edc6241e62c660971b3907832eacee76f49",
+  "latestRun": 40939012727,
+  "packageTests": 844,
+  "packageFailures": 0,
+  "nativeBuild": "passed",
+  "nativeMedia": "passed",
+  "nativeWorkspaceRenders": 92,
+  "runtime": {
+    "exportRunIdentity": {
+      "delayedAWhileB": true,
+      "validCurrentProgress": true,
+      "cancelledSuccessRejected": true,
+      "failureAndRetry": true
+    },
+    "actualSerialQueue": {
+      "order": true,
+      "queuedAndActiveCancellation": true,
+      "preservesSuccessfulOutputsOnRetry": true,
+      "rejectsObsoleteSamePresetProgress": true
+    },
+    "cardSafety": {
+      "compiledOfflineRules": true,
+      "unprotectedConnections": 1,
+      "protectedConnections": 0,
+      "paintedFirstFrame": true,
+      "flatFinalFrameRetained": true,
+      "flatOddWidthRejected": true
+    },
+    "transcriptViewSwitch": {
+      "nativeFirstResponderAndSyntheticKeys": true,
+      "equalCountReplacement": true,
+      "updatedRangesAndTiming": true,
+      "mountedTakeSwitch": true,
+      "selectionReset": true,
+      "currentTakeCutUndoRedo": true,
+      "otherTakeBytesUnchanged": true
+    },
+    "reducedMotionTransactionAndStateChanges": true
+  },
+  "inspection": {
+    "reviewer": "tracking assistant in originating session; not human user",
+    "ownedTemplateIntroBody": "portrait asset fills output; body camera fully visible upper-right and Producer caption readable",
+    "paintedFirstAndFlatLast": "opened; expected blue/yellow then yellow",
+    "minimumLibrary": "all 4 light/dark populated/filtered-empty opened; controls/recovery visible without clipping",
+    "filteredEmptyLibraryWideNarrow": "all 4 opened; controls and recovery visible without overflow; standalone LibraryView",
+    "transcriptRecovery": "all 12 missing/corrupt/empty x light/dark x wide/narrow opened; recovery and preview/playback/export visible",
+    "minimumRecording": "both 760x520 opened; header/choices/preview/footer/Start recording visible; Refresh preview partly clipped at internal viewport bottom; scrolling/reachability unverified",
+    "limit": "Static review and app-owned synthetic events do not establish real interaction, OS accessibility, capture, providers, model download or audible/real-footage quality"
+  },
+  "unfinished": "Every remaining gate in docs/CLOUD-VERIFICATION.md is still required; no merge, release or publication performed.",
+  "localMacVerification": {
+    "authorized": true,
+    "commit": "9e1d8ed",
+    "scope": "verification only; implementation remains cloud",
+    "state": "isolated managed worktree created; build and interactive QA in progress",
+    "results": "pending"
+  }
+}

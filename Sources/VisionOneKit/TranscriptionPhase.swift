@@ -121,8 +121,8 @@ public struct TakeAudioTracks: Codable, Equatable, Sendable {
 // MARK: - Failures
 
 /// transcript-failed.json: written when a take can never be transcribed
-/// (it has no sound), so the next launch doesn't try it again. Retrying
-/// from the menu deletes it first.
+/// (it has no sound), so the next launch doesn't try it again. Recovery
+/// requires another source; retry does not delete this permanent reason.
 public struct TranscriptFailure: Codable, Equatable, Sendable {
     public enum Reason: String, Codable, Sendable {
         case noAudio

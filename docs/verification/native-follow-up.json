@@ -1,0 +1,46 @@
+{
+  "checkpoint": "205a51d9b203f8464f6ef865111161500672778f",
+  "scope": "Observed native results reported by the local verification assistant; the full twelve-part plan remains open.",
+  "verified": [
+    "df24f1f: separate manual Post copy persisted across A/B/A navigation and app relaunch; explicit empty overrides preserved, silent-take Draft gates disabled.",
+    "5f0fbab: actual compact window 1524x1104 pixels and recording sheet 1320x944 pixels. Light/dark scrolling reaches script, teleprompter, Coach, rehearsal and countdown with fixed header/footer. No capture attempted.",
+    "5f0fbab: ambiguous edit request clarified without running an edit; 'open sound' navigated the same take. 'show sound' was not recognized.",
+    "5f0fbab: individually inspected all twelve post-no-speech, transcript-no-audio and autopilot-start-error light/dark narrow/wide PNGs. Visible content legible without clipping. Autopilot images show only the notice, not the full screen.",
+    "30d3e2b: Script Coach focused nine tests and CI 41032607706 passed. Actual on-device full-line and phrase-flag rewrites produced suggestions; Use it replaced only the intended sentence and preserved the next sentence. Original QA script restored.",
+    "11de12f: CI 41033409772 passed. Native Zoom here immediately enabled toolbar Undo; Undo removed the zoom, Redo restored it, and final Undo removed the temporary effect.",
+    "205a51d: local Xcode Debug build and strict deep code-signature verification passed. Actual silent QA take shows No source audio in this video in Sound header and waveform. Playback changed Play to Pause while running and returned to Play at EOF 00:00:02.15. Dark mixer screenshot inspected.",
+    "205a51d: CI 41033978239 rendered-media step passed, including missing-source audio analysis failure followed by recovery after restoring the source, silent terminal state and EOF playback state. Full run status is recorded separately.",
+    "205a51d: complete CI 41033978239 succeeded, including package tests, native build, actual rendered media and native workspace fixtures.",
+    "b8418b2: verification bundle now uses mcp-verification.sock, separate from release and dev. All 31 local MCPTests passed; signed native build and strict signature verification passed. Live bridge initialized protocol 2025-11-25, listed 25 tools and returned recording=false through a mode-0600 socket. Duplicate QA title returned ambiguity guidance; exact folder get_take/get_timeline succeeded with the expected Square export and no effects. Settings showed the named verification client connected with Ask first selected. No MCP recording/edit/export/share call was made.",
+    "b8418b2: complete CI 41035169364 succeeded, including package tests, native build, rendered media and workspace fixtures.",
+    "b8418b2: actual QA task Archive removed it from its project and exposed Restore in Archived tasks. Restore reopened the same project/task and preserved its Square export; saved desk.json confirms archived=false. No other task was archived.",
+    "b8418b2: actual two-format export selected Vertical and Portrait 4:5, showed Vertical exporting while Portrait waited, then two videos ready. Both H.264 MP4s fully decoded: Vertical 1080x1920 28311 bytes; Portrait 1080x1350 19769 bytes; each 2.5 seconds and correctly no audio. Decoded frames inspected and show the expected red/blue QA image. No external share action.",
+    "b8418b2: actual multi-take queue UI used a 120-second synthetic fixture and existing QA take B. B showed Another take is exporting and Queue 2, then Queued position 1; Stop marked both B outputs cancelled; Retry unfinished returned B to position 1. The active fixture finished normally and B subsequently showed two videos ready. Probed outputs: fixture 120s H264 at 1080x1920 and 1080x1350 with no audio; B 2.5s H264 at both dimensions with AAC. This is queued cancellation/retry and serial completion, not active cancellation or failure recovery.",
+    "Queue-test cleanup: temporary imports at 2026-10-30 11.49.45 (long fixture) and 11.49.14 (picker selected the previous short fixture on the first attempt) were archived through the UI; saved desk.json confirms both archived and original QA task unarchived. Media retained locally. Original QA editor restored at zero with no effects. No outbound share.",
+    "User-authorized OS accessibility check on b8418b2 native build: Reduce Motion started off, was enabled and verified on; Editor -> Sound -> Editor -> Tasks retained the QA task and expected controls. Restored off and verified. This is functional mode-switch evidence, not a frame-by-frame animation audit."
+  ],
+  "open": [
+    {
+      "area": "Canvas gestures",
+      "observed": "Earlier Zoom/Blur drags did not add effects. Subsequent native pointer retest failed in Computer Use itself with windowNotFoundAtPosition before input delivery; this does not establish an app gesture defect.",
+      "status": "Manual Zoom/Blur create-and-undo test requested. Draw remains unverified. Toolbar Undo issue separately fixed and verified in 11de12f."
+    },
+    {
+      "area": "Script Coach recovery",
+      "status": "Empty, unknown and unchanged rewrite outputs covered by tests. Stale-response and unusable-response feedback not forced with the live model."
+    },
+    {
+      "area": "MCP completion",
+      "status": "Source CI 41035169364 passed. Live read-only runtime and UI entry point verified; recording approvals, agent action capture and broader client workflows remain open."
+    },
+    {
+      "area": "Delivery scope",
+      "status": "Actual single-take multi-format and multi-take queued cancellation/retry/serial completion verified with synthetic inputs. Active cancellation and injected failure recovery remain native-CI-only; representative real-media quality and provider handoffs remain open."
+    },
+    {
+      "area": "VoiceOver and provider follow-up",
+      "status": "User authorized temporary accessibility changes and intends to configure providers directly in Vision One. VoiceOver off -> on verified; composer focus and Control-Option-Right attempted, but tool output did not establish VoiceOver cursor or spoken feedback. Utility attempt was interrupted by reported user interaction with Settings. VoiceOver restored off and verified. Full screen-reader walkthrough remains unverified. Provider setup completion not yet confirmed; no credentials requested in chat."
+    }
+  ],
+  "limits": "No full VoiceOver, representative audio quality, provider account, complex automation or full-plan completion claim. No merge or publication authorized."
+}

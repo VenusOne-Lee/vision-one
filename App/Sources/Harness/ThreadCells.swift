@@ -13,9 +13,13 @@ struct ThreadCellView: View {
         case let .ask(text, mode):
             AskBubble(text: text, at: cell.at, planFirst: mode == .planFirst)
         case let .take(folder):
-            let take = Take(folder: folder)
-            TakeThreadCard(take: take, title: model.title(of: take)) {
-                model.mode = .editor
+            // The first take is the task's video: the header and review
+            // column already show it. Later takes get a card.
+            if task.takeFolders.first != folder {
+                let take = Take(folder: folder)
+                TakeThreadCard(take: take, title: model.title(of: take)) {
+                    model.mode = .editor
+                }
             }
         case let .reply(agent, text):
             AgentReply(agent: agent, text: text)
@@ -46,7 +50,12 @@ struct ThreadCellView: View {
                 AnsweredCard(card: card)
             }
         case let .failed(agent, message):
-            Notice(.error, lead: "\(agent.title) didn't finish", detail: message)
+            VStack(alignment: .leading, spacing: Theme.Space.sm) {
+                Notice(.error, lead: "\(agent.title) didn't finish", detail: message)
+                Button("Retry request") { model.retryRequest(before: cell.id, in: task.id) }
+                    .buttonStyle(.secondary)
+                    .help("Retries this request with its original plan/approval mode")
+            }
         }
     }
 
@@ -76,15 +85,22 @@ struct AnsweredCard: View {
     }
 }
 
-/// An agent's short reply, on the left.
+/// An agent's short reply beside the ring, in the transcript's reading face.
 struct AgentReply: View {
     let agent: AgentKind
     let text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(agent.title).textStyle(.label).foregroundStyle(Theme.textFaint)
-            Text(text).textStyle(.body).textSelection(.enabled)
+        HStack(alignment: .top, spacing: 14) {
+            RingLogo(size: 32)
+                .help(agent.title)
+            Text(text)
+                .font(Font(Theme.transcriptFont(size: 18)))
+                .lineSpacing(3)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("\(agent.title): \(text)")
+            Spacer(minLength: 0)
         }
     }
 }
@@ -106,15 +122,15 @@ struct TakeThreadCard: View {
                     Image(systemName: "film").foregroundStyle(Theme.textFaint)
                 }
             }
-            .frame(width: 128, height: 80)
+            .frame(width: 72, height: 52)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).textStyle(.headline).lineLimit(2)
                 Text(take.shortLabel()).textStyle(.caption).foregroundStyle(Theme.textMuted)
                 HStack(spacing: Theme.Space.sm) {
-                    Button("Open in Editor", action: openEditor)
+                    Button("Edit video", action: openEditor)
                         .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
-                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([take.screenURL]) }
+                    Button("Show file") { NSWorkspace.shared.activateFileViewerSelecting([take.screenURL]) }
                         .buttonStyle(PillButtonStyle(kind: .quiet, size: .small))
                 }
                 .padding(.top, 2)
@@ -133,18 +149,37 @@ struct AskBubble: View {
     var planFirst = false
 
     var body: some View {
-        HStack {
-            Spacer(minLength: 80)
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            UserAvatar()
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
             Text(text)
-                .textStyle(.body)
+                .font(.custom(BundledFont.sansRegular, size: 15))
                 .textSelection(.enabled)
-                .padding(.horizontal, Theme.Space.md - 4)
-                .padding(.vertical, Theme.Space.sm)
-                .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg)
-                    .strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
+                .fixedSize(horizontal: false, vertical: true)
                 .help(at.formatted(date: .abbreviated, time: .shortened) + (planFirst ? " · Plan first" : ""))
+            Spacer(minLength: 0)
         }
+    }
+}
+
+/// Your initials in a soft circle, beside what you asked.
+struct UserAvatar: View {
+    var size: CGFloat = 34
+
+    var body: some View {
+        Text(initials)
+            .font(.custom(BundledFont.sansSemiBold, size: size * 0.38))
+            .foregroundStyle(Theme.text)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Theme.canvas))
+            .overlay(Circle().strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
+            .accessibilityHidden(true)
+    }
+
+    private var initials: String {
+        let words = NSFullUserName().split(separator: " ").prefix(2)
+        let letters = words.compactMap(\.first).map { String($0).uppercased() }.joined()
+        return letters.isEmpty ? "You" : letters
     }
 }
 

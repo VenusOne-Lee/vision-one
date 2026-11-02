@@ -209,6 +209,19 @@ public struct ExportBatch: Equatable, Sendable {
         }
     }
 
+    /// A retry keeps successful files and their identity; only unfinished
+    /// outputs re-enter the queue.
+    public mutating func retryUnfinished() {
+        guard !isRunning else { return }
+        isCancelled = false
+        for preset in presets {
+            switch statuses[preset] {
+            case .failed?, .cancelled?: statuses[preset] = .waiting
+            default: break
+            }
+        }
+    }
+
     /// Follows the exporter. Only phases for the running preset count,
     /// and an end (done, failed, idle) only once it has been seen
     /// exporting, so a phase left over from an earlier export is ignored.

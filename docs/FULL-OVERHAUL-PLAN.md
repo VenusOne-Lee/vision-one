@@ -1,0 +1,40 @@
+# Vision One: full Producer Workspace overhaul
+
+## Objective and approval
+
+The user requested a complete functionality-led UI overhaul, selected option 4 (Producer Workspace), approved its functional variations and dark mode, then explicitly requested: “build the whole plan. Continue in cloud.” Ease, functionality and productivity are the priorities. Implement the native SwiftUI macOS application, not a substitute website or static prototype. The earlier core iteration is not completion.
+
+## Selected visual targets
+
+The seven PNGs in `docs/design/producer-workspace/` are the approved concept family. `01-task-light.png` is the original selected option 4. The remaining images cover new task, recording setup, dark task review, expanded editor, sound and clips/delivery. Inspect the actual images before implementation. Translate composition and hierarchy, not incidental generated text or invented controls. Use actual project data and video, not fictional footage baked into the interface. Remove duplicate primary actions in the recording concept. Keep navigation order consistent between modes.
+
+Default task layout: compact project/task sidebar; concise conversation and reviewable proposals in the middle; larger preview plus transcript/changes at right. Completed work is a disclosure, not a wall of receipts. Expand editing and sound to use the canvas; preserve task context when returning. Light and dark have identical functionality. Reuse theme tokens, native icons, bundled fonts, accessibility and keyboard behavior. Orange means live recording; dashed means proposed; solid means accepted. Settings remain available without overcrowding the workspace.
+
+## Required implementation and acceptance
+
+1. **Recording preparation:** unify screen/window/area, camera, mic, system audio, source preview, level meter, permission/readiness state, countdown and script access. One obvious Record action. Remember project choices where appropriate. Verify start/pause/resume/stop and opening the resulting task; do not change OS permissions silently.
+2. **New task and library:** implement the approved productive starting surface; provide general video import into an editable task, not merely a style-reference importer. Handle invalid/no-audio media and cancellation. Keep transcript search, sorting, rename/archive/trash recovery and review/export filters; useful titles and honest statuses, no raw output paths as status text. Verify record/import/resume routes.
+3. **AI workspace:** compact plans, explicit actions, pending approvals, retry/cancel/progress, and reviewable results. Handle simple navigation correctly and clarify ambiguous requests instead of silently executing an unrelated edit. Keep on-device versus external processing explicit. Preserve existing approval gates and never advertise automatic posting where only handoff exists.
+4. **Transcript and cleanup:** synchronize words, playhead and timeline; preview proposed cuts in context; make keep-original versus apply-cut clear. Undo/redo and before/after review must work. Handle missing, loading and failed transcripts without dead ends.
+5. **Expanded editor:** implement the selected layout for captions, zoom/blur/draw, spoken editing, alternate versions and contextual controls. Verify returning to the same task, keyboard navigation, resizing and small-window layouts.
+6. **Sound:** coherent selected mixer design with voice clarity, music balance, ducking, Energy and optional advanced tracks. Explain actual Energy behavior. Verify saved edits and audible preview/export agreement.
+7. **Clips and thumbnails:** finish export consistency: captions, timed sidecars, separate camera track, brand overlays, correct aspect ratios and framing. Support a complete previewable clip deliverable and batch output. Verify actual rendered MP4s including portrait camera placement, captions, cuts and audio. Do not count compilation as media verification. Existing clip crop is fixed; assess and implement useful cursor-follow behavior using the existing reframe planner without breaking manual fixed/fit framing.
+8. **Brand and reusable styles:** connect template selection/loading/application and project defaults end to end. A saved style analysis must visibly affect the relevant edit/export settings; do not present stored metadata as an applied template. Preserve brand cards/watermark and user overrides.
+9. **Preparation and automation tools:** expose Script Coach, rehearsal/voice tools, Autopilot, agent recording and MCP through clear contextual entry points. Keep existing functionality; show setup prerequisites early and maintain task context. Apply the coherent design to these surfaces rather than deleting or hiding capabilities to simplify screenshots.
+10. **Delivery:** coherent finishing workspace with clip/full-video preview, output presets, caption controls, thumbnails/post copy and honest share handoff. Expand multi-output work beyond the current single-take batch where needed for the approved workflow; clear queued/running/failed/cancelled/retry states. Keep Cloudflare share pages, languages/dubbing and personalized versions reachable, with accurate provider requirements.
+11. **Theme and accessibility:** full light/dark parity across all changed surfaces, no clipped controls, readable contrast, VoiceOver labels, useful focus order, keyboard shortcuts, reduced motion, empty/loading/error states. Preserve custom appearance choices when toggling light/dark rather than unexpectedly resetting unrelated preferences.
+12. **Verification and documentation:** relevant tests for new behavior, Swift package suite, native Xcode build, real native UI walkthrough and actual exported-media inspection. Update stale feature docs against the owning code. Record completed requirements and evidence individually, plus remaining limitations. Deliver reviewable commits/PR; do not merge or publish a release without user authorization.
+
+## Current implementation is only a starting point
+
+See `WORKSPACE-UPDATE.md` for the initial changes. They widened the preview, collapsed activity, added library filters, direct export/theme actions, exact navigation phrases and clip export wiring. Reinspect and improve them rather than treating them as final. Known areas to audit include history ordering, per-task UI state, narrow layouts, theme preference preservation, source/output timing, camera placement after crop, and subtitle-write failures.
+
+The previous local iteration reported an Xcode Debug build and 821 passing Swift tests. A native UI walkthrough exercised task light/dark, composer wrapping, opening Export and filtering the library. Clip media output was not rendered/verified. Those results apply only to that iteration. `Tests/VisionOneKitTests/SoundTests.swift` has a type-annotation simplification for a pre-existing compiler timeout; preserve its test intent.
+
+## Cloud execution and completion boundary
+
+Continue from the handoff branch, not repository main. Recheck upstream changes and preserve unrelated user work. The untracked `App/Info 2.plist` on the Mac was not part of this task and is intentionally excluded.
+
+Cloud execution may not have macOS/Xcode or hardware capture. Confirm actual tools before claiming support. Implement and test what the environment supports, use existing macOS CI if appropriate, and explicitly track native/device/media checks still requiring a Mac. Do not turn an environment limitation into a claim that the full plan is complete, and do not replace the native application with a web demo. Keep making independent progress until the full objective is met or a concrete external blocker remains.
+
+User working agreements: medium reasoning by default, high for complex work; no subagents without user approval; use Codex IAB explicitly for any website/browser work, native UI tools for this app; no speculative scope expansion. Provide concise updates and complete authorized fixes/checks without repeated permission requests. No external messages, public deployment or release is authorized by this handoff.

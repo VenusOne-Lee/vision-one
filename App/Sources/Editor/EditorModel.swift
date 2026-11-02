@@ -15,12 +15,32 @@ final class EditorModel: ObservableObject {
 
     enum TranscriptState: Equatable {
         case loading
-        /// No transcript.json yet; the editor checks again every few
-        /// seconds, so it appears when transcription finishes.
+        /// A transcription job is queued or running; check for its result.
         case waiting
+        /// No file and no transcription job is queued or running.
+        case missing
+        /// The owned video has no audio; retry cannot create speech.
+        case noAudio
         case ready
         case failed(String)
     }
+
+    enum AudioLevelsState: Equatable {
+        case idle, loading, ready, noAudio
+        case failed(String)
+
+        var message: String {
+            switch self {
+            case .idle: return "Audio levels not read yet"
+            case .loading: return "Reading audio…"
+            case .ready: return "No measurable voice loudness"
+            case .noAudio: return "No source audio in this video"
+            case let .failed(message): return message
+            }
+        }
+    }
+
+    @Published private(set) var audioLevelsState: AudioLevelsState = .idle
 
     let take: Take
     let undoManager = UndoManager()
@@ -30,12 +50,18 @@ final class EditorModel: ObservableObject {
 
     @Published private(set) var phase: Phase = .loading
     @Published private(set) var transcriptState: TranscriptState = .loading
-    @Published private(set) var transcript: Transcript?
+    @Published private(set) var transcript: Transcript? {
+        didSet { transcriptRevision += 1 }
+    }
+    /// Changes only when word/timing data is replaced, never on playback ticks.
+    private(set) var transcriptRevision = 0
     @Published private(set) var edits = EditList(sourceDuration: 0) {
         didSet { if edits != oldValue { refreshMarks() } }
     }
     /// Music and sound effects, saved to sound.json.
     @Published private(set) var sound = SoundPlan()
+    @Published private(set) var recordedMix = RecordedMix()
+    private var microphoneTrackID: CMPersistentTrackID?
     /// Sentences said again, saved to redos.json.
     @Published private(set) var redos = RedoList()
     /// The voice tools' cleaned voice and AI word fixes (voice.json),
@@ -49,10 +75,15 @@ final class EditorModel: ObservableObject {
     @Published var saveError: String?
     /// Shape of the video, so boxes drawn over the preview line up.
     @Published private(set) var videoSize: CGSize = .zero
+    private var previewTransform = CGAffineTransform.identity
+    private var previewCamera: (id: CMPersistentTrackID, info: CameraTrack)?
     /// Mic loudness every 10 ms, for the waveform and finding silence.
     /// Nil until levels.json is read or measured.
     @Published private(set) var levels: LoudnessEnvelope? {
-        didSet { if levels != oldValue { voiceLoudness = levels?.integratedLoudness() } }
+        didSet {
+            if levels != oldValue { voiceLoudness = levels?.integratedLoudness() }
+            if levels != nil { audioLevelsState = .ready }
+        }
     }
     /// The mic's integrated loudness, for the sound full mode's meter.
     @Published private(set) var voiceLoudness: Float?
@@ -82,6 +113,8 @@ final class EditorModel: ObservableObject {
 
     private var asset: AVURLAsset?
     private var timeObserver: Any?
+    private var undoChanges: AnyCancellable?
+    private var playbackChanges: AnyCancellable?
     private var rebuildTask: Task<Void, Never>?
     private var watch: Task<Void, Never>?
     /// Every cut id this editor has seen, so cuts written by someone else
@@ -98,6 +131,8 @@ final class EditorModel: ObservableObject {
     /// effects volume ramps, so mute and solo can be applied live.
     private var mixTracks: [MixLane: [CMPersistentTrackID]] = [:]
     private var soundParameters: [AVMutableAudioMixInputParameters] = []
+    /// Keep selected music/effect assets alive for the current player item.
+    private var soundAssets: [AVAsset] = []
     /// Redone sentences on their own tracks, and where the original
     /// voice is silent under them.
     private var redoParameters: [AVMutableAudioMixInputParameters] = []
@@ -107,9 +142,31 @@ final class EditorModel: ObservableObject {
     private var fixMutes: [TimeSpan] = []
     private var loadStarted = false
 
-    init(take: Take) {
+    init(take: Take, renderPhase: Phase? = nil) {
         self.take = take
         effects = EffectsModel(take: take, undoManager: undoManager)
+        // Effects share this history but publish through their own model.
+        // Refresh editor-owned toolbar controls after the manager settles.
+        let undoNotifications: [Notification.Name] = [
+            .NSUndoManagerDidCloseUndoGroup, .NSUndoManagerDidUndoChange,
+            .NSUndoManagerDidRedoChange
+        ]
+        undoChanges = Publishers.MergeMany(undoNotifications.map {
+            NotificationCenter.default.publisher(for: $0, object: undoManager)
+        }).sink { [weak self] _ in
+            MainActor.assumeIsolated { self?.objectWillChange.send() }
+        }
+        // A final periodic time callback can precede AVPlayer's rate change
+        // at EOF. Observe the actual transport state as well.
+        playbackChanges = player.publisher(for: \.rate, options: [.initial, .new])
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] rate in
+                MainActor.assumeIsolated { self?.isPlaying = rate != 0 }
+            }
+        if let renderPhase {
+            phase = renderPhase
+            loadStarted = true
+        }
     }
 
     // MARK: Loading
@@ -129,6 +186,7 @@ final class EditorModel: ObservableObject {
         knownCutIDs = Set(edits.cuts.map(\.id))
         outsideCutIDs = []
         sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
+        recordedMix = RecordedMix.load(for: take)
         redos = (try? RedoList.load(from: take.redosURL)) ?? RedoList()
         voiceEdits = VoiceEdits.load(from: take.voiceURL)
         effects.load(edits: edits)
@@ -162,6 +220,7 @@ final class EditorModel: ObservableObject {
             knownCutIDs = Set(edits.cuts.map(\.id))
             // A damaged sound.json shouldn't stop the take opening.
             sound = (try? SoundPlan.load(from: take.soundURL)) ?? SoundPlan()
+        recordedMix = RecordedMix.load(for: take)
             redos = (try? RedoList.load(from: take.redosURL)) ?? RedoList()
             voiceEdits = VoiceEdits.load(from: take.voiceURL)
         } catch {
@@ -174,7 +233,7 @@ final class EditorModel: ObservableObject {
         await rebuildPlayer()
         phase = .ready
         if let saved = try? LoudnessEnvelope.read(from: take.levelsURL) { levels = saved }
-        loadTranscript()
+        reloadTranscript()
         startWatching()
     }
 
@@ -186,7 +245,7 @@ final class EditorModel: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self, !Task.isCancelled else { return }
-                if self.transcriptState == .waiting { self.loadTranscript() }
+                if self.transcriptState != .ready { self.reloadTranscript() }
                 if self.mergeOutsideCuts() { self.scheduleRebuild() }
                 self.pickUpVoiceEdits()
             }
@@ -224,9 +283,30 @@ final class EditorModel: ObservableObject {
         if mergeOutsideCuts() { scheduleRebuild() }
     }
 
-    private func loadTranscript() {
+    var canRetryTranscript: Bool { transcriptState != .noAudio }
+
+    func retryTranscript() {
+        guard canRetryTranscript else { return }
+        transcriptState = .waiting
+        Transcriber.shared.retry(take)
+    }
+
+    /// Rereads transcript recovery output and invalidates native text/range caches.
+    func reloadTranscript() {
+        let transcriber = Transcriber.shared
+        if transcriber.isWorking(on: take) { transcriptState = .waiting; return }
+        if let failure = try? TranscriptFailure.read(from: take.transcriptFailedURL) {
+            switch failure.reason {
+            case .noAudio: transcriptState = .noAudio
+            }
+            return
+        }
+        if let message = transcriber.failures[take.name] {
+            transcriptState = .failed(message)
+            return
+        }
         guard FileManager.default.fileExists(atPath: take.transcriptURL.path) else {
-            transcriptState = .waiting
+            transcriptState = .missing
             return
         }
         do {
@@ -390,6 +470,24 @@ final class EditorModel: ObservableObject {
         scheduleRebuild()
     }
 
+    func previewRecordedMix(_ next: RecordedMix) {
+        recordedMix = next
+        player.currentItem?.audioMix = previewAudioMix()
+    }
+
+    func applyRecordedMix(_ next: RecordedMix, from start: RecordedMix? = nil) {
+        let previous = start ?? recordedMix
+        guard previous != next else { return }
+        undoManager.registerUndo(withTarget: self) { model in
+            MainActor.assumeIsolated { model.applyRecordedMix(previous) }
+        }
+        undoManager.setActionName("Source Audio Levels")
+        recordedMix = next
+        do { try next.write(for: take); saveError = nil }
+        catch { saveError = "Couldn't save source levels: \(error.localizedDescription)" }
+        player.currentItem?.audioMix = previewAudioMix()
+    }
+
     /// Every redo change goes through here, like cuts through `apply`.
     func applyRedos(_ next: RedoList, actionName: String) {
         let previous = redos
@@ -478,7 +576,11 @@ final class EditorModel: ObservableObject {
         let keep = sourceTime
         do {
             let composition = try await PreviewComposition.make(from: asset, keeping: edits.keptSpans, take: take)
-            let voiceTracks = composition.tracks(withMediaType: .audio).map(\.trackID)
+            previewCamera = try await PreviewComposition.addCamera(for: take, keeping: edits.keptSpans, to: composition)
+            let recordedAudio = composition.tracks(withMediaType: .audio)
+            let voiceTracks = recordedAudio.map(\.trackID)
+            let micIndex = await MicTrack.micIndex(of: recordedAudio, take: take)
+            microphoneTrackID = micIndex.map { recordedAudio[$0].trackID }
             let timeline = ExportTimeline(keep: edits.keptSpans.map { $0.start..<$0.end },
                                           sourceDuration: edits.sourceDuration, frameRate: 0)
             let added = await SoundComposer.add(sound, timeline: timeline, words: wordSpans, to: composition)
@@ -486,7 +588,11 @@ final class EditorModel: ObservableObject {
             let fixes = await VoiceComposer.addFixes(for: take, timeline: timeline, to: composition, offset: 0)
             guard !Task.isCancelled else { return }
             if let track = composition.tracks(withMediaType: .video).first {
-                let natural = try await track.load(.naturalSize)
+                let encoded = try await track.load(.naturalSize)
+                let transform = try await track.load(.preferredTransform)
+                previewTransform = transform
+                let displayed = CGRect(origin: .zero, size: encoded).applying(transform)
+                let natural = CGSize(width: abs(displayed.width), height: abs(displayed.height))
                 // Big enough to judge a blur, small enough to play smoothly.
                 let scale = min(1, 1920 / max(natural.width, natural.height, 1))
                 let size = CGSize(width: (natural.width * scale / 2).rounded() * 2,
@@ -517,6 +623,7 @@ final class EditorModel: ObservableObject {
             item.audioTimePitchAlgorithm = .spectral
             item.audioMix = previewAudioMix()
             soundProblem = added.problem
+            soundAssets = added.assets
             player.replaceCurrentItem(with: item)
             seek(toSource: keep)
             if wasPlaying { player.play() }
@@ -552,14 +659,14 @@ extension EditorModel {
         } else {
             inputs += redoParameters
             inputs += fixParameters
-            if !redoMutes.isEmpty || !fixMutes.isEmpty {
-                for id in mixTracks[.voice] ?? [] {
-                    let parameters = AVMutableAudioMixInputParameters()
-                    parameters.trackID = id
-                    RedoComposer.mute(parameters, during: redoMutes)
-                    VoiceComposer.mute(fixMutes, on: parameters)
-                    inputs.append(parameters)
-                }
+            for id in mixTracks[.voice] ?? [] {
+                let gain = recordedMix.gain(isMicrophone: id == microphoneTrackID)
+                let parameters = AVMutableAudioMixInputParameters()
+                parameters.trackID = id
+                parameters.setVolume(gain, at: .zero)
+                RedoComposer.mute(parameters, during: redoMutes, gain: gain)
+                if id == microphoneTrackID { VoiceComposer.mute(fixMutes, on: parameters, gain: gain) }
+                inputs.append(parameters)
             }
         }
         guard !inputs.isEmpty else { return nil }
@@ -571,15 +678,21 @@ extension EditorModel {
     /// The export compositor, drawing this take's zooms and blurs, or nil
     /// to play the frames as they are.
     fileprivate func previewVideoComposition() -> AVVideoComposition? {
-        guard let preview, preview.renderSize.width > 0,
-              let effects = effects.previewEffects(edits: edits) else { return nil }
+        guard let preview, preview.renderSize.width > 0 else { return nil }
+        let effects = effects.previewEffects(edits: edits)
+        guard effects != nil || previewCamera != nil || previewTransform != .identity else { return nil }
         let composition = AVMutableVideoComposition()
         composition.customVideoCompositorClass = FrameCompositor.self
         composition.renderSize = preview.renderSize
         composition.frameDuration = CMTime(value: 1, timescale: 30)
         composition.instructions = [
             FrameInstruction(timeRange: CMTimeRange(start: .zero, duration: preview.composition.duration),
-                             trackID: preview.trackID, overlays: [], effects: effects),
+                             trackID: preview.trackID, overlays: [], sourceTransform: previewTransform, effects: effects,
+                             camera: previewCamera.map { camera in
+                                 CameraLayer(trackID: camera.id, track: camera.info, timeline: outputTimeline,
+                                             ringColour: VideoExporter.cgColor(BrandStore.shared.kit.ring),
+                                             background: BackgroundRenderer(background: CameraBackground.read(from: take.backgroundURL)))
+                             }),
         ]
         return composition
     }
@@ -589,6 +702,24 @@ extension EditorModel {
 /// same spans export renders, so what you hear is what you get. It only
 /// points at screen.mov, so rebuilding it after an edit is quick.
 enum PreviewComposition {
+    static func addCamera(for take: Take, keeping spans: [TimeSpan], to composition: AVMutableComposition) async throws
+        -> (id: CMPersistentTrackID, info: CameraTrack)? {
+        guard let camera = await VideoExporter.camera(for: take),
+              let track = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else { return nil }
+        var outputStart = 0.0
+        for span in spans {
+            let wanted = CMTimeRange(start: VideoExporter.time(camera.info.cameraTime(forScreen: span.start)),
+                                     end: VideoExporter.time(camera.info.cameraTime(forScreen: span.end)))
+            let available = wanted.intersection(camera.range)
+            if available.duration > .zero {
+                try track.insertTimeRange(available, of: camera.track,
+                                          at: VideoExporter.time(outputStart) + (available.start - wanted.start))
+            }
+            outputStart += span.duration
+        }
+        return (track.trackID, camera.info)
+    }
+
     /// With `take`, a kept cleaned voice plays in place of the mic, as
     /// in export.
     static func make(from asset: AVAsset, keeping spans: [TimeSpan], take: Take? = nil) async throws -> AVMutableComposition {
@@ -636,22 +767,34 @@ extension EditorModel {
     /// cleaned before silence was checked against the mic get their
     /// undecided silence suggestions redone at the same time.
     func loadLevels() async {
-        if levels != nil { return }
+        if levels != nil { audioLevelsState = .ready; return }
+        guard audioLevelsState != .loading else { return }
         if let saved = try? LoudnessEnvelope.read(from: take.levelsURL) {
             levels = saved
             return
         }
-        guard let samples = try? await TakeAudio.read(take).samples else { return }
-        let rate = TakeAudio.sampleRate
-        let measured = await Task.detached(priority: .utility) {
-            LoudnessEnvelope.measure(samples: samples, sampleRate: rate)
-        }.value
-        guard levels == nil else { return }
-        levels = measured
-        try? measured.write(to: take.levelsURL)
-        guard !words.isEmpty else { return }
-        let fresh = CleanupDetector().pauses(in: words, duration: edits.sourceDuration, loudness: measured)
-        replaceSuggestions(SilenceCut.refreshSuggestions(edits, with: fresh))
+        audioLevelsState = .loading
+        do {
+            let samples = try await TakeAudio.read(take).samples
+            try Task.checkCancellation()
+            let rate = TakeAudio.sampleRate
+            let measured = await Task.detached(priority: .utility) {
+                LoudnessEnvelope.measure(samples: samples, sampleRate: rate)
+            }.value
+            try Task.checkCancellation()
+            guard levels == nil else { audioLevelsState = .ready; return }
+            levels = measured
+            try? measured.write(to: take.levelsURL)
+            guard !words.isEmpty else { return }
+            let fresh = CleanupDetector().pauses(in: words, duration: edits.sourceDuration, loudness: measured)
+            replaceSuggestions(SilenceCut.refreshSuggestions(edits, with: fresh))
+        } catch is CancellationError {
+            audioLevelsState = .idle
+        } catch TakeAudio.ReadError.noAudio {
+            audioLevelsState = .noAudio
+        } catch {
+            audioLevelsState = .failed("Couldn't read this video's audio. Try again.")
+        }
     }
 
     /// "Cut the silence" from the Ask bar: every quiet stretch, cut now as

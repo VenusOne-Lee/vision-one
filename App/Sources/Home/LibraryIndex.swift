@@ -4,13 +4,11 @@ import VisionOneKit
 
 /// Reads what the Library lists for each take off disk: title, length,
 /// where it's up to, what it's for and its words for search. Off the main
-/// thread; lengths and transcripts are kept once read, since neither
-/// changes after they land.
+/// thread; transcripts are re-read so a retry or correction updates search.
 actor LibraryIndex {
     static let shared = LibraryIndex()
 
     private var durations: [URL: Double] = [:]
-    private var transcripts: [URL: String] = [:]
 
     func items(for takes: [Take]) async -> [TakeListing] {
         var items: [TakeListing] = []
@@ -53,9 +51,7 @@ actor LibraryIndex {
     }
 
     private func transcript(of take: Take) -> String? {
-        if let known = transcripts[take.folder] { return known }
         guard let text = (try? Transcript.read(from: take.transcriptURL))?.text else { return nil }
-        transcripts[take.folder] = text
         return text
     }
 }

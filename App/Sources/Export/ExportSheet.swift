@@ -28,6 +28,7 @@ struct ExportSheet: View {
     @State private var loadProblem: String?
     @State private var captions = CaptionSettings()
     @State private var savedCaptions: CaptionSettings?
+    @State private var captionProblem: String?
 
     init(take: Take, keep: [Range<Double>]?, close: @escaping () -> Void) {
         self.take = take
@@ -35,7 +36,7 @@ struct ExportSheet: View {
         self.close = close
         let purpose = TakePlan.load(for: take)?.purpose
         self.purpose = purpose
-        _picked = State(initialValue: Set(purpose.map { ExportPreset.suggested(for: $0) } ?? Self.lastPicked))
+        _picked = State(initialValue: Set(AppliedTemplate.presets(for: take) ?? purpose.map { ExportPreset.suggested(for: $0) } ?? Self.lastPicked))
     }
 
     /// What was exported last time, for takes with no purpose.
@@ -80,6 +81,17 @@ struct ExportSheet: View {
                 .padding(Theme.Space.lg)
                 .frame(maxHeight: .infinity, alignment: .top)
             }
+            if let explanation = CaptionExport.omissionReason(for: take) {
+                Text(explanation).textStyle(.caption).foregroundStyle(Theme.textMuted)
+                    .padding(.horizontal, Theme.Space.lg).padding(.bottom, Theme.Space.sm)
+            }
+            if let captionProblem {
+                Text(captionProblem).textStyle(.caption).foregroundStyle(Theme.error).padding(.horizontal, Theme.Space.lg)
+            }
+            if let warnings = queue.warnings[take.folder], !warnings.isEmpty {
+                Text(warnings.joined(separator: "\n")).textStyle(.caption).foregroundStyle(Theme.error)
+                    .padding(.horizontal, Theme.Space.lg).padding(.bottom, Theme.Space.sm)
+            }
             Rectangle().fill(Theme.line).frame(height: 1)
             footer
         }
@@ -103,8 +115,12 @@ struct ExportSheet: View {
             // Saved the way the editor's caption controls save, so the
             // export (which reads captions.json) uses what's shown here.
             guard newValue != savedCaptions else { return }
-            try? take.saveCaptionSettings(newValue)
-            savedCaptions = newValue
+            do {
+                try take.saveCaptionSettings(newValue)
+                savedCaptions = newValue
+                captionProblem = nil
+                NotificationCenter.default.post(name: .takeStyleChanged, object: take.folder)
+            } catch { captionProblem = "Couldn't save captions: \(error.localizedDescription)" }
         }
     }
 
@@ -207,7 +223,7 @@ struct ExportSheet: View {
 
     private func toggle(_ preset: ExportPreset) {
         // Picking again after an export starts a fresh batch.
-        if batch != nil { queue.reset() }
+        if batch != nil { queue.reset(take) }
         if picked.contains(preset) {
             picked.remove(preset)
         } else {
@@ -266,7 +282,7 @@ struct ExportSheet: View {
             footerNote
                 .frame(maxWidth: .infinity, alignment: .leading)
             if isExporting {
-                Button("Stop") { queue.cancel() }
+                Button("Stop") { queue.cancel(take) }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textMuted)
@@ -277,7 +293,15 @@ struct ExportSheet: View {
                     .keyboardShortcut(.defaultAction)
                     .help("Keeps exporting. Open Export again to see it.")
             } else if batch?.isFinished == true {
-                Button("Export more") { queue.reset() }
+                if let batch, batch.presets.contains(where: {
+                    switch batch.status(of: $0) {
+                    case .failed?, .cancelled?: return true
+                    default: return false
+                    }
+                }) {
+                    Button("Retry unfinished") { queue.retry(take) }.buttonStyle(.secondary)
+                }
+                Button("Export more") { queue.reset(take) }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textMuted)
@@ -292,15 +316,15 @@ struct ExportSheet: View {
                     .foregroundStyle(Theme.textMuted)
                     .keyboardShortcut(.cancelAction)
                     .help("Close without exporting")
-                Button("Export \(picked.count)") {
+                Button(otherIsExporting ? "Queue \(picked.count)" : "Export \(picked.count)") {
                     let presets = ExportPreset.allCases.filter(picked.contains)
                     UserDefaults.standard.set(presets.map(\.rawValue), forKey: Self.lastPickedKey)
                     queue.export(take, presets: presets, keep: keep)
                 }
                 .buttonStyle(PillButtonStyle(kind: .primary))
                 .keyboardShortcut(.defaultAction)
-                .disabled(picked.isEmpty || otherIsExporting)
-                .opacity(picked.isEmpty || otherIsExporting ? 0.5 : 1)
+                .disabled(picked.isEmpty || captionProblem != nil)
+                .opacity(picked.isEmpty || captionProblem != nil ? 0.5 : 1)
             }
         }
         .padding(.horizontal, Theme.Space.lg)
@@ -309,7 +333,9 @@ struct ExportSheet: View {
 
     @ViewBuilder
     private var footerNote: some View {
-        if let batch, batch.isRunning {
+        if let position = queue.position(of: take) {
+            Text("Queued · position \(position) · uses saved settings when it starts").textStyle(.caption).foregroundStyle(Theme.textMuted)
+        } else if let batch, batch.isRunning {
             // Ticks every second so the time left counts down between
             // progress updates.
             TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -325,7 +351,7 @@ struct ExportSheet: View {
                 .lineLimit(2)
                 .help(batch.failures.joined(separator: "\n"))
         } else if otherIsExporting {
-            Text("Another take is exporting. This one can go when it's done.")
+            Text("Another take is exporting. Add this video to the queue; saved settings are read when it starts.")
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.textMuted)
                 .lineLimit(2)
@@ -375,7 +401,10 @@ struct ExportSheet: View {
                 loadProblem = "This take has no video."
                 return
             }
-            let size = try await track.load(.naturalSize)
+            let encoded = try await track.load(.naturalSize)
+            let transform = try await track.load(.preferredTransform)
+            let displayed = CGRect(origin: .zero, size: encoded).applying(transform)
+            let size = CGSize(width: abs(displayed.width), height: abs(displayed.height))
             let rate = try await Double(track.load(.nominalFrameRate))
             let seconds = try await asset.load(.duration).seconds
             guard seconds.isFinite else { return }
@@ -388,7 +417,7 @@ struct ExportSheet: View {
                 edits.sourceDuration = seconds
                 timeline = ExportTimeline(edits: edits, frameRate: rate)
             }
-            let plan = brand.cardMaker().plan(bodyDuration: timeline.duration)
+            let plan = brand.cardMaker(look: AppliedTemplate.look(for: take), templateFolder: AppliedTemplate.folder(for: take)).plan(bodyDuration: timeline.duration)
             source = ExportSource(width: Int(size.width), height: Int(size.height), frameRate: rate)
             duration = plan.duration
             loadProblem = nil

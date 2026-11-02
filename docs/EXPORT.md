@@ -62,3 +62,11 @@ Beside it is the **Post panel** (`PostPanel(take:)`), the same view the task win
 - The camera bubble in short clips, and moving or hiding it in the editor
 - A share link (Loom style). It needs storage the builder brings, such as their own Drive or S3
 - A notification when a background export finishes while the sheet is closed
+
+## Producer Workspace delivery updates
+
+`ExportQueue` serialises batches across multiple takes and retains per-take results while another task runs. Each take has queued/running/failed/cancelled states and retry of unfinished outputs. Cancel in one take's export sheet cancels that take, including a queued request. Queued work reads the take's saved settings when it starts; the UI says so. The queue currently lives in the app process and is not restored after quitting.
+
+Portrait 4:5 is an explicit output preset, including template defaults. Split template framing places the screen above a camera pane when a separate camera is present. Imported rotation metadata is applied before effects and reframing. Camera overlays compose after crop. Subtitle-write errors are visible warnings attached to the completed video; disabling subtitle files removes stale sidecars.
+
+CI can run the built binary with `--verify-media <temporary-output-folder>` to render a deterministic fixture and retain MP4/PNG/SRT/VTT/JSON evidence. This diagnostic uses no recording permissions or external provider. Its actual result is tracked per commit in `CLOUD-VERIFICATION.md`.

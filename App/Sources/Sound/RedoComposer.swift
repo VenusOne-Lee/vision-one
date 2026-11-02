@@ -53,14 +53,14 @@ enum RedoComposer {
 
     /// Silences the original voice under each redone line, with short
     /// fades either side.
-    static func mute(_ parameters: AVMutableAudioMixInputParameters, during mutes: [Range<Double>]) {
+    static func mute(_ parameters: AVMutableAudioMixInputParameters, during mutes: [Range<Double>], gain: Float = 1) {
         for range in mutes {
             let start = time(max(0, range.lowerBound - fade))
-            parameters.setVolumeRamp(fromStartVolume: 1, toEndVolume: 0,
+            parameters.setVolumeRamp(fromStartVolume: gain, toEndVolume: 0,
                                      timeRange: CMTimeRange(start: start, duration: time(fade)))
             parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: 0,
                                      timeRange: CMTimeRange(start: time(range.lowerBound), end: time(range.upperBound)))
-            parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: 1,
+            parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: gain,
                                      timeRange: CMTimeRange(start: time(range.upperBound), duration: time(fade)))
         }
     }

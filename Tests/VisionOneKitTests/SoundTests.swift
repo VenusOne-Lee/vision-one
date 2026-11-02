@@ -178,7 +178,8 @@ final class EffectSuggesterTests: XCTestCase {
         let suggestions = EffectSuggester.suggestions(energy: .viral, words: words(), edits: edits)
         XCTAssertEqual(suggestions.first?.soundID, "pop")
         XCTAssertEqual(suggestions.first?.at, 1)
-        XCTAssertEqual(suggestions.dropFirst().map(\.at), [10 - 0.25, 20 - 0.25, 40 - 0.25, 70 - 0.25])
+        let expectedTimes: [Double] = [9.75, 19.75, 39.75, 69.75]
+        XCTAssertEqual(suggestions.dropFirst().map(\.at), expectedTimes)
     }
 
     func testCutWordsAreSkipped() {

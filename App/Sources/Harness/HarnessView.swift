@@ -10,106 +10,138 @@ import VisionOneKit
 struct HarnessView: View {
     @ObservedObject var model: HarnessModel
     @ObservedObject private var recorder = ScreenRecorder.shared
+    @ObservedObject private var theme = ThemeStore.shared
+    @ObservedObject private var importer = VideoImporter.shared
 
     @AppStorage("harness.showSidebar") private var showSidebar = true
     @AppStorage("harness.sidebarWidth") private var sidebarWidth = 248.0
     /// A component filling the window (⤢), with the task rail beside it.
     @State private var fullPanel: PanelKind?
+    @AppStorage("harness.stageFraction") private var stageFraction = 0.58
     /// Editor or Sound picked with no takes yet: their empty state shows.
     @State private var noTakesMode: HarnessMode?
+    @State private var showingTemplate = false
+    @State private var showingTools = false
+    @State private var compactPane = "Review"
+
+    init(model: HarnessModel, compactPane: String = "Review") {
+        self.model = model
+        _compactPane = State(initialValue: compactPane)
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
+        GeometryReader { outer in
             HStack(spacing: 0) {
-                if showSidebar && model.mode == .tasks && fullPanel == nil {
+                if model.mode == .editor && noTakesMode == nil {
+                    IconRail(model: model)
+                } else if showSidebar && fullPanel == nil {
                     HarnessSidebar(model: model)
-                        .frame(width: sidebarWidth)
+                        .frame(width: min(sidebarWidth, max(200, outer.size.width * 0.28)))
                     DragDivider(axis: .vertical, value: $sidebarWidth, range: 200...420)
                 }
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 0) {
+                    if importer.isImporting {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text("Importing video on this Mac…").textStyle(.caption)
+                            Spacer()
+                            Button("Cancel") { importer.cancel() }.buttonStyle(.quiet)
+                        }.padding(Theme.Space.sm).padding(.top, WindowChrome.titleBarHeight)
+                    }
+                    if let message = importer.problem {
+                        HStack {
+                            Text(message).textStyle(.caption).foregroundStyle(Theme.error)
+                            Spacer()
+                            Button("Dismiss") { importer.clearProblem() }.buttonStyle(.quiet)
+                        }.padding(Theme.Space.sm).padding(.top, WindowChrome.titleBarHeight)
+                    }
+                    content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         }
+        .ignoresSafeArea()
         .frame(minWidth: 760, minHeight: 520)
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
         .themed()
         .background(shortcuts)
+        .sheet(isPresented: $showingTools) {
+            WorkspaceToolsSheet(model: model) { showingTools = false }
+        }
+        .sheet(isPresented: $showingTemplate) {
+            if let workspace = model.workspace { ApplyTemplateSheet(workspace: workspace) { showingTemplate = false } }
+        }
+        .onChange(of: model.preparingRecording) { _, preparing in
+            // Ready to record lives in the task page's review column.
+            if preparing, model.mode != .tasks { model.mode = .tasks }
+        }
+        .sheet(isPresented: $model.presentingExport) {
+            if let workspace = model.workspace {
+                ExportSheet(take: workspace.take, keep: nil) { model.presentingExport = false }
+            }
+        }
         .onReceive(recorder.$lastTake) { _ in model.refreshTakes() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             model.refreshTakes()
+        }
+        .onChange(of: model.task?.openApprovals.count) { _, count in
+            if let count, count > 0 { compactPane = "Task" }
         }
         .onChange(of: model.page) { _, _ in
             fullPanel = nil
             noTakesMode = nil
         }
         .onChange(of: model.takes.isEmpty) { _, empty in if !empty { noTakesMode = nil } }
-        .alert("Something went wrong", isPresented: Binding(get: { model.problem != nil },
-                                                           set: { if !$0 { model.problem = nil } })) {
-            Button("OK") { model.problem = nil }
-        } message: {
-            Text(model.problem ?? "")
+        .alert(model.clarification == nil ? "Something went wrong" : "Clarify request",
+               isPresented: Binding(get: { model.problem != nil || model.clarification != nil }, set: {
+                   if !$0 { model.problem = nil; model.clarification = nil }
+               })) {
+            Button("OK") { model.problem = nil; model.clarification = nil }
+        } message: { Text(model.clarification ?? model.problem ?? "") }
+
+    }
+
+    private var moreMenu: some View {
+        WorkspaceMoreMenu(model: model, showingTools: $showingTools, showingTemplate: $showingTemplate) {
+            modeBinding.wrappedValue = $0
         }
     }
 
-    // MARK: Top bar
+    private var savedLine: String {
+        let project = model.currentProject?.name ?? "My videos"
+        return "\(project)  ·  Saved on this Mac"
+    }
 
-    private var topBar: some View {
-        HStack(spacing: Theme.Space.sm) {
-            IconButton(showSidebar ? "Hide sidebar" : "Show sidebar", systemImage: "sidebar.left",
-                       shortcut: ShortcutMap.toggleSidebar.display, isOn: showSidebar) { showSidebar.toggle() }
-                .disabled(model.mode != .tasks)
-            breadcrumb
-                .layoutPriority(-1)
-            Spacer(minLength: Theme.Space.sm)
-            SegmentedTabs(selection: modeBinding, options: HarnessMode.allCases) { $0.title }
-                .help("Tasks shows the thread; Editor and Sound fill the window. Esc comes back.")
-            Spacer(minLength: Theme.Space.sm)
-            if recorder.phase.isLive {
-                HStack(spacing: 6) {
-                    LiveDot()
-                    Text("Recording").textStyle(.label).foregroundStyle(Theme.text)
+    private var modeSubtitle: String {
+        let date = model.workspace?.take.recordedAt().map {
+            $0.formatted(.dateTime.day().month(.abbreviated).year())
+        }
+        return [model.currentProject?.name ?? "My videos", "Saved on this Mac", date].compactMap { $0 }
+            .joined(separator: "  ·  ")
+    }
+
+    private func modeHeader(inset: CGFloat) -> some View {
+        ModeHeader(title: model.task?.title ?? model.workspace?.take.displayTitle() ?? "Video",
+                   subtitle: modeSubtitle, mode: modeBinding, leadingInset: inset) {
+            HStack(spacing: Theme.Space.sm) {
+                if model.mode == .editor, let workspace = model.workspace {
+                    EditorHeaderActions(model: workspace.editor)
                 }
-            }
-            if model.mode == .tasks, model.workspace != nil {
-                IconButton(model.layout.isHidden ? "Show panel" : "Hide panel", systemImage: "sidebar.right",
-                           shortcut: ShortcutMap.togglePanel.display, isOn: !model.layout.isHidden) {
-                    model.updateLayout { $0.isHidden.toggle() }
-                }
+                if model.workspace != nil { ExportPill { model.presentingExport = true } }
+                moreMenu
             }
         }
-        .padding(.horizontal, Theme.Space.md - 2)
-        .frame(height: Theme.Size.toolbar)
+    }
+
+    private func taskHeader(_ task: DeskTask) -> some View {
+        PageHeader(task.title, subtitle: savedLine) {
+            HStack(spacing: Theme.Space.xs) {
+                if model.workspace != nil { ExportPill { model.presentingExport = true } }
+                moreMenu
+            }
+        }
         .background(Theme.paper)
-    }
-
-    /// "My videos › RankRide launch demo"
-    private var breadcrumb: some View {
-        HStack(spacing: 6) {
-            Text(model.currentProject?.name ?? "My videos")
-                .textStyle(.label)
-                .foregroundStyle(Theme.textMuted)
-                .lineLimit(1)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(Theme.textFaint)
-                .accessibilityHidden(true)
-            Text(pageTitle)
-                .textStyle(.bodyStrong)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var pageTitle: String {
-        switch model.page {
-        case .newTask: return "New task"
-        case .library: return "Library"
-        case .task: return model.task?.title ?? "Task"
-        }
     }
 
     /// Editor and Sound need a take: with none open, they open the newest.
@@ -122,7 +154,8 @@ struct HarnessView: View {
                     noTakesMode = next
                     return
                 }
-                model.open(newest)
+                model.open(newest, mode: next)
+                return
             }
             fullPanel = nil
             model.mode = next
@@ -133,7 +166,9 @@ struct HarnessView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let noTakesMode {
+        if model.preparingRecording && model.mode == .tasks {
+            recordingSetup
+        } else if let noTakesMode {
             NoTakesYetView(mode: noTakesMode)
         } else {
             modeContent
@@ -150,25 +185,62 @@ struct HarnessView: View {
                         .background(Theme.paper)
                     TaskRail(model: model) { self.fullPanel = nil }
                 }
+                .padding(.top, WindowChrome.titleBarHeight)
             } else {
                 tasksPage
             }
         case .editor:
             if let workspace = model.workspace {
-                EditorFullMode(model: workspace.editor, clips: workspace.clips, thumbnail: workspace.thumbnail,
-                               onBack: { model.mode = .tasks }) {
-                    TaskRail(model: model) { model.mode = .tasks }
+                VStack(spacing: 0) {
+                    modeHeader(inset: WindowChrome.trafficLightsWidth - 56)
+                    EditorFullMode(model: workspace.editor, clips: workspace.clips, thumbnail: workspace.thumbnail,
+                                   onBack: { model.mode = .tasks })
                 }
                 .id(workspace.take.name)
                 .task(id: workspace.take.name) { await workspace.load() }
             }
         case .sound:
             if let workspace = model.workspace {
-                SoundFullMode(model: workspace.editor, onBack: { model.mode = .tasks }) {
-                    TaskRail(model: model) { model.mode = .tasks }
+                VStack(spacing: 0) {
+                    modeHeader(inset: showSidebar ? 0 : WindowChrome.trafficLightsWidth)
+                    SoundFullMode(model: workspace.editor, onBack: { model.mode = .tasks })
                 }
                 .id(workspace.take.name)
                 .task(id: workspace.take.name) { await workspace.load() }
+            }
+        }
+    }
+
+    /// Ready to record: the thread says what's set up, the review column
+    /// holds the choices and the one Start recording.
+    private var recordingSetup: some View {
+        GeometryReader { geometry in
+            let stageWidth = min(max(geometry.size.width * stageFraction, 380), max(380, geometry.size.width - 340))
+            if geometry.size.width < 720 {
+                RecordingPreparationView(model: model)
+                    .padding(.top, WindowChrome.titleBarHeight)
+                    .background(Theme.paper)
+            } else {
+                HStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        PageHeader(model.task?.title ?? "New recording", subtitle: savedLine) {
+                            moreMenu
+                        }
+                        RecordingThreadSummary(model: model)
+                        Composer(model: model)
+                            .frame(maxWidth: 640)
+                            .padding(.horizontal, Theme.Space.lg)
+                            .padding(.bottom, Theme.Space.md)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .background(Theme.paper)
+                    .frame(minWidth: 340, maxWidth: .infinity)
+                    Rectangle().fill(Theme.line).frame(width: Theme.Stroke.hairline)
+                    RecordingPreparationView(model: model)
+                        .padding(.top, WindowChrome.titleBarHeight)
+                        .background(Theme.paper)
+                        .frame(width: stageWidth)
+                }
             }
         }
     }
@@ -179,21 +251,48 @@ struct HarnessView: View {
         case .newTask:
             NewTaskView(model: model)
         case .library:
-            LibraryView { model.open($0) }
+            LibraryView(library: model.library) { model.open($0) }
+                .padding(.top, WindowChrome.titleBarHeight)
         case .task:
             if let task = model.task {
-                HStack(spacing: 0) {
-                    TaskThreadView(model: model, task: task)
-                        .frame(minWidth: 340, maxWidth: .infinity)
-                    // The panel needs a take; a task that's still a plan
-                    // or a script is just its thread.
-                    if let workspace = model.workspace, !model.layout.isHidden {
-                        DragDivider(axis: .vertical, value: panelWidth, range: PanelLayout.minWidth...PanelLayout.maxWidth,
-                                    inverted: true)
-                        PanelHost(model: model, workspace: workspace) { fullPanel = $0 }
-                            .frame(width: model.layout.width)
-                            .task(id: workspace.take.name) { await workspace.load() }
+                GeometryReader { geometry in
+                let narrow = geometry.size.width < 720
+                let stageWidth = min(max(geometry.size.width * stageFraction, 320), max(320, geometry.size.width - 340))
+                if narrow, let workspace = model.workspace, !model.layout.isHidden {
+                    VStack(spacing: 0) {
+                        taskHeader(task)
+                        HStack {
+                            SegmentedTabs(selection: $compactPane, options: ["Task", "Review"]) { $0 }
+                            Spacer()
+                        }.padding(8).background(Theme.paper)
+                        Divider().overlay(Theme.line)
+                        if compactPane == "Task" {
+                            TaskThreadView(model: model, task: task).id(task.id)
+                        } else {
+                            PanelHost(model: model, workspace: workspace) { fullPanel = $0 }
+                                .task(id: workspace.take.name) { await workspace.load() }
+                        }
                     }
+                } else {
+                    HStack(spacing: 0) {
+                        VStack(spacing: 0) {
+                            taskHeader(task)
+                            TaskThreadView(model: model, task: task).id(task.id)
+                        }
+                        .frame(minWidth: 340, maxWidth: .infinity)
+                        if let workspace = model.workspace, !model.layout.isHidden {
+                            DragDivider(axis: .vertical, value: Binding(
+                                get: { Double(stageWidth) },
+                                set: { stageFraction = $0 / max(1, geometry.size.width) }),
+                                range: 320...max(320, Double(geometry.size.width - 340)), inverted: true)
+                            PanelHost(model: model, workspace: workspace) { fullPanel = $0 }
+                                .padding(.top, WindowChrome.titleBarHeight)
+                                .background(Theme.paper)
+                                .frame(width: stageWidth)
+                                .task(id: workspace.take.name) { await workspace.load() }
+                        }
+                    }
+                }
                 }
             }
         }
@@ -219,7 +318,9 @@ struct HarnessView: View {
     }
 
     private func escape() {
-        if noTakesMode != nil {
+        if model.preparingRecording {
+            model.preparingRecording = false
+        } else if noTakesMode != nil {
             noTakesMode = nil
         } else if model.mode != .tasks {
             model.mode = .tasks

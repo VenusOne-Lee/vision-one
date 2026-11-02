@@ -21,7 +21,7 @@ struct EditorFullMode<Rail: View>: View {
     @StateObject private var filmstrip: FilmstripModel
     @AppStorage("editor.tool") private var toolRaw = EditorTool.select.rawValue
     @AppStorage("editor.showTranscript") private var showAside = true
-    @AppStorage("editor.asideWidth") private var asideWidth = 340.0
+    @AppStorage("editor.asideWidth") private var asideWidth = 440.0
     @AppStorage("editor.aside") private var asideRaw = EditorAside.transcript.rawValue
     /// An agent recorded this take (actions.json), so it has a Steps tab.
     @State private var hasSteps: Bool
@@ -35,6 +35,10 @@ struct EditorFullMode<Rail: View>: View {
     /// Space is down; a hold past `holdToTalk` starts listening.
     @State private var spaceDown = false
     @State private var comparing = false
+    @State private var compactPane = "Canvas"
+    @State private var timelineOverride: Bool?
+    @State private var search = ""
+    @State private var searching = false
 
     static var holdToTalk: Duration { .milliseconds(350) }
 
@@ -65,30 +69,35 @@ struct EditorFullMode<Rail: View>: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            if geometry.size.width < 760 {
-                // Narrow: the aside goes under the stage.
-                VSplitView {
-                    HStack(spacing: 0) {
-                        ToolStrip(model: model, tool: $toolRaw)
-                        stage
+        GeometryReader { outer in
+        HStack(spacing: 0) {
+            rail()
+            VStack(spacing: 0) {
+                GeometryReader { geometry in
+                    if geometry.size.width < 760 {
+                        VStack(spacing: 0) {
+                            if showAside {
+                                HStack {
+                                    SegmentedTabs(selection: $compactPane, options: ["Canvas", "Transcript & changes"]) { $0 }
+                                    Spacer()
+                                }.padding(8).background(Theme.paper)
+                            }
+                            if !showAside || compactPane == "Canvas" { stage(height: outer.size.height) }
+                            else { asidePanel }
+                        }
+                    } else {
+                        HStack(spacing: 0) {
+                            stage(height: outer.size.height).frame(minWidth: 380, maxWidth: .infinity).layoutPriority(1)
+                            if showAside {
+                                SideResizeHandle(width: $asideWidth, range: 260...min(640, geometry.size.width * 0.5))
+                                asidePanel.frame(width: min(asideWidth, max(260, geometry.size.width - 470)))
+                            }
+                        }
                     }
-                    .frame(minHeight: 320)
-                    if showAside { asidePanel.frame(minHeight: 180) }
                 }
-            } else {
-                HStack(spacing: 0) {
-                    ToolStrip(model: model, tool: $toolRaw)
-                    stage
-                        .frame(minWidth: 380, maxWidth: .infinity)
-                        .layoutPriority(1)
-                    if showAside {
-                        SideResizeHandle(width: $asideWidth, range: 260...min(640, geometry.size.width * 0.5))
-                        asidePanel.frame(width: asideWidth)
-                    }
-                    rail()
-                }
+                if model.phase == .ready { editingFooter(height: outer.size.height) }
             }
+        }
         }
         .background(Theme.canvas)
         .foregroundStyle(Theme.text)
@@ -117,8 +126,9 @@ struct EditorFullMode<Rail: View>: View {
     // MARK: Stage
 
     @ViewBuilder
-    private var stage: some View {
+    private func stage(height: CGFloat) -> some View {
         VStack(spacing: 0) {
+            ToolStrip(model: model, tool: $toolRaw, zoom: $zoom, showAside: $showAside)
             switch model.phase {
             case .loading:
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -126,42 +136,12 @@ struct EditorFullMode<Rail: View>: View {
                 EditorNotice(title: "Can't open this take", message: message, isError: true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
-                video
-                    .padding([.horizontal, .top], 12)
-                TransportBar(model: model, zoom: $zoom) {
-                    VersionMenu(model: model.versions) { comparing = true }
-                        .sheet(isPresented: $comparing) {
-                            CompareView(versions: model.versions, take: model.take) { comparing = false }
-                        }
-                    ViewThatFits(in: .horizontal) {
-                        Text("Hold Space to talk · D to draw")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.textMuted)
-                            .lineLimit(1)
-                            .fixedSize()
-                        Color.clear.frame(width: 0)
-                    }
-                    .help("Hold Space while it plays and say what you want, like “cut this bit” or “zoom in here”. With the pen (D), circle to zoom and scribble to blur.")
-                    Button("Show tracks") { showTracks.toggle() }
-                        .buttonStyle(TabPillStyle(isOn: showTracks))
-                        .accessibilityAddTraits(showTracks ? .isSelected : [])
-                        .help("One lane each for zooms and blurs, and music and sound effects")
-                    IconButton(showAside ? "Hide the side pane" : "Show the side pane",
-                               systemImage: "sidebar.right", shortcut: "⌘2", isOn: false) {
-                        showAside.toggle()
-                    }
-                    .keyboardShortcut("2", modifiers: .command)
+                VStack(spacing: 0) {
+                    video
+                    PlayerTransport(model: model, onExpand: { NSApp.keyWindow?.toggleFullScreen(nil) })
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                TimelineResizeBar(height: $timelineHeight)
-                EditorTimeline(model: model, effects: model.effects, filmstrip: filmstrip, zoom: $zoom,
-                               showWaveform: showWaveform, showEffects: showTracks, showSound: showTracks,
-                               cutsOnRelease: tool == .cut)
-                    .frame(height: timelineHeight)
-                    .padding(.horizontal, 12)
-                AskBar(model: model)
-                    .padding(12)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.lg))
+                .padding(12)
             }
             if let saveError = model.saveError {
                 EditorNotice(title: "Edits not saved", message: saveError, isError: true)
@@ -171,10 +151,62 @@ struct EditorFullMode<Rail: View>: View {
         .background(Theme.canvas)
     }
 
+    private func editingFooter(height: CGFloat) -> some View {
+        let timelineVisible = timelineOverride ?? (height >= 540)
+        return VStack(spacing: 0) {
+            if timelineVisible { TimelineResizeBar(height: $timelineHeight) }
+            timelineHeader(visible: timelineVisible)
+            if timelineVisible {
+                HStack(alignment: .top, spacing: 0) {
+                    TrackLabels(showWaveform: showWaveform, showTracks: showTracks,
+                                hasEffects: !model.effects.zooms.zooms.isEmpty || !model.effects.blurs.blurs.isEmpty)
+                    EditorTimeline(model: model, effects: model.effects, filmstrip: filmstrip, zoom: $zoom,
+                                   showWaveform: showWaveform, showEffects: showTracks, showSound: showTracks,
+                                   cutsOnRelease: tool == .cut)
+                }
+                .frame(height: min(timelineHeight, max(80, height * 0.24)))
+                .padding(.horizontal, 12)
+            }
+            AskBar(model: model)
+                .padding(12)
+        }
+        .background(Theme.canvas)
+        .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline) }
+    }
+
+    /// "00:24 / 2:14", the selection's Cut, then zoom and lane switches.
+    private func timelineHeader(visible: Bool) -> some View {
+        HStack(spacing: Theme.Space.sm) {
+            Text("\(Timecode.short(from: model.edits.outputTime(forSource: model.sourceTime) ?? 0))  /  \(Timecode.short(from: model.edits.outputDuration))")
+                .font(.system(size: 13, weight: .medium).monospacedDigit())
+            if let span = model.selection {
+                Button("Cut \(EditorTimeline.seconds(span.duration))") { model.cutSelection() }
+                    .buttonStyle(PillButtonStyle(kind: .secondary, size: .small))
+                    .fixedSize()
+                    .help("Cut the stretch you picked on the timeline (Delete)")
+            }
+            Spacer(minLength: Theme.Space.sm)
+            if visible {
+                IconButton("Zoom out", systemImage: "minus") { zoom = max(1, zoom / 1.5) }
+                Scrubber(value: log2(max(zoom, 1)), total: 5) { value, _ in zoom = pow(2, value) }
+                    .frame(width: 140)
+                    .accessibilityLabel("Timeline zoom")
+                IconButton("Zoom in", systemImage: "plus") { zoom = min(32, zoom * 1.5) }
+                Rectangle().fill(Theme.line).frame(width: 1, height: 18)
+                IconButton("Waveform", systemImage: "waveform", isOn: showWaveform) { showWaveform.toggle() }
+                IconButton("Effect and sound lanes", systemImage: "square.3.layers.3d", isOn: showTracks) { showTracks.toggle() }
+            }
+            IconButton(visible ? "Hide timeline" : "Show timeline",
+                       systemImage: visible ? "chevron.down" : "chevron.up") { timelineOverride = !visible }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 38)
+    }
+
     private var video: some View {
         PlayerSurface(player: model.player)
             .overlay { CaptionLayer(model: model) }
-            .background(Theme.text)
+            .background(Color.black)
             .onTapGesture { model.togglePlay() }
             .overlay { EffectsLayer(model: model, effects: model.effects) }
             .overlay {
@@ -190,9 +222,9 @@ struct EditorFullMode<Rail: View>: View {
                     ClipWindowHost(clips: clips)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .frame(minHeight: 160)
+            .frame(minHeight: 60)
+            .background(Color.black)
             .layoutPriority(1)
     }
 
@@ -223,22 +255,36 @@ struct EditorFullMode<Rail: View>: View {
     private var asidePanel: some View {
         VStack(spacing: 0) {
             HStack(spacing: Theme.Space.sm) {
-                SegmentedTabs(selection: Binding(get: { aside }, set: { asideRaw = $0.rawValue }),
-                              options: asides) { pane in
+                SegmentBar(selection: Binding(get: { aside }, set: { asideRaw = $0.rawValue }),
+                           options: [EditorAside.transcript, .changes], fill: false) { pane in
                     pane == .changes && model.proposedChangeCount > 0
-                        ? "\(pane.title) \(model.proposedChangeCount)" : pane.title
+                        ? "\(pane.title) (\(model.proposedChangeCount))" : pane.title
                 }
+                .fixedSize()
                 Spacer(minLength: 0)
+                if aside == .transcript { TranscriptSearchButton(query: $search, isOpen: $searching) }
+                if asides.count > 2 {
+                    Menu {
+                        ForEach(asides.filter { $0 != .transcript && $0 != .changes }) { pane in
+                            Button(pane.title) { asideRaw = pane.rawValue }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 24, height: 24)
+                    }
+                    .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+                    .accessibilityLabel("More editor panels")
+                    .help("Steps, clips and thumbnails")
+                }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
             Divider().overlay(Theme.line)
             if !model.steerLog.isEmpty { SteerLogStrip(model: model) }
             if let target = model.redoTarget {
                 RedoCard(model: model, sentence: target).id(target.start)
             }
             switch aside {
-            case .transcript: TranscriptPane(model: model)
+            case .transcript: TranscriptPane(model: model, search: search)
             case .changes: ChangesPanel(model: model, effects: model.effects)
             case .steps: AgentStepsPane(model: model)
             case .clips:
@@ -284,36 +330,117 @@ enum EditorAside: String, CaseIterable, Identifiable {
 struct ToolStrip: View {
     @ObservedObject var model: EditorModel
     @Binding var tool: String
+    @Binding var zoom: Double
+    @Binding var showAside: Bool
 
     var body: some View {
-        VStack(spacing: 4) {
-            ForEach(EditorTool.allCases) { option in
-                IconButton(option.title, systemImage: option.systemImage,
-                           shortcut: option.key.uppercased(), isOn: option.rawValue == tool) {
-                    tool = option.rawValue
+        HStack(spacing: 6) {
+            HStack(spacing: 2) {
+                ForEach(EditorTool.allCases) { option in
+                    let isOn = option.rawValue == tool
+                    Button { tool = option.rawValue } label: {
+                        Label(option.title, systemImage: option.systemImage)
+                            .font(.custom(BundledFont.sansMedium, size: 13))
+                            .foregroundStyle(Theme.text)
+                            .padding(.horizontal, 12)
+                            .frame(height: 34)
+                            .background(RoundedRectangle(cornerRadius: Theme.Radius.md).fill(isOn ? Theme.paper : .clear))
+                            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md)
+                                .strokeBorder(isOn ? Theme.text : .clear, lineWidth: 1.5))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isOn ? .isSelected : [])
+                    .help("\(option.title) (\(option.key.uppercased())): \(option.help)")
                 }
-                .help("\(option.title) (\(option.key.uppercased())): \(option.help)")
             }
+            .padding(3)
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.lg).fill(Theme.canvas))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg).strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
             Spacer(minLength: Theme.Space.sm)
-            IconButton(undoTitle, systemImage: "arrow.uturn.backward", shortcut: "⌘Z") {
-                model.undoManager.undo()
+            Menu {
+                ForEach([1.0, 2, 4, 8], id: \.self) { level in
+                    Button { zoom = level } label: { MenuCheck("\(Int(level * 100))%", isOn: abs(zoom - level) < 0.01) }
+                }
+            } label: {
+                HStack(spacing: 14) {
+                    Text("\(Int((zoom * 100).rounded()))%").monospacedDigit()
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                }
+                .font(.custom(BundledFont.sansMedium, size: 13))
+                .foregroundStyle(Theme.text)
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
+                .contentShape(Rectangle())
             }
-            .disabled(!model.undoManager.canUndo)
-            IconButton("Redo", systemImage: "arrow.uturn.forward", shortcut: "⇧⌘Z") {
-                model.undoManager.redo()
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+            .help("Timeline zoom")
+            Rectangle().fill(Theme.line).frame(width: 1, height: 20)
+            IconButton(showAside ? "Hide transcript" : "Show transcript", systemImage: "sidebar.right", shortcut: "⌘2",
+                       isOn: false) { showAside.toggle() }
+                .keyboardShortcut("2", modifiers: .command)
+            IconButton("Full screen", systemImage: "arrow.up.left.and.arrow.down.right", shortcut: "⌃⌘F") {
+                NSApp.keyWindow?.toggleFullScreen(nil)
             }
-            .disabled(!model.undoManager.canRedo)
         }
-        .padding(.vertical, 10)
-        .frame(width: 44)
-        .frame(maxHeight: .infinity)
-        .background(Theme.paper)
-        .overlay(alignment: .trailing) { Rectangle().fill(Theme.line).frame(width: 1) }
+        .padding(.horizontal, 12)
+        .frame(height: 52)
+        .background(Theme.canvas)
+    }
+}
+
+/// Undo, redo and the version picker for the editor's header.
+struct EditorHeaderActions: View {
+    @ObservedObject var model: EditorModel
+    @State private var comparing = false
+
+    var body: some View {
+        HStack(spacing: Theme.Space.xs) {
+            IconButton(undoTitle, systemImage: "arrow.uturn.backward", shortcut: "⌘Z") { model.undoManager.undo() }
+                .disabled(!model.undoManager.canUndo)
+            IconButton("Redo", systemImage: "arrow.uturn.forward", shortcut: "⇧⌘Z") { model.undoManager.redo() }
+                .disabled(!model.undoManager.canRedo)
+            VersionMenu(model: model.versions) { comparing = true }
+                .padding(.leading, Theme.Space.xs)
+                .sheet(isPresented: $comparing) {
+                    CompareView(versions: model.versions, take: model.take) { comparing = false }
+                }
+        }
     }
 
     private var undoTitle: String {
         let name = model.undoManager.undoActionName
         return name.isEmpty ? "Undo" : "Undo \(name)"
+    }
+}
+
+/// Video, Audio, Effects and Sound beside the timeline's lanes.
+struct TrackLabels: View {
+    let showWaveform: Bool
+    let showTracks: Bool
+    var hasEffects = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Color.clear.frame(height: EditorTimeline.rulerHeight)
+            label("Video", "film").frame(height: EditorTimeline.pictureHeight + EditorTimeline.wordsHeight)
+            if showWaveform { label("Audio", "mic").frame(height: EditorTimeline.waveHeight) }
+            if showTracks {
+                if hasEffects { label("Effects", "wand.and.stars").frame(height: 30) }
+                label("Sound", "music.note").frame(height: 38)
+            }
+        }
+        .frame(width: 96, alignment: .leading)
+    }
+
+    private func label(_ title: String, _ icon: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).font(.system(size: 13)).frame(width: 18)
+            Text(title).font(.custom(BundledFont.sansMedium, size: 13))
+        }
+        .foregroundStyle(Theme.text)
+        .frame(maxHeight: .infinity)
     }
 }
 
@@ -465,6 +592,8 @@ struct TimelineResizeBar: View {
 /// The transcript, or why it isn't there yet.
 struct TranscriptPane: View {
     @ObservedObject var model: EditorModel
+    var search = ""
+    @StateObject private var selection = TranscriptSelection()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -476,9 +605,40 @@ struct TranscriptPane: View {
                              message: "Vision One is writing out what you said. The words appear here as soon as it's done, and you can play the take meanwhile.",
                              isError: false)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .missing:
+                VStack(spacing: Theme.Space.md) {
+                    EditorNotice(title: "No transcript yet",
+                                 message: "Create a transcript on this Mac. The speech model downloads on first use.",
+                                 isError: false)
+                    Button("Create transcript") { model.retryTranscript() }.buttonStyle(.secondary)
+                    Text("Playback, timeline edits and export remain available.")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .noAudio:
+                ScrollView {
+                    VStack(spacing: Theme.Space.sm) {
+                        EditorNotice(title: "No audio in this video",
+                                     message: "A transcript needs speech. Keep editing this silent video, or start with a video that includes audio.",
+                                     isError: false)
+                        Button("Import a video with audio…") { HarnessModel.shared.importVideo() }
+                            .buttonStyle(.secondary)
+                        Button("Open recording setup…") { HarnessModel.shared.preparingRecording = true }
+                            .buttonStyle(.secondary)
+                        Text("Playback, timeline edits and export remain available.")
+                            .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(Theme.Space.md)
+                }
             case let .failed(message):
-                EditorNotice(title: "Transcript unavailable", message: message, isError: true)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: Theme.Space.md) {
+                    EditorNotice(title: "Transcript unavailable", message: message, isError: true)
+                    Button("Retry this transcript") { model.retryTranscript() }.buttonStyle(.secondary)
+                    Text("Playback, timeline edits and export remain available.")
+                        .textStyle(.caption).foregroundStyle(Theme.textMuted)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
                 if model.words.isEmpty {
                     EditorNotice(title: "No words found",
@@ -486,7 +646,13 @@ struct TranscriptPane: View {
                                  isError: false)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    TranscriptTextView(model: model)
+                    TranscriptTextView(model: model, selection: selection, search: search)
+                        .overlay(alignment: .topLeading) {
+                            if let words = selection.words, let anchor = selection.anchor {
+                                CutWordsButton(model: model, words: words)
+                                    .offset(x: min(anchor.x, 260), y: anchor.y)
+                            }
+                        }
                 }
             }
         }
@@ -530,5 +696,64 @@ private struct SteerLogStrip: View {
         }
         .padding(10)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+}
+
+/// Floats under picked transcript words: Cut words, with a menu for
+/// marking them as a proposal or taking out the fillers inside.
+struct CutWordsButton: View {
+    @ObservedObject var model: EditorModel
+    let words: ClosedRange<Int>
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button { model.toggleCut(words: words) } label: {
+                Label("Cut words", systemImage: "scissors")
+                    .font(.custom(BundledFont.sansMedium, size: 13))
+                    .padding(.leading, 12).padding(.trailing, 10)
+                    .frame(height: 34)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Cut the picked words (Delete)")
+            Rectangle().fill(Theme.line).frame(width: 1, height: 20)
+            Menu {
+                Button("Mark as proposed") { model.proposeCut(words: words) }
+                Button("Remove fillers here") { model.acceptFillers(in: words) }
+            } label: {
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                    .frame(width: 30, height: 34).contentShape(Rectangle())
+            }
+            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+            .accessibilityLabel("More ways to cut")
+        }
+        .foregroundStyle(Theme.text)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.lg).fill(Theme.paper))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg).strokeBorder(Theme.lineStrong, lineWidth: Theme.Stroke.hairline))
+        .floatShadow()
+        .fixedSize()
+    }
+}
+
+extension EditorModel {
+    /// Leaves the picked words in, with a dashed cut over them to decide later.
+    func proposeCut(words range: ClosedRange<Int>) {
+        guard let span = EditList.span(deleting: range, of: wordSpans, sourceDuration: edits.sourceDuration) else { return }
+        var next = edits
+        next.add(Cut(span: span, reason: Cut.Reason.word, state: .proposed))
+        apply(next, actionName: "Propose Cut")
+    }
+
+    /// Accepts the suggested filler cuts inside the picked words.
+    func acceptFillers(in range: ClosedRange<Int>) {
+        guard range.upperBound < wordSpans.count else { return }
+        let start = wordSpans[range.lowerBound].start, end = wordSpans[range.upperBound].end
+        var next = edits
+        for cut in next.cuts where cut.state == .proposed && cut.reason == Cut.Reason.filler
+            && cut.start < end && cut.end > start {
+            next.setState(.accepted, for: cut.id)
+        }
+        guard next != edits else { NSSound.beep(); return }
+        apply(next, actionName: "Remove Fillers")
     }
 }
