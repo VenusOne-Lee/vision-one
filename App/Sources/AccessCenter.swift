@@ -45,7 +45,10 @@ final class AccessCenter: ObservableObject {
     /// recording works in this process and no restart is needed. Only once
     /// asked, so it never brings up the system prompt by itself.
     private func probeScreen() {
-        guard checklist.state(of: .screen) == .denied, !probing else { return }
+        // Only after asking in this launch: on a stale entry the probe
+        // itself makes macOS show its "would like to record" box, which
+        // shouldn't appear unasked.
+        guard screenAskedThisLaunch, checklist.state(of: .screen) == .denied, !probing else { return }
         probing = true
         Task {
             let allowed = (try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)) != nil
@@ -78,6 +81,7 @@ final class AccessCenter: ObservableObject {
         refresh()
     }
     private var screenResetDone = false
+    private var screenAskedThisLaunch = false
 
     /// Removes Vision One's entry for `kind` from macOS's privacy list.
     /// A switch tied to an older or differently signed copy looks on but
@@ -116,6 +120,7 @@ final class AccessCenter: ObservableObject {
     /// old entry and asks again: macOS's own prompt for the mic and camera,
     /// one switch in System Settings for Screen Recording and Accessibility.
     func request(_ kind: AccessKind) {
+        if kind == .screen { screenAskedThisLaunch = true }
         switch (kind, checklist.state(of: kind)) {
         case (_, .granted):
             return

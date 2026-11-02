@@ -48,9 +48,12 @@ struct RecordingPreparationView: View {
                         HStack {
                             Label("\(kind.title) needs your OK", systemImage: "exclamationmark.circle").textStyle(.body)
                             Spacer()
-                            Button(access.checklist.state(of: kind) == .notAsked ? "Allow…" : "Open System Settings…") {
-                                if access.checklist.state(of: kind) == .notAsked { access.request(kind) }
-                                else { access.openSettings(for: kind) }
+                            // One button either way: Allow the first time;
+                            // once off, Fix clears Vision One's old entry
+                            // (a switch that looks on but does nothing) and
+                            // asks again.
+                            Button(access.checklist.state(of: kind) == .notAsked ? "Allow…" : "Fix…") {
+                                access.request(kind)
                             }.buttonStyle(.secondary)
                         }
                         .padding(Theme.Space.sm + 4)
