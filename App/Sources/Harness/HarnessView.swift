@@ -125,6 +125,9 @@ struct HarnessView: View {
         ModeHeader(title: model.task?.title ?? model.workspace?.take.displayTitle() ?? "Video",
                    subtitle: modeSubtitle, mode: modeBinding, leadingInset: inset) {
             HStack(spacing: Theme.Space.sm) {
+                if model.mode == .editor, let workspace = model.workspace {
+                    EditorHeaderActions(model: workspace.editor)
+                }
                 if model.workspace != nil { ExportPill { model.presentingExport = true } }
                 moreMenu
             }
