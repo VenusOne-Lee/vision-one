@@ -60,8 +60,12 @@ private struct PostPanelContent: View {
     @ObservedObject private var transcriber = Transcriber.shared
 
     let onNetworkMount: ((ShareTarget, PostDraftControl) -> Void)?
+    /// The approval cards per network, folded under the simple form.
+    @State private var showTargets: Bool
 
     init(take: Take, onNetworkMount: ((ShareTarget, PostDraftControl) -> Void)? = nil) {
+        // Verification mounts each network row, so it opens them.
+        _showTargets = State(initialValue: onNetworkMount != nil)
         self.take = take
         self.onNetworkMount = onNetworkMount
         _agents = StateObject(wrappedValue: AgentsModel(take: take))
@@ -70,16 +74,23 @@ private struct PostPanelContent: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Space.md) {
-                if agents.share == nil {
-                    draftFirst
-                } else {
-                    VersionOneCard(take: take, agents: agents, rules: rules)
-                }
-                PanelLabel("Socials")
-                VStack(spacing: Theme.Space.sm) {
-                    ForEach(ShareTarget.allCases) { target in
-                        NetworkRow(take: take, target: target, agents: agents, queue: queue, rules: rules, onMount: onNetworkMount)
+                PostCopyForm(take: take, agents: agents, canDraft: canDraftWithSharer)
+                DisclosureGroup(isExpanded: $showTargets) {
+                    VStack(alignment: .leading, spacing: Theme.Space.md) {
+                        if agents.share == nil {
+                            draftFirst
+                        } else {
+                            VersionOneCard(take: take, agents: agents, rules: rules)
+                        }
+                        VStack(spacing: Theme.Space.sm) {
+                            ForEach(ShareTarget.allCases) { target in
+                                NetworkRow(take: take, target: target, agents: agents, queue: queue, rules: rules, onMount: onNetworkMount)
+                            }
+                        }
                     }
+                    .padding(.top, Theme.Space.sm)
+                } label: {
+                    Text("Post to…").font(.custom(BundledFont.sansMedium, size: 14)).foregroundStyle(Theme.text)
                 }
                 if let link = ShareLinks.link(for: take) {
                     LinkRow(link: link)
@@ -523,5 +534,88 @@ private struct PanelLabel: View {
             .tracking(0.6)
             .foregroundStyle(Theme.textMuted)
             .padding(.top, Theme.Space.xs)
+    }
+}
+
+/// The simple Post copy: a title, the copy with a counter against X's 280,
+/// and Copy text. It reads and writes the same saved drafts as the X row
+/// under "Post to…" (and a "title" draft), so there's one copy.
+private struct PostCopyForm: View {
+    let take: Take
+    @ObservedObject var agents: AgentsModel
+    let canDraft: Bool
+    @StateObject private var title: PostDraftControl
+    @StateObject private var copy: PostDraftControl
+    @State private var copied = false
+
+    private static let limit = 280
+
+    init(take: Take, agents: AgentsModel, canDraft: Bool) {
+        self.take = take
+        self.agents = agents
+        self.canDraft = canDraft
+        _title = StateObject(wrappedValue: PostDraftControl(take: take, destination: "title"))
+        _copy = StateObject(wrappedValue: PostDraftControl(take: take, destination: ShareTarget.x.network))
+    }
+
+    private var titleText: String { title.manualText ?? agents.share?.title ?? take.displayTitle() }
+    private var copyText: String { copy.manualText ?? ShareTarget.x.text(in: agents.share) ?? "" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.sm) {
+            Text("Title").textStyle(.body).foregroundStyle(Theme.textMuted)
+            TextField("Title", text: Binding(get: { titleText }, set: { title.edit($0) }))
+                .textFieldStyle(.plain)
+                .font(.custom(BundledFont.sansRegular, size: 14))
+                .padding(.horizontal, 12)
+                .frame(height: 38)
+                .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
+                .disabled(!title.loaded)
+                .accessibilityLabel("Post title")
+            Text("Copy").textStyle(.body).foregroundStyle(Theme.textMuted).padding(.top, 4)
+            ZStack(alignment: .bottomTrailing) {
+                TextEditor(text: Binding(get: { copyText }, set: { copy.edit($0) }))
+                    .font(.custom(BundledFont.sansRegular, size: 14))
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(minHeight: 100, maxHeight: 160)
+                    .disabled(!copy.loaded)
+                    .accessibilityLabel("Post copy")
+                Text("\(copyText.count)/\(Self.limit)")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(copyText.count > Self.limit ? Theme.error : Theme.textMuted)
+                    .padding(8)
+            }
+            .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
+            HStack {
+                if agents.share == nil, canDraft {
+                    Button("Draft with Sharer") { agents.runSharer(launch: true) }
+                        .buttonStyle(PillButtonStyle(kind: .secondary))
+                        .disabled(agents.sharerRun.isRunning)
+                }
+                if let problem = copy.problem ?? title.problem {
+                    Text(problem).textStyle(.caption).foregroundStyle(Theme.error)
+                }
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(copyText, forType: .string)
+                    copied = true
+                } label: {
+                    Label(copied ? "Copied" : "Copy text", systemImage: "doc.on.doc")
+                        .font(.custom(BundledFont.sansMedium, size: 13))
+                        .foregroundStyle(Theme.text)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.lineStrong, lineWidth: Theme.Stroke.hairline))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(copyText.isEmpty)
+            }
+        }
+        .onChange(of: copyText) { _, _ in copied = false }
     }
 }

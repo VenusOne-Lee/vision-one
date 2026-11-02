@@ -451,28 +451,37 @@ struct EffectsLane: View {
             let zooms = effects.zooms.zooms
             let blurs = effects.blurs.blurs
             Canvas { context, size in
-                func draw(_ span: TimeSpan, _ state: ProposalState, row: Int) {
-                    let rect = CGRect(x: CGFloat(span.start / duration) * size.width, y: 3 + CGFloat(row) * 11,
-                                      width: max(3, CGFloat(span.duration / duration) * size.width), height: 7)
-                    let path = Path(roundedRect: rect, cornerRadius: 2)
+                func draw(_ span: TimeSpan, _ state: ProposalState, title: String) {
+                    let rect = CGRect(x: CGFloat(span.start / duration) * size.width, y: 3,
+                                      width: max(3, CGFloat(span.duration / duration) * size.width), height: size.height - 6)
+                    let path = Path(roundedRect: rect, cornerRadius: 5)
+                    var ink = Theme.text
                     switch state {
                     case .accepted:
                         context.fill(path, with: .color(Theme.text))
+                        ink = Theme.paper
                     case .proposed:
+                        context.fill(path, with: .color(Theme.canvas))
                         context.stroke(path, with: .color(Theme.text), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
                     case .rejected:
                         context.stroke(path, with: .color(Theme.cutText), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                        ink = Theme.cutText
                     }
+                    guard rect.width > 44 else { return }
+                    var clipped = context
+                    clipped.clip(to: path)
+                    let label = clipped.resolve(Text(title).font(.custom(BundledFont.sansMedium, size: 11)).foregroundStyle(ink))
+                    clipped.draw(label, at: CGPoint(x: rect.minX + 10, y: rect.midY), anchor: .leading)
                 }
-                for zoom in zooms { draw(zoom.span, zoom.state, row: 0) }
-                for blur in blurs { draw(blur.span, blur.state, row: 1) }
+                for zoom in zooms { draw(zoom.span, zoom.state, title: "Zoom") }
+                for blur in blurs { draw(blur.span, blur.state, title: "Blur") }
             }
             .contentShape(Rectangle())
             .onTapGesture { location in
                 model.seek(toSource: Double(location.x / max(width, 1)) * duration)
             }
         }
-        .frame(height: 24)
+        .frame(height: 30)
         .accessibilityElement()
         .accessibilityLabel("Zooms and blurs: \(effects.zooms.zooms.count) zooms, \(effects.blurs.blurs.count) blurs")
     }

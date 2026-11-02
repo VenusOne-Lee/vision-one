@@ -14,6 +14,58 @@ extension EnvironmentValues {
     }
 }
 
+/// A timer off the main thread: if one step runs past its limit (even with
+/// the main thread blocked), it logs the step, samples the process so CI
+/// shows where it's stuck, and fails the run instead of hanging.
+final class VerificationWatchdog: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "VisionOne.verification-watchdog")
+    private var timer: DispatchSourceTimer?
+
+    func start(_ step: String, limit: TimeInterval = 20) {
+        print("Start \(step)")
+        queue.sync {
+            timer?.cancel()
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.schedule(deadline: .now() + limit)
+            timer.setEventHandler {
+                FileHandle.standardError.write(Data("Watchdog: \(step) took over \(Int(limit)) s; sampling and failing\n".utf8))
+                // Only the call graph: the binary image list is thousands of lines.
+                let file = FileManager.default.temporaryDirectory.appendingPathComponent("vision-one-watchdog-sample.txt")
+                let sample = Process()
+                sample.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
+                sample.arguments = ["\(getpid())", "3", "-file", file.path]
+                sample.standardOutput = FileHandle.nullDevice
+                try? sample.run()
+                sample.waitUntilExit()
+                if let text = try? String(contentsOf: file, encoding: .utf8) {
+                    let graph = text.components(separatedBy: "Binary Images:").first ?? text
+                    FileHandle.standardError.write(Data(graph.utf8))
+                }
+                exit(3)
+            }
+            timer.resume()
+            self.timer = timer
+        }
+    }
+
+    func stop() {
+        queue.sync { timer?.cancel(); timer = nil }
+    }
+}
+
+/// Verification windows draw far off every screen and never take focus,
+/// so a local run doesn't flash on someone's display. Bitmap caching
+/// still renders them.
+@MainActor
+enum VerificationWindow {
+    static func hide(_ window: NSWindow) {
+        window.setFrameOrigin(NSPoint(x: -40_000, y: -40_000))
+        window.hasShadow = false
+        window.ignoresMouseEvents = true
+        window.collectionBehavior.insert(.transient)
+    }
+}
+
 @MainActor
 enum WorkspaceRenderEvidence {
     static weak var captionOwner: DeliveryCaptionControl?
@@ -45,6 +97,8 @@ enum WorkspaceVerification {
         }
         try Transcript(language: "en", engine: "workspace fixture", duration: 3, segments: [.init(words: words)]).write(to: take.transcriptURL)
         let checks = WorkspaceRuntimeChecks()
+        let runStart = Date()
+        defer { print(String(format: "Workspace verification total %.2fs", Date().timeIntervalSince(runStart))) }
         await checks.run("reduceMotion") { try WorkspaceMotion.verify() }
         await checks.run("exportRunIdentity") { try await ExportControllerVerification.run(in: root) }
         await checks.run("exportQueue") { try await ExportControllerVerification.verifyQueue(in: root) }
@@ -73,11 +127,27 @@ enum WorkspaceVerification {
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
-        let project = DeskProject(name: "Producer workspace", sources: [.init(.github, "VenusOne-Lee/vision-one")], createdAt: date)
-        var task = DeskTask(projectID: project.id, title: "Launch walkthrough", takes: [take], createdAt: date)
-        task.cells += [TaskCell(.ask("Tighten this walkthrough and prepare clips for launch.", mode: .planFirst), at: date),
-                       TaskCell(.reply(.producer, "Review the transcript and proposed edits beside this thread. Keep each change before delivery."), at: date)]
-        let snapshot = DeskSnapshot(projects: [project], tasks: [task])
+        // The visual states use a calm 2:14 walkthrough so renders compare
+        // with the approved pictures; runtime checks above keep the small fixture.
+        let fixtureWatchdog = VerificationWatchdog()
+        fixtureWatchdog.start("showcase fixture", limit: 60)
+        let fixtureStart = Date()
+        let showcase = try await ShowcaseFixture.make(in: root)
+        fixtureWatchdog.stop()
+        print(String(format: "Showcase fixture %.2fs", Date().timeIntervalSince(fixtureStart)))
+        func day(_ text: String) -> Date {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd HH:mm"
+            return formatter.date(from: text) ?? date
+        }
+        let project = DeskProject(name: "Launch demos", sources: [.init(.github, "VenusOne-Lee/vision-one")], createdAt: date)
+        var task = DeskTask(projectID: project.id, title: "Product walkthrough", takes: [showcase], createdAt: date)
+        task.cells += [TaskCell(.ask("Clean up this walkthrough and add captions.", mode: .planFirst), at: date),
+                       TaskCell(.reply(.producer, "I found 7 cuts that save 18 seconds. Preview them before applying."), at: date)]
+        let highlights = DeskTask(projectID: project.id, title: "Feature highlights", createdAt: day("2026-10-27 10:00"))
+        let onboarding = DeskTask(projectID: project.id, title: "Onboarding guide", createdAt: day("2026-10-24 10:00"))
+        let snapshot = DeskSnapshot(projects: [project], tasks: [task, highlights, onboarding])
         var names: [String] = []
         for dark in [false, true] {
             var appearance = Appearance.standard
@@ -86,11 +156,11 @@ enum WorkspaceVerification {
             for narrow in [false, true] {
                 let size = narrow ? CGSize(width: 900, height: 640) : CGSize(width: 1512, height: 982)
                 for state in ["new-task", "library", "task", "editor", "sound", "delivery", "pending", "error", "loading", "transcript-missing", "transcript-failed", "transcript-empty", "transcript-no-audio"] {
-                    let stateTake = transcriptFixtures.first(where: { $0.0 == state })?.1 ?? take
-                    let selectedTask = stateTake == take ? task : DeskTask(projectID: project.id, title: "Transcript recovery",
+                    let stateTake = transcriptFixtures.first(where: { $0.0 == state })?.1 ?? showcase
+                    let selectedTask = stateTake == showcase ? task : DeskTask(projectID: project.id, title: "Transcript recovery",
                                                                           takes: [stateTake], createdAt: date)
                     let page: HarnessPage = state == "new-task" ? .newTask : (state == "library" ? .library : .task(selectedTask.id))
-                    var stateSnapshot = stateTake == take ? snapshot : DeskSnapshot(projects: [project], tasks: [selectedTask])
+                    var stateSnapshot = stateTake == showcase ? snapshot : DeskSnapshot(projects: [project], tasks: [selectedTask])
                     if state == "pending" {
                         stateSnapshot.tasks[0].cells.append(TaskCell(.plan(DeskPlan(steps: [.init(agent: .editor, title: "Tighten the opening", action: .edit(ask: "Remove long pauses")), .init(agent: .clipper, title: "Prepare two clips", action: .clips(count: 2))])), at: date))
                         stateSnapshot.tasks[0].cells.append(TaskCell(.approval(.plan("Review edits and two clip proposals. Nothing is posted.")), at: date))
@@ -98,23 +168,32 @@ enum WorkspaceVerification {
                     if state == "error" {
                         stateSnapshot.tasks[0].cells.append(TaskCell(.failed(.editor, "The provider is unavailable. Your original and saved changes are safe. Try again or choose an on-device provider."), at: date))
                     }
+                    let watchdog = VerificationWatchdog()
+                    watchdog.start("\(state)-\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide")", limit: state == "delivery" ? 60 : 20)
+                    defer { watchdog.stop() }
                     let model = HarnessModel(snapshot: stateSnapshot, takes: [stateTake], page: page,
                                              renderPhase: state == "loading" ? .loading : nil)
                     if let workspace = model.workspace {
                         await workspace.load()
                         if state.hasPrefix("transcript-") { try TranscriptViewVerification.verifyState(state, editor: workspace.editor) }
                         if state == "delivery" {
-                            try ClipList().write(to: take.clipsURL)
                             await workspace.clips.load()
-                            workspace.clips.addAtPlayhead()
+                            workspace.clips.selectedID = workspace.clips.list.visible.first?.id
                             if let clip = workspace.clips.selected {
                                 workspace.clips.export(clip)
-                                while workspace.clips.isExporting { try await Task.sleep(for: .milliseconds(50)) }
+                                let deadline = Date().addingTimeInterval(45)
+                                while workspace.clips.isExporting {
+                                    guard Date() < deadline else {
+                                        workspace.clips.cancelExport()
+                                        throw MediaVerification.Failure(message: "Delivery clip export took over 45 seconds")
+                                    }
+                                    try await Task.sleep(for: .milliseconds(50))
+                                }
                             }
                             model.updateLayout { $0.show(.clips) }
                         }
                     }
-                    model.workspace?.editor.seek(toSource: 0.5)
+                    model.workspace?.editor.seek(toSource: stateTake == showcase ? 24.6 : 0.5)
                     if state == "editor" { model.mode = .editor }
                     if state == "sound" { model.mode = .sound }
                     let name = "\(state)-\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide").png"
@@ -123,22 +202,25 @@ enum WorkspaceVerification {
                     model.workspace?.close()
                     names.append(name)
                 }
-                let model = HarnessModel(snapshot: snapshot, takes: [take], page: .task(task.id))
+                let model = HarnessModel(snapshot: snapshot, takes: [showcase], page: .task(task.id))
                 let suffix = "\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide")"
                 let tools: [(String, AnyView)] = [
                     ("library-filter-empty", AnyView(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }))),
                     ("post-no-speech", AnyView(PostPanel(take: emptyPostTake))),
                     ("task-tools", AnyView(WorkspaceToolsSheet(model: model, close: {}))),
-                    ("recording", AnyView(RecordingPreparationView(model: model, availableHeight: size.height))),
+                    ("recording", AnyView(HarnessView(model: recordingModel(snapshot: snapshot, take: showcase, task: task)))),
                     ("script-coach", AnyView(ScriptCoachView(model: ScriptCoachModel(learnPace: false)))),
                     ("rehearse", AnyView(RehearseView(model: RehearseModel(), talk: CoachConversation()))),
-                    ("voice-tools", AnyView(VoiceToolsView(model: VoiceToolsModel(take: take)))),
+                    ("voice-tools", AnyView(VoiceToolsView(model: VoiceToolsModel(take: showcase)))),
                     ("autopilot", AnyView(AutopilotView())),
                     ("autopilot-start-error", AnyView(AutopilotStartProblemView(message: StopReason.noAccess.message))),
                     ("agents", AnyView(AgentsSettingsView(service: MCPService.shared)))
                 ]
                 for (tool, view) in tools {
                     let name = "\(tool)-\(suffix).png"
+                    let watchdog = VerificationWatchdog()
+                    watchdog.start(name)
+                    defer { watchdog.stop() }
                     try await capture(view, size: size, to: root.appendingPathComponent(name))
                     names.append(name)
                 }
@@ -150,13 +232,16 @@ enum WorkspaceVerification {
             appearance.mode = dark ? .dark : .light
             ThemeStore.shared.renderAppearance(appearance)
             for state in ["new-task", "library", "library-filter-empty", "recording", "editor", "sound"] {
-                let model = HarnessModel(snapshot: snapshot, takes: [take], page: state == "new-task" ? .newTask : (state.hasPrefix("library") ? .library : .task(task.id)))
-                if let workspace = model.workspace { await workspace.load(); workspace.editor.seek(toSource: 0.5) }
+                let watchdog = VerificationWatchdog()
+                watchdog.start("\(state)-\(dark ? "dark" : "light")-minimum")
+                defer { watchdog.stop() }
+                let model = HarnessModel(snapshot: snapshot, takes: [showcase], page: state == "new-task" ? .newTask : (state.hasPrefix("library") ? .library : .task(task.id)))
+                if let workspace = model.workspace { await workspace.load(); workspace.editor.seek(toSource: 24.6) }
                 if state == "editor" { model.mode = .editor }
                 if state == "sound" { model.mode = .sound }
                 let name = "\(state)-\(dark ? "dark" : "light")-minimum.png"
                 if state == "recording" {
-                    try await capture(RecordingPreparationView(model: model, availableHeight: 520),
+                    try await capture(HarnessView(model: recordingModel(snapshot: snapshot, take: showcase, task: task)),
                                       size: CGSize(width: 760, height: 520), to: root.appendingPathComponent(name))
                 } else if state == "library-filter-empty" {
                     try await capture(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }),
@@ -176,6 +261,13 @@ enum WorkspaceVerification {
             .write(to: root.appendingPathComponent("workspace-render.json"))
         print("Workspace renders saved: \(names.count)")
         try checks.finish(in: root)
+    }
+
+    /// The task page with Ready to record in its review column.
+    private static func recordingModel(snapshot: DeskSnapshot, take: Take, task: DeskTask) -> HarnessModel {
+        let model = HarnessModel(snapshot: snapshot, takes: [take], page: .task(task.id))
+        model.preparingRecording = true
+        return model
     }
 
     /// Mount the real HarnessView, retain it across a task switch with Clips
@@ -207,6 +299,7 @@ enum WorkspaceVerification {
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
+        VerificationWindow.hide(window)
         window.orderFrontRegardless()
         defer {
             model.workspace?.close()
@@ -258,6 +351,8 @@ enum WorkspaceVerification {
     }
 
     private static func capture<V: View>(_ view: V, size: CGSize, to url: URL, requiresFrame: Bool = false) async throws {
+        let started = Date()
+        defer { print(String(format: "Render %@ %.2fs", url.lastPathComponent, Date().timeIntervalSince(started))) }
         WorkspaceRenderEvidence.generation += 1
         WorkspaceRenderEvidence.frames = 0
         WorkspaceRenderEvidence.failures = []
@@ -269,10 +364,11 @@ enum WorkspaceVerification {
         window.isReleasedWhenClosed = false
         window.contentView = host
         window.setContentSize(size)
+        VerificationWindow.hide(window)
         window.orderFrontRegardless()
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
         // Let production .task loads, SwiftUI layout and AppKit drawing settle.
-        try await Task.sleep(for: .milliseconds(700))
+        try await Task.sleep(for: .milliseconds(350))
         if requiresFrame {
             for _ in 0..<40 where WorkspaceRenderEvidence.frames == 0 && WorkspaceRenderEvidence.failures.isEmpty {
                 try await Task.sleep(for: .milliseconds(50))
@@ -301,6 +397,13 @@ private final class WorkspaceRuntimeChecks {
     private var results: [String: String] = [:]
 
     func run(_ name: String, operation: @MainActor () async throws -> Void) async {
+        let started = Date()
+        let watchdog = VerificationWatchdog()
+        watchdog.start("check \(name)", limit: 60)
+        defer {
+            watchdog.stop()
+            print(String(format: "Check %@ %.2fs", name, Date().timeIntervalSince(started)))
+        }
         do {
             try await operation()
             results[name] = "passed"

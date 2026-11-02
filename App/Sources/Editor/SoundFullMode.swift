@@ -12,7 +12,7 @@ struct SoundFullMode<Rail: View>: View {
     let onBack: () -> Void
     @ViewBuilder let rail: () -> Rail
 
-    @AppStorage("sound.asideWidth") private var asideWidth = 320.0
+    @AppStorage("sound.asideWidth") private var asideWidth = 420.0
     @AppStorage("sound.aside") private var asideRaw = SoundAside.mix.rawValue
     @State private var compactPane = "Mix"
     @State private var tracksOverride: Bool?
@@ -54,10 +54,21 @@ struct SoundFullMode<Rail: View>: View {
                 if model.phase == .ready {
                     Divider().overlay(Theme.line)
                     if tracksVisible {
-                        ScrollView { MixLanes(model: model).padding(12) }
-                            .frame(height: min(225, outer.size.height * 0.28))
+                        ScrollView { MixLanes(model: model).padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 12) }
+                            .frame(height: min(300, outer.size.height * 0.32))
                     }
-                    AskBar(model: model).padding(12)
+                    HStack(spacing: Theme.Space.md) {
+                        AskBar(model: model, placeholder: "Make the music softer when I'm talking…")
+                        Button { model.acceptAllEffects() } label: {
+                            Text("Apply mix").padding(.horizontal, 28)
+                        }
+                        .buttonStyle(WideButtonStyle(kind: model.proposedEffectCount > 0 ? .primary : .secondary, height: 52))
+                        .fixedSize()
+                        .disabled(model.proposedEffectCount == 0)
+                        .help(model.proposedEffectCount > 0 ? "Keep the \(model.proposedEffectCount) suggested sound effects"
+                              : "Your mix changes are already saved")
+                    }
+                    .padding(12)
                 }
             }
         }
@@ -84,36 +95,24 @@ struct SoundFullMode<Rail: View>: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready:
             VStack(spacing: 0) {
-                HStack(spacing: Theme.Space.md) {
-                    Text("Sound mix").textStyle(.bodyStrong)
-                    Spacer(minLength: Theme.Space.sm)
-                    LoudnessMeter(lufs: model.voiceLoudness, status: model.audioLevelsState.message)
-                    if case .failed = model.audioLevelsState {
-                        Button("Retry audio") { Task { await model.loadLevels() } }
-                            .buttonStyle(.secondary)
-                    }
+                VStack(spacing: 0) {
+                    PlayerSurface(player: model.player)
+                        .overlay { CaptionLayer(model: model) }
+                        .background(Color.black)
+                        .onTapGesture { model.togglePlay() }
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 100, maxHeight: .infinity)
+                    PlayerTransport(model: model, onExpand: { NSApp.keyWindow?.toggleFullScreen(nil) })
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                PlayerSurface(player: model.player)
-                    .overlay { CaptionLayer(model: model) }
-                    .background(Theme.text)
-                    .onTapGesture { model.togglePlay() }
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 100, maxHeight: .infinity)
-                    .padding(.horizontal, 12)
-                TransportBar(model: model, zoom: .constant(1), showsZoom: false) {
-                    if !model.laneMix.isDefault {
-                        Button("Hear everything") { model.laneMix = LaneMix() }
-                            .buttonStyle(PillButtonStyle(kind: .secondary))
-                            .fixedSize()
-                            .help("Turn off every mute and solo")
-                    }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.lg))
+                .padding(12)
+                if !model.laneMix.isDefault {
+                    Button("Hear everything") { model.laneMix = LaneMix() }
+                        .buttonStyle(PillButtonStyle(kind: .secondary))
+                        .fixedSize()
+                        .help("Turn off every mute and solo")
+                        .padding(.bottom, 8)
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-
             }
         }
     }
@@ -121,29 +120,147 @@ struct SoundFullMode<Rail: View>: View {
     // MARK: Aside
 
     private var asidePanel: some View {
-        VStack(spacing: 0) {
-            HStack {
-                SegmentedTabs(selection: Binding(get: { aside }, set: { asideRaw = $0.rawValue }),
-                              options: SoundAside.allCases) { $0.title }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            Divider().overlay(Theme.line)
-            ScrollView {
-                Group {
-                    switch aside {
-                    case .mix: MixSettings(model: model)
-                    case .music: MusicPicker(model: model)
-                    case .effects: EffectsSettings(model: model)
-                    }
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+        ScrollView {
+            VoiceClearCard(model: model)
+                .padding(12)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Theme.paper)
+        .background(Theme.canvas)
+    }
+}
+
+/// "Keep your voice clear": energy, music, its volume, ducking and sound
+/// effects in one card. Levels, loudness and the full music list are one
+/// click away under More.
+private struct VoiceClearCard: View {
+    @ObservedObject var model: EditorModel
+    @State private var sliderStart: SoundPlan?
+    @State private var showEffects = false
+    @State private var showMore = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.md) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Keep your voice clear").font(.custom(BundledFont.sansSemiBold, size: 17))
+                Text("Balance your audio so your voice is easy to hear.")
+                    .textStyle(.body).foregroundStyle(Theme.textMuted)
+                LoudnessMeter(lufs: model.voiceLoudness, status: model.audioLevelsState.message)
+                    .padding(.top, 4)
+            }
+            row("Voice energy", icon: "dial.medium") { EmptyView() }
+            SegmentBar(selection: Binding(get: { model.sound.energy }, set: { model.setEnergy($0) }),
+                       options: Energy.allCases) { $0.title }
+                .padding(.leading, 36)
+            row("Music", icon: "music.note") { EmptyView() }
+            musicMenu.padding(.leading, 36)
+            row("Music volume", icon: "speaker.wave.2") {
+                Slider(value: Binding(get: { percent(model.sound.music?.levelDB ?? MusicBed.defaultLevelDB) },
+                                      set: { value in model.previewSound { $0.music?.levelDB = -30 + value / 100 * 24 } }),
+                       in: 0...100, onEditingChanged: editing("Music Level"))
+                    .tint(Theme.text)
+                    .frame(minWidth: 80, maxWidth: 150)
+                    .accessibilityLabel("Music volume")
+                Text("\(Int(percent(model.sound.music?.levelDB ?? MusicBed.defaultLevelDB)))%")
+                    .font(.system(size: 13).monospacedDigit())
+                    .frame(width: 40, alignment: .trailing)
+            }
+            .disabled(model.sound.music == nil)
+            row("Lower music while speaking", icon: "waveform.badge.minus") {
+                Toggle("", isOn: Binding(get: { (model.sound.music?.duckDB ?? 0) > 0 }, set: { on in
+                    let start = model.sound
+                    model.previewSound { $0.music?.duckDB = on ? MusicBed.defaultDuckDB : 0 }
+                    model.commitSound(from: start, actionName: "Duck Music")
+                }))
+                .labelsHidden().toggleStyle(.ink)
+                .accessibilityLabel("Lower music while speaking")
+            }
+            .disabled(model.sound.music == nil)
+            Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
+            Button { showEffects.toggle() } label: {
+                row("Sound effects", icon: "sparkle") {
+                    if model.proposedEffectCount > 0 {
+                        Text("\(model.proposedEffectCount) suggested").textStyle(.caption).foregroundStyle(Theme.textMuted)
+                    }
+                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                        .rotationEffect(.degrees(showEffects ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if showEffects { EffectsSettings(model: model) }
+            Button { showMore.toggle() } label: {
+                row("Levels and music library", icon: "slider.horizontal.3") {
+                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                        .rotationEffect(.degrees(showMore ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if showMore {
+                MixSettings(model: model)
+                MusicPicker(model: model)
+            }
+            if let problem = model.soundProblem {
+                Text(problem).font(.system(size: 12)).foregroundStyle(Theme.error)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Theme.Space.md + 4)
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg).strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
+    }
+
+    private func percent(_ db: Double) -> Double { min(100, max(0, (db + 30) / 24 * 100)) }
+
+    private func editing(_ action: String) -> (Bool) -> Void {
+        { editing in
+            if editing { sliderStart = model.sound } else {
+                model.commitSound(from: sliderStart, actionName: action)
+                sliderStart = nil
+            }
+        }
+    }
+
+    private func row<Trailing: View>(_ title: String, icon: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon).font(.system(size: 16)).frame(width: 24)
+            Text(title).font(.custom(BundledFont.sansMedium, size: 14)).lineLimit(1).fixedSize()
+            Spacer(minLength: Theme.Space.sm)
+            trailing()
+        }
+        .foregroundStyle(Theme.text)
+    }
+
+    private var musicMenu: some View {
+        Menu {
+            Button { model.setMusic(nil) } label: { MenuCheck("No music", isOn: model.sound.music == nil) }
+            Divider()
+            ForEach(SoundLibrary.music) { sound in
+                Button { model.setMusic(.library(sound)) } label: {
+                    MenuCheck("\(sound.title) · \(sound.summary)", isOn: model.sound.music?.libraryID == sound.id)
+                }
+            }
+            Divider()
+            Button("Choose a file…") { model.chooseMusicFile() }
+        } label: {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Theme.canvas)
+                    .frame(width: 34, height: 34)
+                    .overlay(Image(systemName: model.sound.music == nil ? "music.note.slash" : "music.note")
+                        .font(.system(size: 14)))
+                Text(model.sound.music?.title ?? "No music").font(.custom(BundledFont.sansRegular, size: 14))
+                Spacer()
+                Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(Theme.text)
+            .padding(.horizontal, 8)
+            .frame(height: 46)
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+        .accessibilityLabel("Music: \(model.sound.music?.title ?? "none")")
     }
 }
 
@@ -183,7 +300,7 @@ struct MixLanes: View {
     @AppStorage("sound.lane.music") private var musicHeight = 64.0
     @AppStorage("sound.lane.effects") private var effectsHeight = 40.0
 
-    static let headerWidth: CGFloat = 132
+    static let headerWidth: CGFloat = 190
 
     var body: some View {
         VStack(spacing: 0) {
@@ -221,33 +338,48 @@ struct MixLanes: View {
                                      @ViewBuilder content: () -> Content) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(lane.title).font(.system(size: 12, weight: .semibold))
-                    Text(detail)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.textMuted)
-                        .lineLimit(1)
-                    HStack(spacing: 4) {
-                        mixButton("M", on: model.laneMix.muted.contains(lane),
-                                  help: "Mute \(lane.title.lowercased()) while you listen") {
-                            model.laneMix.toggleMute(lane)
-                        }
-                        mixButton("S", on: model.laneMix.soloed.contains(lane),
-                                  help: "Hear only \(lane.title.lowercased())") {
-                            model.laneMix.toggleSolo(lane)
-                        }
+                HStack(spacing: 10) {
+                    Image(systemName: icon(lane)).font(.system(size: 15)).frame(width: 20)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(lane.title).font(.custom(BundledFont.sansMedium, size: 13))
+                        Text(detail).font(.system(size: 11)).foregroundStyle(Theme.textMuted).lineLimit(1)
                     }
+                    Spacer(minLength: 4)
+                    let muted = model.laneMix.muted.contains(lane)
+                    Button { model.laneMix.toggleMute(lane) } label: {
+                        Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(muted ? Theme.textMuted : Theme.text)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(muted ? "Unmute \(lane.title.lowercased()) while you listen" : "Mute \(lane.title.lowercased()) while you listen")
+                    .accessibilityLabel(muted ? "Unmute \(lane.title)" : "Mute \(lane.title)")
                 }
                 .padding(.horizontal, 10)
                 .frame(width: Self.headerWidth, alignment: .leading)
+                .contextMenu {
+                    Button(model.laneMix.soloed.contains(lane) ? "Stop hearing only \(lane.title)" : "Hear only \(lane.title)") {
+                        model.laneMix.toggleSolo(lane)
+                    }
+                }
                 content()
                     .frame(maxWidth: .infinity)
                     .frame(height: height.wrappedValue)
                     .opacity(model.laneMix.isAudible(lane) ? 1 : 0.35)
                     .padding(.trailing, 8)
             }
-            .frame(height: max(height.wrappedValue, 58))
+            .frame(height: max(height.wrappedValue, 48))
             LaneResizeEdge(height: height)
+        }
+    }
+
+    private func icon(_ lane: MixLane) -> String {
+        switch lane {
+        case .voice: return "mic"
+        case .music: return "music.note"
+        case .effects: return "sparkle"
         }
     }
 
@@ -273,11 +405,16 @@ struct MixLanes: View {
             let width = max(geometry.size.width - Self.headerWidth - 8, 1)
             let duration = max(model.edits.sourceDuration, 0.001)
             let x = Self.headerWidth + CGFloat(model.sourceTime / duration) * width
-            Rectangle()
-                .fill(Theme.text)
-                .frame(width: 1.5, height: geometry.size.height)
-                .offset(x: x)
-                .allowsHitTesting(false)
+            ZStack(alignment: .top) {
+                Rectangle()
+                    .fill(Theme.text)
+                    .frame(width: 1.5, height: geometry.size.height)
+                PlayheadBadge(text: PlayheadBadge.stamp(model.edits.outputTime(forSource: model.sourceTime) ?? 0))
+                    .offset(y: -9)
+            }
+            .frame(width: 56)
+            .offset(x: x - 28)
+            .allowsHitTesting(false)
         }
     }
 }

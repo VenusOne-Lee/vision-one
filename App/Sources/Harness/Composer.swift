@@ -8,7 +8,7 @@ import VisionOneKit
 /// leave dashed proposals; "On this Mac" keeps the AI on this Mac.
 struct Composer: View {
     @ObservedObject var model: HarnessModel
-    var placeholder = "Ask for a change, / for commands, @ for a take"
+    var placeholder = "Ask for a change, or describe what to do…"
     @ObservedObject private var ai = AIServices.shared
     @ObservedObject private var recorder = ScreenRecorder.shared
     @FocusState private var focused: Bool
@@ -20,38 +20,28 @@ struct Composer: View {
                 CompletionList(completion: completion, highlighted: highlighted) { pick($0) }
             }
             VStack(alignment: .leading, spacing: Theme.Space.sm) {
-                TextField(placeholder, text: $model.draft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .textStyle(.body)
-                    .lineLimit(1...8)
-                    .focused($focused)
-                    .onSubmit(submit)
-                    .onKeyPress(.upArrow) { moveHighlight(-1) }
-                    .onKeyPress(.downArrow) { moveHighlight(1) }
-                    .onKeyPress(.tab) { acceptHighlighted() }
-                    .onChange(of: model.draft) { _, _ in highlighted = 0 }
-                    .accessibilityLabel("Ask Vision One")
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Theme.Space.xs) {
-                        autonomyMenu
-                        whereMenu
-                        Spacer(minLength: Theme.Space.sm)
-                        modeMenu
-                        recordButton
-                        sendButton
-                    }
-                    VStack(alignment: .leading, spacing: Theme.Space.sm) {
-                        HStack(spacing: Theme.Space.xs) { autonomyMenu; whereMenu }
-                        HStack(spacing: Theme.Space.xs) {
-                            modeMenu
-                            Spacer(minLength: 0)
-                            recordButton
-                            sendButton
-                        }
-                    }
+                HStack(alignment: .top, spacing: Theme.Space.sm) {
+                    TextField(placeholder, text: $model.draft, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.custom(BundledFont.sansRegular, size: 14))
+                        .lineLimit(1...8)
+                        .focused($focused)
+                        .onSubmit(submit)
+                        .onKeyPress(.upArrow) { moveHighlight(-1) }
+                        .onKeyPress(.downArrow) { moveHighlight(1) }
+                        .onKeyPress(.tab) { acceptHighlighted() }
+                        .onChange(of: model.draft) { _, _ in highlighted = 0 }
+                        .accessibilityLabel("Ask Vision One")
+                        .padding(.top, 6)
+                    if recorder.phase.isLive { recordButton }
+                    sendButton
+                }
+                HStack(spacing: Theme.Space.xs) {
+                    WhereMenu(model: model)
+                    Spacer(minLength: 0)
                 }
             }
-            .padding(Theme.Space.sm + 4)
+            .padding(Theme.Space.md - 2)
             .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.Radius.lg)
@@ -109,78 +99,6 @@ struct Composer: View {
 
     // MARK: Buttons
 
-    private var autonomyMenu: some View {
-        Menu {
-            ForEach(AskMode.allCases, id: \.self) { mode in
-                Button {
-                    model.askMode = mode
-                } label: {
-                    MenuCheck(mode.title, isOn: model.askMode == mode)
-                }
-            }
-            Divider()
-            Text("Just do it: the agents start and leave dashed proposals to keep or undo.")
-            Text("Plan first: you see the plan and say yes before anything runs.")
-        } label: {
-            ComposerPill(title: model.askMode.title,
-                         systemImage: model.askMode == .justDoIt ? "bolt" : "list.bullet")
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Just do it, or see a plan first")
-    }
-
-    private var whereMenu: some View {
-        Menu {
-            Button {
-                ai.settings.onDeviceOnly = true
-            } label: {
-                MenuCheck("On this Mac", isOn: ai.settings.onDeviceOnly)
-            }
-            Button {
-                ai.settings.onDeviceOnly = false
-            } label: {
-                MenuCheck("Best available", isOn: !ai.settings.onDeviceOnly)
-            }
-            Divider()
-            Button("AI settings…") { SettingsWindowController.shared.show(.ai) }
-        } label: {
-            ComposerPill(title: ai.settings.onDeviceOnly ? "On this Mac" : "Best available",
-                         systemImage: ai.settings.onDeviceOnly ? "laptopcomputer" : "sparkles")
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Where the AI runs. On this Mac keeps everything private; Best available can ask before using your keys.")
-    }
-
-    /// What the next take records. Camera only is one click away, and the
-    /// pick is saved, so ⇧⌘R records the same way.
-    private var modeMenu: some View {
-        Menu {
-            ForEach(CaptureMode.allCases, id: \.self) { mode in
-                Button {
-                    recorder.choice.mode = mode
-                } label: {
-                    MenuCheck(mode.menuTitle, isOn: recorder.choice.mode == mode)
-                }
-            }
-            Divider()
-            Text("Camera only records just you and your mic. It doesn't need Screen Recording.")
-        } label: {
-            ComposerPill(title: recorder.choice.mode.menuTitle, systemImage: recorder.choice.mode.symbol)
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .disabled(recorder.phase.isLive || recorder.phase.isBusy)
-        .help("What the record button records")
-    }
-
     private var recordButton: some View {
         Button {
             if recorder.phase.isLive { Task { await recorder.toggle() } }
@@ -208,11 +126,11 @@ struct Composer: View {
     private var sendButton: some View {
         let empty = model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return Button(action: submit) {
-            Image(systemName: "arrow.up")
-                .font(.system(size: 13, weight: .bold))
+            Image(systemName: "paperplane.fill")
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.paper)
-                .frame(width: Theme.Size.control, height: Theme.Size.control)
-                .background(empty ? Theme.textFaint : Theme.text, in: Circle())
+                .frame(width: 32, height: 32)
+                .background(empty ? Theme.textFaint : Theme.text, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
         }
         .buttonStyle(.plain)
         .disabled(empty)
@@ -228,14 +146,14 @@ struct ComposerPill: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: systemImage).font(.system(size: 11))
-            Text(title).textStyle(.label)
-            Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+        HStack(spacing: 6) {
+            Image(systemName: systemImage).font(.system(size: 12))
+            Text(title).font(.custom(BundledFont.sansMedium, size: 13))
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
         }
-        .foregroundStyle(hovering ? Theme.text : Theme.textMuted)
-        .padding(.horizontal, Theme.Space.sm)
-        .frame(height: Theme.Size.controlSmall)
+        .foregroundStyle(Theme.text)
+        .padding(.horizontal, 10)
+        .frame(height: Theme.Size.control + 2)
         .background(hovering ? Theme.canvas : .clear, in: Capsule())
         .overlay(Capsule().strokeBorder(Theme.line, lineWidth: Theme.Stroke.hairline))
         .contentShape(Capsule())
@@ -300,5 +218,52 @@ struct MenuCheck: View {
         } else {
             Text(title)
         }
+    }
+}
+
+/// "On this Mac ▾": where the AI runs, how asks behave and what records.
+struct WhereMenu: View {
+    @ObservedObject var model: HarnessModel
+    @ObservedObject private var ai = AIServices.shared
+    @ObservedObject private var recorder = ScreenRecorder.shared
+
+    var body: some View {
+        Menu {
+            Button {
+                ai.settings.onDeviceOnly = true
+            } label: {
+                MenuCheck("On this Mac", isOn: ai.settings.onDeviceOnly)
+            }
+            Button {
+                ai.settings.onDeviceOnly = false
+            } label: {
+                MenuCheck("Best available", isOn: !ai.settings.onDeviceOnly)
+            }
+            Divider()
+            Section("When you ask") {
+                ForEach(AskMode.allCases, id: \.self) { mode in
+                    Button { model.askMode = mode } label: { MenuCheck(mode.title, isOn: model.askMode == mode) }
+                }
+            }
+            Section("Record") {
+                ForEach(CaptureMode.allCases, id: \.self) { mode in
+                    Button { recorder.choice.mode = mode } label: {
+                        MenuCheck(mode.menuTitle, isOn: recorder.choice.mode == mode)
+                    }
+                    .disabled(recorder.phase.isLive || recorder.phase.isBusy)
+                }
+                Button("Prepare a recording…") { model.preparingRecording = true }
+            }
+            Divider()
+            Button("AI settings…") { SettingsWindowController.shared.show(.ai) }
+        } label: {
+            ComposerPill(title: ai.settings.onDeviceOnly ? "On this Mac" : "Best available",
+                         systemImage: ai.settings.onDeviceOnly ? "laptopcomputer" : "sparkles")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Where the AI runs. On this Mac keeps everything private; Best available can ask before using your keys.")
     }
 }

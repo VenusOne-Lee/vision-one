@@ -322,12 +322,17 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         if window == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1320, height: 820),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
             window.isReleasedWhenClosed = false
             window.title = "Vision One"
+            // No global top bar: the sidebar runs the full height and the
+            // traffic lights sit over it.
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.isMovableByWindowBackground = false
             window.delegate = self
             window.contentViewController = NSHostingController(rootView: HarnessView(model: model))
             window.center()

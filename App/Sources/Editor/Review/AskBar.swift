@@ -73,32 +73,43 @@ extension AskModel {
 /// ink-bordered capsule, with a small line saying what happened.
 struct AskBar: View {
     @ObservedObject var model: EditorModel
+    var placeholder = "Ask for an edit, or hold Space to talk…"
     @StateObject private var ask = AskModel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: Theme.Space.sm) {
-                Text("Ask")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textMuted)
-                    .fixedSize()
+            HStack(spacing: Theme.Space.md) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Theme.text)
+                    .accessibilityHidden(true)
                 TextField("Ask", text: $ask.text,
-                          prompt: Text("Make a 45 second TikTok, hook first"))
+                          prompt: Text(placeholder))
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(.custom(BundledFont.sansRegular, size: 14))
                     .labelsHidden()
                     .onSubmit { ask.go(on: model) }
                     .disabled(ask.isRunning)
-                Button("Go") { ask.go(on: model) }
-                    .buttonStyle(PillButtonStyle(kind: .primary))
-                    .disabled(ask.isRunning || ask.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .help("The Editor suggests cuts for what you asked. They arrive dashed in Changes.")
+                    .accessibilityLabel("Ask for an edit")
+                let empty = ask.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                Button { ask.go(on: model) } label: {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.paper)
+                        .frame(width: 34, height: 34)
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.lg)
+                            .fill(empty || ask.isRunning ? Theme.textFaint : Theme.text))
+                }
+                .buttonStyle(.plain)
+                .disabled(ask.isRunning || empty)
+                .accessibilityLabel("Send")
+                .help("The Editor suggests cuts for what you asked. They arrive dashed in Changes.")
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 5)
-            .padding(.vertical, 5)
-            .background(Theme.paper, in: Capsule())
-            .overlay(Capsule().strokeBorder(Theme.text, lineWidth: 1.5))
+            .padding(.leading, 18)
+            .padding(.trailing, 8)
+            .padding(.vertical, 8)
+            .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.lg).strokeBorder(Theme.lineStrong, lineWidth: Theme.Stroke.hairline))
             status
                 .padding(.horizontal, 14)
         }

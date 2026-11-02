@@ -148,7 +148,8 @@ struct EditorTimeline: View {
                        x: x, width: width, height: trackHeight)
         }
         .overlay(alignment: .topLeading) {
-            TimelinePlayhead(x: x(model.sourceTime))
+            TimelinePlayhead(x: x(model.sourceTime),
+                             label: PlayheadBadge.stamp(model.edits.outputTime(forSource: model.sourceTime) ?? 0))
                 .gesture(scrub(width: width))
         }
         .coordinateSpace(.named("timeline"))
@@ -483,6 +484,7 @@ struct TimelineTrack: View, Equatable {
 /// to grab.
 struct TimelinePlayhead: View {
     let x: CGFloat
+    var label: String?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -490,14 +492,38 @@ struct TimelinePlayhead: View {
                 .fill(Theme.text)
                 .frame(width: 2)
                 .frame(maxHeight: .infinity)
-            PlayheadHandle()
-                .fill(Theme.text)
-                .frame(width: 13, height: 15)
+            if let label {
+                PlayheadBadge(text: label)
+            } else {
+                PlayheadHandle()
+                    .fill(Theme.text)
+                    .frame(width: 13, height: 15)
+            }
         }
-        .frame(width: 18)
+        .frame(width: label == nil ? 18 : 56)
         .contentShape(Rectangle())
-        .offset(x: x - 9)
+        .offset(x: x - (label == nil ? 9 : 28))
         .help("Drag to scrub")
+    }
+}
+
+/// "00:24" in an ink pill on top of the playhead.
+struct PlayheadBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.custom(BundledFont.monoMedium, size: 11))
+            .foregroundStyle(Theme.paper)
+            .padding(.horizontal, 6)
+            .frame(height: 18)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Theme.text))
+            .fixedSize()
+    }
+
+    static func stamp(_ seconds: Double) -> String {
+        let s = max(0, Int(seconds))
+        return String(format: "%02d:%02d", s / 60, s % 60)
     }
 }
 
@@ -547,12 +573,17 @@ struct VerificationPlayerFrame: View {
             generator.requestedTimeToleranceBefore = .zero
             generator.requestedTimeToleranceAfter = .zero
             do {
-                let result = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600))
+                // Where the player is (the fixture seeks there); the small
+                // fixture sits at 0.5 s. Slow showcase footage allows one frame.
+                let now = player.currentTime().seconds
+                let requested = now.isFinite && now > 0 ? now : 0.5
+                let fps = (try? await item.asset.loadTracks(withMediaType: .video).first?.load(.nominalFrameRate)) ?? 30
+                let result = try await generator.image(at: CMTime(seconds: requested, preferredTimescale: 600))
                 guard !Task.isCancelled, generation == WorkspaceRenderEvidence.generation else { return }
                 frame = result.image
                 WorkspaceRenderEvidence.frames += 1
-                if abs(result.actualTime.seconds - 0.5) > 1.0 / 30 {
-                    WorkspaceRenderEvidence.failures.append("Fixture frame time differs from requested 0.5 seconds")
+                if abs(result.actualTime.seconds - requested) > max(1.0 / 30, 1.0 / Double(max(fps, 1))) {
+                    WorkspaceRenderEvidence.failures.append("Fixture frame time differs from the requested time")
                 }
             } catch {
                 if !Task.isCancelled, generation == WorkspaceRenderEvidence.generation {

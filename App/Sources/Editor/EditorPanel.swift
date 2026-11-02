@@ -9,6 +9,8 @@ struct EditorPanel: View {
     var onExpand: (() -> Void)?
 
     @AppStorage("editorPanel.pane") private var paneRaw = EditorAside.transcript.rawValue
+    @State private var search = ""
+    @State private var searching = false
 
     private var pane: EditorAside {
         let picked = EditorAside(rawValue: paneRaw) ?? .transcript
@@ -25,33 +27,25 @@ struct EditorPanel: View {
                     .padding(Theme.Panel.inset)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready:
-                PlayerSurface(player: model.player)
-                    .overlay { CaptionLayer(model: model) }
-                    .overlay { EffectsLayer(model: model, effects: model.effects) }
-                    .background(Theme.text)
-                    .onTapGesture { model.togglePlay() }
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
-                    .aspectRatio(aspect, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .padding([.horizontal, .top], Theme.Panel.inset)
-                transport
-                    .padding(.horizontal, Theme.Panel.inset)
-                    .padding(.vertical, Theme.Space.sm)
-                Divider().overlay(Theme.line)
-                HStack {
-                    SegmentedTabs(selection: Binding(get: { pane }, set: { paneRaw = $0.rawValue }),
-                                  options: [EditorAside.transcript, .changes]) { option in
+                VideoStage(model: model, onExpand: onExpand)
+                    .padding([.horizontal, .top], Theme.Space.md)
+                HStack(spacing: Theme.Space.sm) {
+                    SegmentBar(selection: Binding(get: { pane }, set: { paneRaw = $0.rawValue }),
+                               options: [EditorAside.transcript, .changes], fill: false) { option in
                         option == .changes && model.proposedChangeCount > 0
-                            ? "Changes \(model.proposedChangeCount)" : option.title
+                            ? "Changes (\(model.proposedChangeCount))" : option.title
                     }
+                    .fixedSize()
                     Spacer(minLength: 0)
+                    if pane == .transcript { TranscriptSearchButton(query: $search, isOpen: $searching) }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                Divider().overlay(Theme.line)
+                .padding(.horizontal, Theme.Space.md)
+                .padding(.top, Theme.Space.md)
+                .padding(.bottom, Theme.Space.sm)
+                Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
                 switch pane {
                 case .changes: ChangesPanel(model: model, effects: model.effects)
-                default: TranscriptPane(model: model)
+                default: TranscriptPane(model: model, search: search)
                 }
             }
         }
@@ -59,36 +53,5 @@ struct EditorPanel: View {
         .background(Theme.paper)
         .foregroundStyle(Theme.text)
         .task(id: model.take.folder) { await model.loadIfNeeded() }
-    }
-
-    private var aspect: CGFloat {
-        let size = model.videoSize
-        return size.width > 0 && size.height > 0 ? size.width / size.height : 16 / 9
-    }
-
-    private var transport: some View {
-        HStack(spacing: Theme.Space.sm) {
-            Button { model.togglePlay() } label: {
-                Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.paper)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(Theme.text))
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .help(model.isPlaying ? "Pause" : "Play")
-            .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
-            Text("\(Timecode.short(from: model.edits.outputTime(forSource: model.sourceTime) ?? 0)) / \(Timecode.short(from: model.edits.outputDuration))")
-                .font(.system(size: 12, design: .monospaced).monospacedDigit())
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            if FileManager.default.fileExists(atPath: model.take.cameraURL.path) {
-                TakeBackgroundMenu(take: model.take)
-            }
-            if let onExpand {
-                IconButton("Open the editor", systemImage: "arrow.up.left.and.arrow.down.right", action: onExpand)
-            }
-        }
     }
 }

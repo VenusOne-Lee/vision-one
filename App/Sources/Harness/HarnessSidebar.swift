@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 import VisionOneKit
 
@@ -12,18 +13,31 @@ struct HarnessSidebar: View {
     @State private var draft = ""
     @FocusState private var nameFocused: Bool
     @State private var hoveredProject: UUID?
+    @State private var hoveringProjects = false
     @State private var settingsProject: DeskProject?
+    @State private var lengths: [URL: Double] = [:]
+    @ObservedObject private var recorder = ScreenRecorder.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: Theme.Space.sm) {
-                Image(systemName: "record.circle").foregroundStyle(Theme.text)
-                Text("Vision One").textStyle(.headline)
+            HStack(spacing: 10) {
+                RingLogo(size: 24)
+                Text("Vision One").font(.custom(BundledFont.sansSemiBold, size: 17))
+                Spacer(minLength: 0)
+                if recorder.phase.isLive {
+                    HStack(spacing: 5) {
+                        LiveDot()
+                        Text("Live").textStyle(.label).foregroundStyle(Theme.text)
+                    }
+                    .accessibilityLabel("Recording")
+                }
             }
-            .padding(Theme.Space.md)
+            .padding(.horizontal, Theme.Space.md)
+            .padding(.top, WindowChrome.titleBarHeight + 6)
+            .padding(.bottom, Theme.Space.sm)
 
             VStack(alignment: .leading, spacing: 2) {
-                SidebarButton("New task", systemImage: "square.and.pencil", isSelected: model.page == .newTask,
+                SidebarButton("New task", systemImage: "plus.square", isSelected: model.page == .newTask,
                               shortcut: "⌘N") {
                     model.page = .newTask
                 }
@@ -34,13 +48,19 @@ struct HarnessSidebar: View {
             .padding(Theme.Space.sm)
 
             HStack {
-                Text("PROJECTS").textStyle(.label).foregroundStyle(Theme.textFaint)
+                Text("PROJECTS").textStyle(.label).tracking(0.6).foregroundStyle(Theme.textMuted)
                 Spacer()
-                IconButton("New project", systemImage: "folder.badge.plus") { model.addProject() }
+                if hoveringProjects {
+                    IconButton("New project", systemImage: "folder.badge.plus") { model.addProject() }
+                }
             }
+            .frame(height: Theme.Size.control)
             .padding(.leading, Theme.Space.md)
             .padding(.trailing, Theme.Space.sm)
-            .padding(.top, Theme.Space.xs)
+            .padding(.top, Theme.Space.sm)
+            .contentShape(Rectangle())
+            .onHover { hoveringProjects = $0 }
+            .contextMenu { Button("New project") { model.addProject() } }
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
@@ -57,7 +77,7 @@ struct HarnessSidebar: View {
                             }
                             ForEach(tasks) { task in
                                 TaskRow(title: task.title, status: model.snapshot.status(of: task),
-                                        line: sidebarStatus(task)
+                                        line: sidebarLine(task)
                                             + (task.requestedBy.map { " · from \($0)" } ?? ""),
                                         isSelected: model.page.taskID == task.id)
                                     .onTapGesture { model.open(task.id) }
@@ -77,9 +97,8 @@ struct HarnessSidebar: View {
                 .padding(.bottom, Theme.Space.md)
             }
 
-            Rectangle().fill(Theme.line).frame(height: Theme.Stroke.hairline)
             HStack(spacing: Theme.Space.xs) {
-                IconButton("Settings", systemImage: "gearshape", shortcut: "⌘,") {
+                SidebarButton("Settings", systemImage: "gearshape", shortcut: "⌘,") {
                     SettingsWindowController.shared.show()
                 }
                 let archived = model.snapshot.tasks.filter(\.archived)
@@ -92,20 +111,47 @@ struct HarnessSidebar: View {
                     .menuStyle(.borderlessButton).fixedSize()
                     .accessibilityLabel("Archived tasks")
                 }
-                Spacer()
                 let waiting = model.snapshot.needsYou.count
                 if waiting > 0 {
                     Text("\(waiting) need\(waiting == 1 ? "s" : "") you")
                         .textStyle(.caption)
                         .foregroundStyle(Theme.textMuted)
+                        .fixedSize()
                 }
             }
             .padding(.horizontal, Theme.Space.sm)
-            .frame(height: Theme.Size.toolbar)
+            .padding(.bottom, Theme.Space.md)
         }
         .background(Theme.canvas)
         .sheet(item: $settingsProject) { project in
             ProjectSettingsSheet(project: project) { settingsProject = nil }
+        }
+        .task(id: model.snapshot.tasks.compactMap(\.take?.folder)) { await loadLengths() }
+    }
+
+    /// "Today at 4:48 PM · 1:56": when, and how long the take is. Work in
+    /// progress, review waiting and failures say so instead.
+    private func sidebarLine(_ task: DeskTask) -> String {
+        switch model.snapshot.status(of: task) {
+        case .working, .needsYou, .failed: return sidebarStatus(task)
+        case .ready, .done: break
+        }
+        let date = task.take?.recordedAt() ?? task.createdAt
+        let when: String
+        if Calendar.current.isDateInToday(date) {
+            when = "Today at " + date.formatted(date: .omitted, time: .shortened)
+        } else {
+            when = date.formatted(.dateTime.month(.abbreviated).day().year())
+        }
+        guard let folder = task.take?.folder, let seconds = lengths[folder] else { return when }
+        return "\(when) · \(Timecode.short(from: seconds))"
+    }
+
+    private func loadLengths() async {
+        for folder in model.snapshot.tasks.compactMap(\.take?.folder) where lengths[folder] == nil {
+            let take = Take(folder: folder)
+            let seconds = (try? await AVURLAsset(url: take.screenURL).load(.duration))?.seconds ?? 0
+            if seconds.isFinite, seconds > 0 { lengths[folder] = seconds }
         }
     }
 
@@ -141,8 +187,8 @@ struct HarnessSidebar: View {
                 .foregroundStyle(Theme.textFaint)
                 .frame(width: 10)
             Image(systemName: isOpen ? "folder" : "folder.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.textMuted)
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.text)
             if renaming == project.id {
                 TextField("Name", text: $draft)
                     .textFieldStyle(.plain)
@@ -152,7 +198,7 @@ struct HarnessSidebar: View {
                     .onExitCommand { renaming = nil }
             } else {
                 Text(project.name)
-                    .textStyle(.bodyStrong)
+                    .font(.custom(BundledFont.sansMedium, size: 14))
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -161,7 +207,7 @@ struct HarnessSidebar: View {
             }
         }
         .padding(.horizontal, Theme.Space.sm)
-        .frame(height: 28)
+        .frame(height: 34)
         .background(model.currentProject?.id == project.id && model.page == .newTask ? Theme.paper : .clear,
                     in: RoundedRectangle(cornerRadius: Theme.Radius.md))
         .contentShape(Rectangle())
@@ -245,17 +291,17 @@ struct SidebarButton: View {
         Button(action: action) {
             HStack(spacing: Theme.Space.sm) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 13))
-                    .frame(width: 18)
-                Text(title).textStyle(.bodyStrong)
+                    .font(.system(size: 15))
+                    .frame(width: 20)
+                Text(title).font(.custom(BundledFont.sansMedium, size: 14))
                 Spacer(minLength: 0)
                 if let shortcut, hovering {
                     Text(shortcut).textStyle(.caption).foregroundStyle(Theme.textFaint)
                 }
             }
             .foregroundStyle(Theme.text)
-            .padding(.horizontal, Theme.Space.sm)
-            .frame(height: 30)
+            .padding(.horizontal, Theme.Space.sm + 2)
+            .frame(height: 36)
             .background(isSelected ? Theme.paper : (hovering ? Theme.line.opacity(0.5) : .clear),
                         in: RoundedRectangle(cornerRadius: Theme.Radius.md))
             .contentShape(Rectangle())
@@ -277,13 +323,13 @@ struct TaskRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Space.sm) {
-            TaskMark(status: status)
-                .frame(width: 14, height: 14)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(alignment: .top, spacing: 10) {
+            mark
+                .frame(width: 16, height: 16)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .textStyle(isSelected ? .bodyStrong : .body)
+                    .font(.custom(isSelected ? BundledFont.sansMedium : BundledFont.sansRegular, size: 14))
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -295,9 +341,9 @@ struct TaskRow: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.leading, 18)
+        .padding(.leading, 14)
         .padding(.trailing, Theme.Space.sm)
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
         .background(isSelected ? Theme.paper : (hovering ? Theme.line.opacity(0.5) : .clear),
                     in: RoundedRectangle(cornerRadius: Theme.Radius.md))
         .overlay(
@@ -309,6 +355,23 @@ struct TaskRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityValue(status.title)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// A hollow ring; the open task's ring is filled. Work, waiting and
+    /// failures keep their own marks.
+    @ViewBuilder
+    private var mark: some View {
+        switch status {
+        case .working, .needsYou, .failed:
+            TaskMark(status: status)
+        case .ready, .done:
+            if isSelected {
+                Circle().strokeBorder(Theme.text, lineWidth: 2)
+                    .overlay(Circle().fill(Theme.text).padding(4))
+            } else {
+                Circle().strokeBorder(Theme.text, lineWidth: Theme.Stroke.ring)
+            }
+        }
     }
 }
 

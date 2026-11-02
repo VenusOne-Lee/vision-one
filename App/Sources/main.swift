@@ -27,6 +27,8 @@ if CommandLine.arguments.contains("--mcp") {
     })
     exit(code)
 } else if let index = CommandLine.arguments.firstIndex(of: "--verify-workspace"), index + 1 < CommandLine.arguments.count {
+    // CI pipes stdout; line buffering keeps the log current if a step hangs.
+    setvbuf(stdout, nil, _IOLBF, 0)
     let root = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
     Task { @MainActor in
         do {
@@ -44,6 +46,7 @@ if CommandLine.arguments.contains("--mcp") {
         NSApplication.shared.run()
     }
 } else if let index = CommandLine.arguments.firstIndex(of: "--verify-media"), index + 1 < CommandLine.arguments.count {
+    setvbuf(stdout, nil, _IOLBF, 0)
     let output = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
     Task { @MainActor in
         do { try await MediaVerification.run(in: output); exit(0) }
