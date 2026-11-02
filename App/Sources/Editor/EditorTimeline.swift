@@ -573,12 +573,17 @@ struct VerificationPlayerFrame: View {
             generator.requestedTimeToleranceBefore = .zero
             generator.requestedTimeToleranceAfter = .zero
             do {
-                let result = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600))
+                // Where the player is (the fixture seeks there); the small
+                // fixture sits at 0.5 s. Slow showcase footage allows one frame.
+                let now = player.currentTime().seconds
+                let requested = now.isFinite && now > 0 ? now : 0.5
+                let fps = (try? await item.asset.loadTracks(withMediaType: .video).first?.load(.nominalFrameRate)) ?? 30
+                let result = try await generator.image(at: CMTime(seconds: requested, preferredTimescale: 600))
                 guard !Task.isCancelled, generation == WorkspaceRenderEvidence.generation else { return }
                 frame = result.image
                 WorkspaceRenderEvidence.frames += 1
-                if abs(result.actualTime.seconds - 0.5) > 1.0 / 30 {
-                    WorkspaceRenderEvidence.failures.append("Fixture frame time differs from requested 0.5 seconds")
+                if abs(result.actualTime.seconds - requested) > max(1.0 / 30, 1.0 / Double(max(fps, 1))) {
+                    WorkspaceRenderEvidence.failures.append("Fixture frame time differs from the requested time")
                 }
             } catch {
                 if !Task.isCancelled, generation == WorkspaceRenderEvidence.generation {

@@ -73,11 +73,22 @@ enum WorkspaceVerification {
         let original = ThemeStore.shared.appearance
         defer { ThemeStore.shared.renderAppearance(original) }
         let date = Date(timeIntervalSince1970: 1_700_000_000)
-        let project = DeskProject(name: "Producer workspace", sources: [.init(.github, "VenusOne-Lee/vision-one")], createdAt: date)
-        var task = DeskTask(projectID: project.id, title: "Launch walkthrough", takes: [take], createdAt: date)
-        task.cells += [TaskCell(.ask("Tighten this walkthrough and prepare clips for launch.", mode: .planFirst), at: date),
-                       TaskCell(.reply(.producer, "Review the transcript and proposed edits beside this thread. Keep each change before delivery."), at: date)]
-        let snapshot = DeskSnapshot(projects: [project], tasks: [task])
+        // The visual states use a calm 2:14 walkthrough so renders compare
+        // with the approved pictures; runtime checks above keep the small fixture.
+        let showcase = try await ShowcaseFixture.make(in: root)
+        func day(_ text: String) -> Date {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd HH:mm"
+            return formatter.date(from: text) ?? date
+        }
+        let project = DeskProject(name: "Launch demos", sources: [.init(.github, "VenusOne-Lee/vision-one")], createdAt: date)
+        var task = DeskTask(projectID: project.id, title: "Product walkthrough", takes: [showcase], createdAt: date)
+        task.cells += [TaskCell(.ask("Clean up this walkthrough and add captions.", mode: .planFirst), at: date),
+                       TaskCell(.reply(.producer, "I found 7 cuts that save 18 seconds. Preview them before applying."), at: date)]
+        let highlights = DeskTask(projectID: project.id, title: "Feature highlights", createdAt: day("2026-10-27 10:00"))
+        let onboarding = DeskTask(projectID: project.id, title: "Onboarding guide", createdAt: day("2026-10-24 10:00"))
+        let snapshot = DeskSnapshot(projects: [project], tasks: [task, highlights, onboarding])
         var names: [String] = []
         for dark in [false, true] {
             var appearance = Appearance.standard
@@ -86,11 +97,11 @@ enum WorkspaceVerification {
             for narrow in [false, true] {
                 let size = narrow ? CGSize(width: 900, height: 640) : CGSize(width: 1512, height: 982)
                 for state in ["new-task", "library", "task", "editor", "sound", "delivery", "pending", "error", "loading", "transcript-missing", "transcript-failed", "transcript-empty", "transcript-no-audio"] {
-                    let stateTake = transcriptFixtures.first(where: { $0.0 == state })?.1 ?? take
-                    let selectedTask = stateTake == take ? task : DeskTask(projectID: project.id, title: "Transcript recovery",
+                    let stateTake = transcriptFixtures.first(where: { $0.0 == state })?.1 ?? showcase
+                    let selectedTask = stateTake == showcase ? task : DeskTask(projectID: project.id, title: "Transcript recovery",
                                                                           takes: [stateTake], createdAt: date)
                     let page: HarnessPage = state == "new-task" ? .newTask : (state == "library" ? .library : .task(selectedTask.id))
-                    var stateSnapshot = stateTake == take ? snapshot : DeskSnapshot(projects: [project], tasks: [selectedTask])
+                    var stateSnapshot = stateTake == showcase ? snapshot : DeskSnapshot(projects: [project], tasks: [selectedTask])
                     if state == "pending" {
                         stateSnapshot.tasks[0].cells.append(TaskCell(.plan(DeskPlan(steps: [.init(agent: .editor, title: "Tighten the opening", action: .edit(ask: "Remove long pauses")), .init(agent: .clipper, title: "Prepare two clips", action: .clips(count: 2))])), at: date))
                         stateSnapshot.tasks[0].cells.append(TaskCell(.approval(.plan("Review edits and two clip proposals. Nothing is posted.")), at: date))
@@ -104,9 +115,8 @@ enum WorkspaceVerification {
                         await workspace.load()
                         if state.hasPrefix("transcript-") { try TranscriptViewVerification.verifyState(state, editor: workspace.editor) }
                         if state == "delivery" {
-                            try ClipList().write(to: take.clipsURL)
                             await workspace.clips.load()
-                            workspace.clips.addAtPlayhead()
+                            workspace.clips.selectedID = workspace.clips.list.visible.first?.id
                             if let clip = workspace.clips.selected {
                                 workspace.clips.export(clip)
                                 while workspace.clips.isExporting { try await Task.sleep(for: .milliseconds(50)) }
@@ -114,7 +124,7 @@ enum WorkspaceVerification {
                             model.updateLayout { $0.show(.clips) }
                         }
                     }
-                    model.workspace?.editor.seek(toSource: 0.5)
+                    model.workspace?.editor.seek(toSource: stateTake == showcase ? 24.6 : 0.5)
                     if state == "editor" { model.mode = .editor }
                     if state == "sound" { model.mode = .sound }
                     let name = "\(state)-\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide").png"
@@ -123,16 +133,16 @@ enum WorkspaceVerification {
                     model.workspace?.close()
                     names.append(name)
                 }
-                let model = HarnessModel(snapshot: snapshot, takes: [take], page: .task(task.id))
+                let model = HarnessModel(snapshot: snapshot, takes: [showcase], page: .task(task.id))
                 let suffix = "\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide")"
                 let tools: [(String, AnyView)] = [
                     ("library-filter-empty", AnyView(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }))),
                     ("post-no-speech", AnyView(PostPanel(take: emptyPostTake))),
                     ("task-tools", AnyView(WorkspaceToolsSheet(model: model, close: {}))),
-                    ("recording", AnyView(HarnessView(model: recordingModel(snapshot: snapshot, take: take, task: task)))),
+                    ("recording", AnyView(HarnessView(model: recordingModel(snapshot: snapshot, take: showcase, task: task)))),
                     ("script-coach", AnyView(ScriptCoachView(model: ScriptCoachModel(learnPace: false)))),
                     ("rehearse", AnyView(RehearseView(model: RehearseModel(), talk: CoachConversation()))),
-                    ("voice-tools", AnyView(VoiceToolsView(model: VoiceToolsModel(take: take)))),
+                    ("voice-tools", AnyView(VoiceToolsView(model: VoiceToolsModel(take: showcase)))),
                     ("autopilot", AnyView(AutopilotView())),
                     ("autopilot-start-error", AnyView(AutopilotStartProblemView(message: StopReason.noAccess.message))),
                     ("agents", AnyView(AgentsSettingsView(service: MCPService.shared)))
@@ -150,13 +160,13 @@ enum WorkspaceVerification {
             appearance.mode = dark ? .dark : .light
             ThemeStore.shared.renderAppearance(appearance)
             for state in ["new-task", "library", "library-filter-empty", "recording", "editor", "sound"] {
-                let model = HarnessModel(snapshot: snapshot, takes: [take], page: state == "new-task" ? .newTask : (state.hasPrefix("library") ? .library : .task(task.id)))
-                if let workspace = model.workspace { await workspace.load(); workspace.editor.seek(toSource: 0.5) }
+                let model = HarnessModel(snapshot: snapshot, takes: [showcase], page: state == "new-task" ? .newTask : (state.hasPrefix("library") ? .library : .task(task.id)))
+                if let workspace = model.workspace { await workspace.load(); workspace.editor.seek(toSource: 24.6) }
                 if state == "editor" { model.mode = .editor }
                 if state == "sound" { model.mode = .sound }
                 let name = "\(state)-\(dark ? "dark" : "light")-minimum.png"
                 if state == "recording" {
-                    try await capture(HarnessView(model: recordingModel(snapshot: snapshot, take: take, task: task)),
+                    try await capture(HarnessView(model: recordingModel(snapshot: snapshot, take: showcase, task: task)),
                                       size: CGSize(width: 760, height: 520), to: root.appendingPathComponent(name))
                 } else if state == "library-filter-empty" {
                     try await capture(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }),
