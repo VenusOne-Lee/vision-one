@@ -69,7 +69,9 @@ struct AccessStep: View {
                     // Screen Recording reads as "denied" as soon as it's been
                     // asked, so it gets a calm note rather than an error.
                     Text(kind.needsSettingsSwitch
-                         ? "Press Open System Settings and switch on Vision One. This moves on by itself."
+                         ? (kind == .screen
+                            ? "Press Open System Settings, then Open System Settings in the box macOS shows, and switch on Vision One. This moves on by itself."
+                            : "Press Open System Settings and switch on Vision One. This moves on by itself.")
                          : "It's off right now. Press Ask again and choose Allow.")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.textMuted)
