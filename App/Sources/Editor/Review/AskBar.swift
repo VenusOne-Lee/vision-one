@@ -73,6 +73,7 @@ extension AskModel {
 /// ink-bordered capsule, with a small line saying what happened.
 struct AskBar: View {
     @ObservedObject var model: EditorModel
+    var placeholder = "Ask for an edit, or hold Space to talk…"
     @StateObject private var ask = AskModel()
 
     var body: some View {
@@ -83,7 +84,7 @@ struct AskBar: View {
                     .foregroundStyle(Theme.text)
                     .accessibilityHidden(true)
                 TextField("Ask", text: $ask.text,
-                          prompt: Text("Ask for an edit, or hold Space to talk…"))
+                          prompt: Text(placeholder))
                     .textFieldStyle(.plain)
                     .font(.custom(BundledFont.sansRegular, size: 14))
                     .labelsHidden()
