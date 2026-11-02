@@ -14,6 +14,38 @@ extension EnvironmentValues {
     }
 }
 
+/// A timer off the main thread: if one step runs past its limit (even with
+/// the main thread blocked), it logs the step, samples the process so CI
+/// shows where it's stuck, and fails the run instead of hanging.
+final class VerificationWatchdog: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "VisionOne.verification-watchdog")
+    private var timer: DispatchSourceTimer?
+
+    func start(_ step: String, limit: TimeInterval = 20) {
+        print("Start \(step)")
+        queue.sync {
+            timer?.cancel()
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.schedule(deadline: .now() + limit)
+            timer.setEventHandler {
+                FileHandle.standardError.write(Data("Watchdog: \(step) took over \(Int(limit)) s; sampling and failing\n".utf8))
+                let sample = Process()
+                sample.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
+                sample.arguments = ["\(getpid())", "3"]
+                try? sample.run()
+                sample.waitUntilExit()
+                exit(3)
+            }
+            timer.resume()
+            self.timer = timer
+        }
+    }
+
+    func stop() {
+        queue.sync { timer?.cancel(); timer = nil }
+    }
+}
+
 /// Verification windows draw far off every screen and never take focus,
 /// so a local run doesn't flash on someone's display. Bitmap caching
 /// still renders them.
@@ -90,8 +122,11 @@ enum WorkspaceVerification {
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         // The visual states use a calm 2:14 walkthrough so renders compare
         // with the approved pictures; runtime checks above keep the small fixture.
+        let fixtureWatchdog = VerificationWatchdog()
+        fixtureWatchdog.start("showcase fixture", limit: 60)
         let fixtureStart = Date()
         let showcase = try await ShowcaseFixture.make(in: root)
+        fixtureWatchdog.stop()
         print(String(format: "Showcase fixture %.2fs", Date().timeIntervalSince(fixtureStart)))
         func day(_ text: String) -> Date {
             let formatter = DateFormatter()
@@ -126,6 +161,9 @@ enum WorkspaceVerification {
                     if state == "error" {
                         stateSnapshot.tasks[0].cells.append(TaskCell(.failed(.editor, "The provider is unavailable. Your original and saved changes are safe. Try again or choose an on-device provider."), at: date))
                     }
+                    let watchdog = VerificationWatchdog()
+                    watchdog.start("\(state)-\(dark ? "dark" : "light")-\(narrow ? "narrow" : "wide")", limit: state == "delivery" ? 60 : 20)
+                    defer { watchdog.stop() }
                     let model = HarnessModel(snapshot: stateSnapshot, takes: [stateTake], page: page,
                                              renderPhase: state == "loading" ? .loading : nil)
                     if let workspace = model.workspace {
@@ -173,6 +211,9 @@ enum WorkspaceVerification {
                 ]
                 for (tool, view) in tools {
                     let name = "\(tool)-\(suffix).png"
+                    let watchdog = VerificationWatchdog()
+                    watchdog.start(name)
+                    defer { watchdog.stop() }
                     try await capture(view, size: size, to: root.appendingPathComponent(name))
                     names.append(name)
                 }
@@ -184,6 +225,9 @@ enum WorkspaceVerification {
             appearance.mode = dark ? .dark : .light
             ThemeStore.shared.renderAppearance(appearance)
             for state in ["new-task", "library", "library-filter-empty", "recording", "editor", "sound"] {
+                let watchdog = VerificationWatchdog()
+                watchdog.start("\(state)-\(dark ? "dark" : "light")-minimum")
+                defer { watchdog.stop() }
                 let model = HarnessModel(snapshot: snapshot, takes: [showcase], page: state == "new-task" ? .newTask : (state.hasPrefix("library") ? .library : .task(task.id)))
                 if let workspace = model.workspace { await workspace.load(); workspace.editor.seek(toSource: 24.6) }
                 if state == "editor" { model.mode = .editor }
@@ -347,7 +391,12 @@ private final class WorkspaceRuntimeChecks {
 
     func run(_ name: String, operation: @MainActor () async throws -> Void) async {
         let started = Date()
-        defer { print(String(format: "Check %@ %.2fs", name, Date().timeIntervalSince(started))) }
+        let watchdog = VerificationWatchdog()
+        watchdog.start("check \(name)", limit: 60)
+        defer {
+            watchdog.stop()
+            print(String(format: "Check %@ %.2fs", name, Date().timeIntervalSince(started)))
+        }
         do {
             try await operation()
             results[name] = "passed"
