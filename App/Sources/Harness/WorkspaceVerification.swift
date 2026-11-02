@@ -29,11 +29,18 @@ final class VerificationWatchdog: @unchecked Sendable {
             timer.schedule(deadline: .now() + limit)
             timer.setEventHandler {
                 FileHandle.standardError.write(Data("Watchdog: \(step) took over \(Int(limit)) s; sampling and failing\n".utf8))
+                // Only the call graph: the binary image list is thousands of lines.
+                let file = FileManager.default.temporaryDirectory.appendingPathComponent("vision-one-watchdog-sample.txt")
                 let sample = Process()
                 sample.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
-                sample.arguments = ["\(getpid())", "3"]
+                sample.arguments = ["\(getpid())", "3", "-file", file.path]
+                sample.standardOutput = FileHandle.nullDevice
                 try? sample.run()
                 sample.waitUntilExit()
+                if let text = try? String(contentsOf: file, encoding: .utf8) {
+                    let graph = text.components(separatedBy: "Binary Images:").first ?? text
+                    FileHandle.standardError.write(Data(graph.utf8))
+                }
                 exit(3)
             }
             timer.resume()

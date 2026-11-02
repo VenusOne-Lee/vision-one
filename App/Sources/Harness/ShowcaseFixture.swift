@@ -47,6 +47,9 @@ enum ShowcaseFixture {
         try EditList(sourceDuration: duration, cuts: cuts).write(to: take.editsURL)
         try ZoomList(zooms: [Zoom(span: TimeSpan(start: 26, end: 31), scale: 1.6, centerX: 0.62, centerY: 0.3,
                                   reason: Zoom.Reason.click, state: .proposed)]).write(to: take.zoomsURL)
+        // Already scanned for secrets (none), so opening it never starts
+        // a Vision text scan in a render.
+        try BlurList().write(to: take.blursURL)
         try ClipList(clips: [
             Clip(title: "Create a new project", hook: "Shows the Projects page and how to get started.",
                  span: TimeSpan(start: 24, end: 54), state: .accepted),

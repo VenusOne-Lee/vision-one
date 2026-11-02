@@ -39,7 +39,7 @@ enum SecretFinder {
             if let last, let thumbnail, Self.largestChange(thumbnail, last.thumbnail) <= 3 {
                 hits = last.hits
             } else {
-                hits = try Self.read(image)
+                hits = try await Self.readOffPool(image)
             }
             if let thumbnail { last = (thumbnail, hits) } else { last = nil }
             samples.append(SecretSample(t: actual.seconds, hits: hits))
@@ -49,6 +49,35 @@ enum SecretFinder {
         }
         await progress(1)
         return BlurPlanner.propose(from: samples, interval: interval, sourceDuration: duration)
+    }
+
+    /// Vision's text reader blocks its thread until it's done. It runs on
+    /// its own queue, one frame at a time, so it never ties up Swift's
+    /// shared threads; a frame that takes over `readLimit` fails the scan
+    /// (on a machine whose Vision never answers, say) instead of hanging.
+    private static let ocrQueue = DispatchQueue(label: "VisionOne.secret-ocr", qos: .utility)
+    static let readLimit: TimeInterval = 15
+
+    struct ReadTimedOut: LocalizedError {
+        var errorDescription: String? { "Reading the screen text took too long" }
+    }
+
+    static func readOffPool(_ image: CGImage) async throws -> [SecretSample.Hit] {
+        final class Once: @unchecked Sendable {
+            private let lock = NSLock()
+            private var done = false
+            func claim() -> Bool { lock.lock(); defer { lock.unlock() }; if done { return false }; done = true; return true }
+        }
+        let once = Once()
+        return try await withCheckedThrowingContinuation { continuation in
+            ocrQueue.async {
+                let result = Result { try read(image) }
+                if once.claim() { continuation.resume(with: result) }
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + readLimit) {
+                if once.claim() { continuation.resume(throwing: ReadTimedOut()) }
+            }
+        }
     }
 
     /// Recognises the text in one frame and keeps only what looks secret.
