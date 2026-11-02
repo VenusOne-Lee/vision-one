@@ -392,10 +392,12 @@ struct CapturePicker: View {
     @EnvironmentObject private var recorder: ScreenRecorder
     @ObservedObject private var access = AccessCenter.shared
     @State private var windows: [WindowCandidate] = []
+    /// Off when the caller shows its own Screen | Window | Area control.
+    var showsModeSwitch = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.sm) {
-            ModeSwitch(selection: $recorder.choice.mode)
+            if showsModeSwitch { ModeSwitch(selection: $recorder.choice.mode) }
 
             switch recorder.choice.mode {
             case .screen:

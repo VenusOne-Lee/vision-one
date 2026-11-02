@@ -129,7 +129,7 @@ enum WorkspaceVerification {
                     ("library-filter-empty", AnyView(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }))),
                     ("post-no-speech", AnyView(PostPanel(take: emptyPostTake))),
                     ("task-tools", AnyView(WorkspaceToolsSheet(model: model, close: {}))),
-                    ("recording", AnyView(RecordingPreparationView(model: model, availableHeight: size.height))),
+                    ("recording", AnyView(HarnessView(model: recordingModel(snapshot: snapshot, take: take, task: task)))),
                     ("script-coach", AnyView(ScriptCoachView(model: ScriptCoachModel(learnPace: false)))),
                     ("rehearse", AnyView(RehearseView(model: RehearseModel(), talk: CoachConversation()))),
                     ("voice-tools", AnyView(VoiceToolsView(model: VoiceToolsModel(take: take)))),
@@ -156,7 +156,7 @@ enum WorkspaceVerification {
                 if state == "sound" { model.mode = .sound }
                 let name = "\(state)-\(dark ? "dark" : "light")-minimum.png"
                 if state == "recording" {
-                    try await capture(RecordingPreparationView(model: model, availableHeight: 520),
+                    try await capture(HarnessView(model: recordingModel(snapshot: snapshot, take: take, task: task)),
                                       size: CGSize(width: 760, height: 520), to: root.appendingPathComponent(name))
                 } else if state == "library-filter-empty" {
                     try await capture(LibraryView(library: model.library, initialQuery: LibraryQuery(filter: .exported), open: { _ in }),
@@ -176,6 +176,13 @@ enum WorkspaceVerification {
             .write(to: root.appendingPathComponent("workspace-render.json"))
         print("Workspace renders saved: \(names.count)")
         try checks.finish(in: root)
+    }
+
+    /// The task page with Ready to record in its review column.
+    private static func recordingModel(snapshot: DeskSnapshot, take: Take, task: DeskTask) -> HarnessModel {
+        let model = HarnessModel(snapshot: snapshot, takes: [take], page: .task(task.id))
+        model.preparingRecording = true
+        return model
     }
 
     /// Mount the real HarnessView, retain it across a task switch with Clips

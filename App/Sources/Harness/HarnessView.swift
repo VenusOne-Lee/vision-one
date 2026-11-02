@@ -72,8 +72,9 @@ struct HarnessView: View {
         .sheet(isPresented: $showingTemplate) {
             if let workspace = model.workspace { ApplyTemplateSheet(workspace: workspace) { showingTemplate = false } }
         }
-        .sheet(isPresented: $model.preparingRecording) {
-            RecordingPreparationView(model: model, availableHeight: NSApp.keyWindow?.contentLayoutRect.height)
+        .onChange(of: model.preparingRecording) { _, preparing in
+            // Ready to record lives in the task page's review column.
+            if preparing, model.mode != .tasks { model.mode = .tasks }
         }
         .sheet(isPresented: $model.presentingExport) {
             if let workspace = model.workspace {
@@ -162,7 +163,9 @@ struct HarnessView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let noTakesMode {
+        if model.preparingRecording && model.mode == .tasks {
+            recordingSetup
+        } else if let noTakesMode {
             NoTakesYetView(mode: noTakesMode)
         } else {
             modeContent
@@ -201,6 +204,40 @@ struct HarnessView: View {
                 }
                 .id(workspace.take.name)
                 .task(id: workspace.take.name) { await workspace.load() }
+            }
+        }
+    }
+
+    /// Ready to record: the thread says what's set up, the review column
+    /// holds the choices and the one Start recording.
+    private var recordingSetup: some View {
+        GeometryReader { geometry in
+            let stageWidth = min(max(geometry.size.width * stageFraction, 380), max(380, geometry.size.width - 340))
+            if geometry.size.width < 720 {
+                RecordingPreparationView(model: model)
+                    .padding(.top, WindowChrome.titleBarHeight)
+                    .background(Theme.paper)
+            } else {
+                HStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        PageHeader(model.task?.title ?? "New recording", subtitle: savedLine) {
+                            moreMenu
+                        }
+                        RecordingThreadSummary(model: model)
+                        Composer(model: model)
+                            .frame(maxWidth: 640)
+                            .padding(.horizontal, Theme.Space.lg)
+                            .padding(.bottom, Theme.Space.md)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .background(Theme.paper)
+                    .frame(minWidth: 340, maxWidth: .infinity)
+                    Rectangle().fill(Theme.line).frame(width: Theme.Stroke.hairline)
+                    RecordingPreparationView(model: model)
+                        .padding(.top, WindowChrome.titleBarHeight)
+                        .background(Theme.paper)
+                        .frame(width: stageWidth)
+                }
             }
         }
     }
@@ -278,7 +315,9 @@ struct HarnessView: View {
     }
 
     private func escape() {
-        if noTakesMode != nil {
+        if model.preparingRecording {
+            model.preparingRecording = false
+        } else if noTakesMode != nil {
             noTakesMode = nil
         } else if model.mode != .tasks {
             model.mode = .tasks
