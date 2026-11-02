@@ -62,12 +62,22 @@ final class AccessCenter: ObservableObject {
     /// older or differently signed copy (its switch then does nothing),
     /// adds this copy afresh and opens System Settings on it, so the only
     /// thing left is one switch.
+    ///
+    /// Only macOS's own box shows the first time (its Open System Settings
+    /// button goes to the pane). Opening the pane as well left that box
+    /// sitting over System Settings after the switch was on. Pressed
+    /// again, it just opens the pane.
     private func resetScreenAccess() {
-        Self.resetEntry(for: .screen)
-        CGRequestScreenCaptureAccess()
-        openSettings(for: .screen)
+        if screenResetDone {
+            openSettings(for: .screen)
+        } else {
+            screenResetDone = true
+            Self.resetEntry(for: .screen)
+            CGRequestScreenCaptureAccess()
+        }
         refresh()
     }
+    private var screenResetDone = false
 
     /// Removes Vision One's entry for `kind` from macOS's privacy list.
     /// A switch tied to an older or differently signed copy looks on but
