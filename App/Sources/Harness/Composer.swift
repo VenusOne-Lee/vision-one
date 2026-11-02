@@ -37,7 +37,7 @@ struct Composer: View {
                     sendButton
                 }
                 HStack(spacing: Theme.Space.xs) {
-                    whereMenu
+                    WhereMenu(model: model)
                     Spacer(minLength: 0)
                 }
             }
@@ -98,46 +98,6 @@ struct Composer: View {
     }
 
     // MARK: Buttons
-
-    private var whereMenu: some View {
-        Menu {
-            Button {
-                ai.settings.onDeviceOnly = true
-            } label: {
-                MenuCheck("On this Mac", isOn: ai.settings.onDeviceOnly)
-            }
-            Button {
-                ai.settings.onDeviceOnly = false
-            } label: {
-                MenuCheck("Best available", isOn: !ai.settings.onDeviceOnly)
-            }
-            Divider()
-            Section("When you ask") {
-                ForEach(AskMode.allCases, id: \.self) { mode in
-                    Button { model.askMode = mode } label: { MenuCheck(mode.title, isOn: model.askMode == mode) }
-                }
-            }
-            Section("Record") {
-                ForEach(CaptureMode.allCases, id: \.self) { mode in
-                    Button { recorder.choice.mode = mode } label: {
-                        MenuCheck(mode.menuTitle, isOn: recorder.choice.mode == mode)
-                    }
-                    .disabled(recorder.phase.isLive || recorder.phase.isBusy)
-                }
-                Button("Prepare a recording…") { model.preparingRecording = true }
-            }
-            Divider()
-            Button("AI settings…") { SettingsWindowController.shared.show(.ai) }
-        } label: {
-            ComposerPill(title: ai.settings.onDeviceOnly ? "On this Mac" : "Best available",
-                         systemImage: ai.settings.onDeviceOnly ? "laptopcomputer" : "sparkles")
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Where the AI runs. On this Mac keeps everything private; Best available can ask before using your keys.")
-    }
 
     private var recordButton: some View {
         Button {
@@ -258,5 +218,52 @@ struct MenuCheck: View {
         } else {
             Text(title)
         }
+    }
+}
+
+/// "On this Mac ▾": where the AI runs, how asks behave and what records.
+struct WhereMenu: View {
+    @ObservedObject var model: HarnessModel
+    @ObservedObject private var ai = AIServices.shared
+    @ObservedObject private var recorder = ScreenRecorder.shared
+
+    var body: some View {
+        Menu {
+            Button {
+                ai.settings.onDeviceOnly = true
+            } label: {
+                MenuCheck("On this Mac", isOn: ai.settings.onDeviceOnly)
+            }
+            Button {
+                ai.settings.onDeviceOnly = false
+            } label: {
+                MenuCheck("Best available", isOn: !ai.settings.onDeviceOnly)
+            }
+            Divider()
+            Section("When you ask") {
+                ForEach(AskMode.allCases, id: \.self) { mode in
+                    Button { model.askMode = mode } label: { MenuCheck(mode.title, isOn: model.askMode == mode) }
+                }
+            }
+            Section("Record") {
+                ForEach(CaptureMode.allCases, id: \.self) { mode in
+                    Button { recorder.choice.mode = mode } label: {
+                        MenuCheck(mode.menuTitle, isOn: recorder.choice.mode == mode)
+                    }
+                    .disabled(recorder.phase.isLive || recorder.phase.isBusy)
+                }
+                Button("Prepare a recording…") { model.preparingRecording = true }
+            }
+            Divider()
+            Button("AI settings…") { SettingsWindowController.shared.show(.ai) }
+        } label: {
+            ComposerPill(title: ai.settings.onDeviceOnly ? "On this Mac" : "Best available",
+                         systemImage: ai.settings.onDeviceOnly ? "laptopcomputer" : "sparkles")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Where the AI runs. On this Mac keeps everything private; Best available can ask before using your keys.")
     }
 }
