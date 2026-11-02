@@ -184,13 +184,15 @@ struct RecordingPreparationView: View {
                         .accessibilityLabel("Camera")
                     cameraMenu
                 }
-                if devices.cameraChoice != .off {
+                if devices.cameraChoice != .off && !model.isFixture {
                     BackgroundRow().padding(.horizontal, Theme.Space.md).padding(.bottom, Theme.Space.sm)
                 }
             }
             divider
-            SourcesRow(devices: devices).padding(.horizontal, Theme.Space.md).padding(.vertical, Theme.Space.sm)
-            divider
+            if !model.isFixture {
+                SourcesRow(devices: devices).padding(.horizontal, Theme.Space.md).padding(.vertical, Theme.Space.sm)
+                divider
+            }
             scriptSection
         }
         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.lg))
@@ -265,11 +267,13 @@ struct RecordingPreparationView: View {
 
     private var micName: String {
         guard recorder.choice.includeMicrophone else { return "Off" }
+        if model.isFixture { return "MacBook microphone" }
         return microphones.resolved(for: recorder.choice)?.name ?? "No mic found"
     }
 
     private var cameraName: String {
         if devices.cameraChoice == .off { return "Off" }
+        if model.isFixture { return "FaceTime camera" }
         if devices.cameras.isEmpty { return "No camera found" }
         return devices.cameraToRecord()?.localizedName ?? "Automatic"
     }
@@ -385,13 +389,15 @@ struct RecordingThreadSummary: View {
                                   count: "", proposed: false) {}
                     rowDivider
                     SuggestionRow(icon: "mic", title: "Microphone",
-                                  detail: recorder.choice.includeMicrophone
-                                      ? microphones.resolved(for: recorder.choice)?.name ?? "No mic found" : "Off",
+                                  detail: !recorder.choice.includeMicrophone ? "Off"
+                                      : model.isFixture ? "MacBook microphone"
+                                      : microphones.resolved(for: recorder.choice)?.name ?? "No mic found",
                                   count: "", proposed: false) {}
                     if recorder.choice.mode.recordsScreen {
                         rowDivider
                         SuggestionRow(icon: "web.camera", title: "Camera",
-                                      detail: devices.cameraChoice == .off ? "Off" : devices.cameraToRecord()?.localizedName ?? "Automatic",
+                                      detail: devices.cameraChoice == .off ? "Off"
+                                          : model.isFixture ? "FaceTime camera" : devices.cameraToRecord()?.localizedName ?? "Automatic",
                                       count: "", proposed: false) {}
                     }
                     rowDivider

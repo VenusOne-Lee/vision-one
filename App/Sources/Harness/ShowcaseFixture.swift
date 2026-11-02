@@ -24,19 +24,12 @@ enum ShowcaseFixture {
         if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let take = Take(folder: folder)
-        let video = root.appendingPathComponent("showcase-video.mov")
-        let voice = root.appendingPathComponent("showcase-voice.caf")
-        try? FileManager.default.removeItem(at: video)
-        try? FileManager.default.removeItem(at: voice)
-        func step<T>(_ name: String, _ work: () async throws -> T) async throws -> T {
-            do { return try await work() } catch {
-                throw MediaVerification.Failure(message: "Showcase \(name) failed: \(error)")
-            }
-        }
-        try await step("video") { try await writeVideo(to: video) }
         let words = transcriptWords()
-        try await step("voice") { try writeVoice(to: voice, words: words) }
-        try await step("combine") { try await combine(video: video, voice: voice, into: take.screenURL) }
+        do {
+            try await writeMovie(to: take.screenURL, words: words)
+        } catch {
+            throw MediaVerification.Failure(message: "Showcase movie failed: \(error)")
+        }
         try TakeAudioTracks(tracks: [.mic]).write(to: take.audioTracksURL)
         try take.setTitle("Product walkthrough")
         try Transcript(language: "en", engine: "workspace fixture", duration: duration,
@@ -114,44 +107,49 @@ enum ShowcaseFixture {
 
     // MARK: Media
 
-    private static func writeVoice(to url: URL, words: [TranscriptWord]) throws {
-        let rate = 16_000.0
-        let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: 1)!
-        let file = try AVAudioFile(forWriting: url, settings: format.settings)
-        let frames = AVAudioFrameCount(duration * rate)
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
-        buffer.frameLength = frames
-        let samples = buffer.floatChannelData![0]
-        for i in 0..<Int(frames) { samples[i] = 0 }
-        for word in words {
-            let a = Int(word.start * rate), b = min(Int(frames), Int(word.end * rate))
-            guard a < b else { continue }
-            for i in a..<b {
-                let t = Double(i) / rate
-                let envelope = sin(Double(i - a) / Double(b - a) * .pi)
-                samples[i] = Float(envelope * 0.3 * (sin(2 * .pi * 180 * t) + 0.4 * sin(2 * .pi * 360 * t)))
-            }
-        }
-        try file.write(from: buffer)
-    }
-
-    private static func writeVideo(to url: URL) async throws {
-        let width = 1440, height = 900
+    /// One pass, one writer: a frame a second of the app window and 16 kHz
+    /// speech-shaped tones, so it stays cheap on a CI VM with no hardware
+    /// encoder (no export session, no re-encode). Every wait is bounded.
+    private static func writeMovie(to url: URL, words: [TranscriptWord]) async throws {
+        let width = 1280, height = 800, rate = 16_000
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
-        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+        let video = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: width, AVVideoHeightKey: height,
         ])
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: video, sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: width, kCVPixelBufferHeightKey as String: height,
         ])
-        writer.add(input)
-        try MediaVerification.require(writer.startWriting(), "Showcase writer failed")
+        let audio = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 32_000,
+        ])
+        writer.add(video)
+        writer.add(audio)
+        try MediaVerification.require(writer.startWriting(), "Showcase writer failed: \(String(describing: writer.error))")
         writer.startSession(atSourceTime: .zero)
-        // One frame a second is plenty for a calm screen recording.
-        let frames = Int(duration)
-        for frame in 0...frames {
-            while !input.isReadyForMoreMediaData { try await Task.sleep(for: .milliseconds(2)) }
+        var asbd = AudioStreamBasicDescription(mSampleRate: Double(rate), mFormatID: kAudioFormatLinearPCM,
+                                               mFormatFlags: kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked,
+                                               mBytesPerPacket: 2, mFramesPerPacket: 1, mBytesPerFrame: 2,
+                                               mChannelsPerFrame: 1, mBitsPerChannel: 16, mReserved: 0)
+        var format: CMAudioFormatDescription?
+        CMAudioFormatDescriptionCreate(allocator: nil, asbd: &asbd, layoutSize: 0, layout: nil, magicCookieSize: 0,
+                                       magicCookie: nil, extensions: nil, formatDescriptionOut: &format)
+        guard let format else { throw MediaVerification.Failure(message: "No showcase audio format") }
+        let samples = voiceSamples(words: words, rate: rate)
+
+        func ready(_ input: AVAssetWriterInput) async throws {
+            let deadline = Date().addingTimeInterval(15)
+            while !input.isReadyForMoreMediaData {
+                guard Date() < deadline, writer.status == .writing else {
+                    throw MediaVerification.Failure(message: "Showcase writer stalled: \(String(describing: writer.error))")
+                }
+                try await Task.sleep(for: .milliseconds(2))
+            }
+        }
+
+        let seconds = Int(duration)
+        for second in 0..<seconds {
+            try await ready(video)
             var buffer: CVPixelBuffer?
             CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &buffer)
             guard let buffer else { throw MediaVerification.Failure(message: "No showcase pixel buffer") }
@@ -160,32 +158,52 @@ enum ShowcaseFixture {
                                        bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
                                        space: CGColorSpaceCreateDeviceRGB(),
                                        bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
-                draw(in: context, size: CGSize(width: width, height: height), second: Double(frame))
+                context.scaleBy(x: CGFloat(width) / 1440, y: CGFloat(height) / 900)
+                draw(in: context, size: CGSize(width: 1440, height: 900), second: Double(second))
             }
             CVPixelBufferUnlockBaseAddress(buffer, [])
-            try MediaVerification.require(adaptor.append(buffer, withPresentationTime: CMTime(value: Int64(frame) * 600, timescale: 600)),
+            try MediaVerification.require(adaptor.append(buffer, withPresentationTime: CMTime(value: Int64(second) * 600, timescale: 600)),
                                           "Showcase frame failed")
+            // The second of sound that goes with this frame.
+            let start = second * rate
+            let end = min(samples.count, start + rate)
+            guard start < end else { continue }
+            try await ready(audio)
+            let data = samples[start..<end].withUnsafeBytes { Data($0) }
+            var block: CMBlockBuffer?
+            CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: data.count, blockAllocator: nil,
+                                               customBlockSource: nil, offsetToData: 0, dataLength: data.count,
+                                               flags: 0, blockBufferOut: &block)
+            guard let block else { throw MediaVerification.Failure(message: "No showcase audio block") }
+            _ = data.withUnsafeBytes { CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block,
+                                                                       offsetIntoDestination: 0, dataLength: data.count) }
+            var sample: CMSampleBuffer?
+            CMAudioSampleBufferCreateReadyWithPacketDescriptions(allocator: nil, dataBuffer: block, formatDescription: format,
+                                                                 sampleCount: end - start,
+                                                                 presentationTimeStamp: CMTime(value: Int64(start), timescale: CMTimeScale(rate)),
+                                                                 packetDescriptions: nil, sampleBufferOut: &sample)
+            guard let sample else { throw MediaVerification.Failure(message: "No showcase audio sample") }
+            try MediaVerification.require(audio.append(sample), "Showcase audio failed: \(String(describing: writer.error))")
         }
-        input.markAsFinished()
+        video.markAsFinished()
+        audio.markAsFinished()
         await writer.finishWriting()
-        try MediaVerification.require(writer.status == .completed, "Showcase video failed")
+        try MediaVerification.require(writer.status == .completed, "Showcase movie failed: \(String(describing: writer.error))")
     }
 
-    private static func combine(video: URL, voice: URL, into output: URL) async throws {
-        let composition = AVMutableComposition()
-        let videoAsset = AVURLAsset(url: video), voiceAsset = AVURLAsset(url: voice)
-        let videoTrack = try await videoAsset.loadTracks(withMediaType: .video)[0]
-        let voiceTrack = try await voiceAsset.loadTracks(withMediaType: .audio)[0]
-        let length = min(try await videoAsset.load(.duration), try await voiceAsset.load(.duration))
-        let range = CMTimeRange(start: .zero, duration: length)
-        try composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)?
-            .insertTimeRange(range, of: videoTrack, at: .zero)
-        try composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)?
-            .insertTimeRange(range, of: voiceTrack, at: .zero)
-        guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
-            throw MediaVerification.Failure(message: "Couldn't create the showcase export session")
+    private static func voiceSamples(words: [TranscriptWord], rate: Int) -> [Int16] {
+        var samples = [Int16](repeating: 0, count: Int(duration) * rate)
+        for word in words {
+            let a = Int(word.start * Double(rate)), b = min(samples.count, Int(word.end * Double(rate)))
+            guard a < b else { continue }
+            for i in a..<b {
+                let t = Double(i) / Double(rate)
+                let envelope = sin(Double(i - a) / Double(b - a) * .pi)
+                let value = envelope * 0.3 * (sin(2 * .pi * 180 * t) + 0.4 * sin(2 * .pi * 360 * t))
+                samples[i] = Int16(max(-1, min(1, value)) * 32_000)
+            }
         }
-        try await session.export(to: output, as: .mov)
+        return samples
     }
 
     /// A light app window on a soft blue-grey backdrop: sidebar, Projects

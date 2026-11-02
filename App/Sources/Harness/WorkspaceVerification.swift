@@ -45,6 +45,8 @@ enum WorkspaceVerification {
         }
         try Transcript(language: "en", engine: "workspace fixture", duration: 3, segments: [.init(words: words)]).write(to: take.transcriptURL)
         let checks = WorkspaceRuntimeChecks()
+        let runStart = Date()
+        defer { print(String(format: "Workspace verification total %.2fs", Date().timeIntervalSince(runStart))) }
         await checks.run("reduceMotion") { try WorkspaceMotion.verify() }
         await checks.run("exportRunIdentity") { try await ExportControllerVerification.run(in: root) }
         await checks.run("exportQueue") { try await ExportControllerVerification.verifyQueue(in: root) }
@@ -75,7 +77,9 @@ enum WorkspaceVerification {
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         // The visual states use a calm 2:14 walkthrough so renders compare
         // with the approved pictures; runtime checks above keep the small fixture.
+        let fixtureStart = Date()
         let showcase = try await ShowcaseFixture.make(in: root)
+        print(String(format: "Showcase fixture %.2fs", Date().timeIntervalSince(fixtureStart)))
         func day(_ text: String) -> Date {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -119,7 +123,14 @@ enum WorkspaceVerification {
                             workspace.clips.selectedID = workspace.clips.list.visible.first?.id
                             if let clip = workspace.clips.selected {
                                 workspace.clips.export(clip)
-                                while workspace.clips.isExporting { try await Task.sleep(for: .milliseconds(50)) }
+                                let deadline = Date().addingTimeInterval(45)
+                                while workspace.clips.isExporting {
+                                    guard Date() < deadline else {
+                                        workspace.clips.cancelExport()
+                                        throw MediaVerification.Failure(message: "Delivery clip export took over 45 seconds")
+                                    }
+                                    try await Task.sleep(for: .milliseconds(50))
+                                }
                             }
                             model.updateLayout { $0.show(.clips) }
                         }
@@ -275,6 +286,8 @@ enum WorkspaceVerification {
     }
 
     private static func capture<V: View>(_ view: V, size: CGSize, to url: URL, requiresFrame: Bool = false) async throws {
+        let started = Date()
+        defer { print(String(format: "Render %@ %.2fs", url.lastPathComponent, Date().timeIntervalSince(started))) }
         WorkspaceRenderEvidence.generation += 1
         WorkspaceRenderEvidence.frames = 0
         WorkspaceRenderEvidence.failures = []
@@ -289,7 +302,7 @@ enum WorkspaceVerification {
         window.orderFrontRegardless()
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
         // Let production .task loads, SwiftUI layout and AppKit drawing settle.
-        try await Task.sleep(for: .milliseconds(700))
+        try await Task.sleep(for: .milliseconds(350))
         if requiresFrame {
             for _ in 0..<40 where WorkspaceRenderEvidence.frames == 0 && WorkspaceRenderEvidence.failures.isEmpty {
                 try await Task.sleep(for: .milliseconds(50))
@@ -318,6 +331,8 @@ private final class WorkspaceRuntimeChecks {
     private var results: [String: String] = [:]
 
     func run(_ name: String, operation: @MainActor () async throws -> Void) async {
+        let started = Date()
+        defer { print(String(format: "Check %@ %.2fs", name, Date().timeIntervalSince(started))) }
         do {
             try await operation()
             results[name] = "passed"
