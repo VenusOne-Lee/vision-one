@@ -1,13 +1,22 @@
 name: CI
 
+# Pull requests only: a merged PR already passed here, so main isn't built again.
+# Run it by hand from the Actions tab (CI > Run workflow) to check main itself.
 on:
-  push:
-    branches: [main]
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+
+concurrency:
+  # A new push to the same PR cancels the run it replaces.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -50,6 +59,7 @@ jobs:
     # The release rehearsal signs with the real keys, so it must never be
     # able to publish. This fails any change that would let it.
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
