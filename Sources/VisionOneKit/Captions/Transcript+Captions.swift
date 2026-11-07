@@ -59,6 +59,7 @@ extension Take {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(settings).write(to: captionSettingsURL, options: .atomic)
+        NotificationCenter.default.post(name: .captionSettingsChanged, object: captionSettingsURL)
     }
 
     /// A visibility-only edit must merge with the latest saved style, position
@@ -139,4 +140,10 @@ extension Take {
             try SubtitleFile.write(cues, format: format, to: folder, name: name, wordTimings: format == .vtt)
         }
     }
+}
+
+extension Notification.Name {
+    /// Posted after a take's caption settings are saved; the object is
+    /// the settings file's URL.
+    public static let captionSettingsChanged = Notification.Name("VisionOneCaptionSettingsChanged")
 }
