@@ -6,7 +6,7 @@ import VisionOneKit
 /// another take runs. Jobs read the take's saved settings when they start.
 @MainActor
 final class ExportQueue: ObservableObject {
-    static let shared = ExportQueue(controller: .shared)
+    static let shared = ExportQueue(controller: .shared, remembers: true)
 
     struct Request: Identifiable {
         let id = UUID()
@@ -25,12 +25,53 @@ final class ExportQueue: ObservableObject {
     private var keep: [Range<Double>]?
     private var watching: AnyCancellable?
     private var requests: [URL: Request] = [:]
+    /// Only the app's own queue keeps unfinished exports across a quit;
+    /// test and verification queues never touch the saved list.
+    private let remembers: Bool
+    private var lastSaved = PendingExports()
 
-    init(controller: ExportController) {
+    init(controller: ExportController, remembers: Bool = false) {
         self.controller = controller
+        self.remembers = remembers
         watching = controller.$phase.receive(on: DispatchQueue.main).sink { [weak self] phase in
-            MainActor.assumeIsolated { self?.follow(phase) }
+            MainActor.assumeIsolated {
+                self?.follow(phase)
+                self?.remember()
+            }
         }
+    }
+
+    /// Picks up exports a quit left unfinished, for takes still on disk.
+    func resumeUnfinished() {
+        guard remembers else { return }
+        let pending = PendingExports.load()
+        // What's on disk now, so the next save replaces it even when none
+        // of it could be picked up.
+        lastSaved = pending
+        for entry in pending.entries {
+            let take = Take(folder: entry.takeFolder)
+            guard FileManager.default.fileExists(atPath: take.screenURL.path) else { continue }
+            export(take, presets: entry.presets, keep: entry.keep)
+        }
+        remember()
+    }
+
+    /// Saves what's still to export, only when that list changed.
+    private func remember() {
+        guard remembers else { return }
+        var entries: [PendingExports.Entry] = []
+        if let take, let batch, batch.isRunning {
+            entries.append(.init(takeFolder: take.folder, presets: batch.unfinished, keep: keep))
+        }
+        for request in waiting {
+            entries.append(.init(takeFolder: request.take.folder,
+                                 presets: request.initialBatch?.unfinished ?? ExportBatch(request.presets).unfinished,
+                                 keep: request.keep))
+        }
+        let pending = PendingExports(entries: entries).cleaned
+        guard pending != lastSaved else { return }
+        lastSaved = pending
+        try? pending.save()
     }
     var isRunning: Bool { batch?.isRunning == true || !waiting.isEmpty }
 
@@ -44,6 +85,7 @@ final class ExportQueue: ObservableObject {
         if batch?.isRunning == true {
             waiting.append(request)
         } else { begin(request) }
+        remember()
     }
 
     func cancel(_ target: Take? = nil) {
@@ -54,12 +96,14 @@ final class ExportQueue: ObservableObject {
             var cancelled = request.initialBatch ?? ExportBatch(request.presets)
             cancelled.cancel()
             finished[target.folder] = cancelled
+            remember()
             return
         }
         guard target.folder == take?.folder, batch?.isRunning == true else { return }
         batch?.cancel()
         if batch?.current != nil { controller.cancel() }
         else { startNext() }
+        remember()
     }
 
     func retry(_ take: Take) {
@@ -70,6 +114,7 @@ final class ExportQueue: ObservableObject {
         requests[take.folder] = request
         if batch?.isRunning == true { waiting.append(request) }
         else { begin(request) }
+        remember()
     }
 
     func reset(_ target: Take? = nil) {
