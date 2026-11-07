@@ -132,6 +132,9 @@ final class EditorModel: ObservableObject {
     /// Which preview audio tracks belong to which lane, and the music and
     /// effects volume ramps, so mute and solo can be applied live.
     private var mixTracks: [MixLane: [CMPersistentTrackID]] = [:]
+    /// The take recorded the Mac's own sound on a track of its own, so
+    /// Sound shows a System audio lane.
+    @Published private(set) var hasSystemAudio = false
     private var soundParameters: [AVMutableAudioMixInputParameters] = []
     /// Keep selected music/effect assets alive for the current player item.
     private var soundAssets: [AVAsset] = []
@@ -610,8 +613,14 @@ final class EditorModel: ObservableObject {
             let item = AVPlayerItem(asset: composition)
             item.videoComposition = previewVideoComposition()
             let soundTracks = added.tracks.map(\.trackID)
+            // The mic is the Voice lane and the rest is System audio. A
+            // take whose mic can't be told apart keeps it all as Voice.
+            let micTrackID = microphoneTrackID
+            let systemTracks = micTrackID == nil ? [] : voiceTracks.filter { $0 != micTrackID }
+            hasSystemAudio = !systemTracks.isEmpty
             mixTracks = [
-                .voice: voiceTracks,
+                .voice: micTrackID == nil ? voiceTracks : voiceTracks.filter { $0 == micTrackID },
+                .system: systemTracks,
                 .music: added.musicTrackID.map { [$0] } ?? [],
                 .effects: soundTracks.filter { $0 != added.musicTrackID },
             ]
@@ -657,14 +666,15 @@ extension EditorModel {
             let lane: MixLane = (mixTracks[.music] ?? []).contains(parameters.trackID) ? .music : .effects
             inputs.append(laneMix.isAudible(lane) ? parameters : silent(parameters.trackID))
         }
-        if !laneMix.isAudible(.voice) {
-            inputs += (mixTracks[.voice] ?? []).map(silent)
-            inputs += redoParameters.map { silent($0.trackID) }
-            inputs += fixParameters.map { silent($0.trackID) }
-        } else {
-            inputs += redoParameters
-            inputs += fixParameters
-            for id in mixTracks[.voice] ?? [] {
+        let voiceOn = laneMix.isAudible(.voice)
+        inputs += voiceOn ? redoParameters : redoParameters.map { silent($0.trackID) }
+        inputs += voiceOn ? fixParameters : fixParameters.map { silent($0.trackID) }
+        for lane in [MixLane.voice, .system] {
+            guard laneMix.isAudible(lane) else {
+                inputs += (mixTracks[lane] ?? []).map(silent)
+                continue
+            }
+            for id in mixTracks[lane] ?? [] {
                 let gain = recordedMix.gain(isMicrophone: id == microphoneTrackID)
                 let parameters = AVMutableAudioMixInputParameters()
                 parameters.trackID = id
@@ -685,7 +695,9 @@ extension EditorModel {
     fileprivate func previewVideoComposition() -> AVVideoComposition? {
         guard let preview, preview.renderSize.width > 0 else { return nil }
         let effects = effects.previewEffects(edits: edits)
-        guard effects != nil || previewCamera != nil || previewPhone != nil || previewTransform != .identity else { return nil }
+        let ink = ScreenInk.make(for: take, timeline: outputTimeline)
+        guard effects != nil || previewCamera != nil || previewPhone != nil || ink != nil
+                || previewTransform != .identity else { return nil }
         let composition = AVMutableVideoComposition()
         composition.customVideoCompositorClass = FrameCompositor.self
         composition.renderSize = preview.renderSize
@@ -698,7 +710,8 @@ extension EditorModel {
                                              ringColour: VideoExporter.cgColor(BrandStore.shared.kit.ring),
                                              background: BackgroundRenderer(background: CameraBackground.read(from: take.backgroundURL)))
                              },
-                             phone: previewPhone),
+                             phone: previewPhone,
+                             ink: ink),
         ]
         return composition
     }

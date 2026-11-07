@@ -2,13 +2,14 @@ import Foundation
 
 /// The three lanes of the sound full mode.
 public enum MixLane: String, CaseIterable, Identifiable, Codable, Sendable {
-    case voice, music, effects
+    case voice, system, music, effects
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
         case .voice: return "Voice"
+        case .system: return "System audio"
         case .music: return "Music"
         case .effects: return "Effects"
         }

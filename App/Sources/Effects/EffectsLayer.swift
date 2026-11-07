@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import VisionOneKit
 
@@ -436,12 +437,49 @@ extension EffectsModel.ScanState {
 struct EffectsLane: View {
     @ObservedObject var model: EditorModel
     @ObservedObject var effects: EffectsModel
+    /// Where burned-in captions show, on the take's clock, joined into
+    /// runs so a talky stretch reads as one block.
+    @State private var captionRuns: [TimeSpan] = []
+
+    private var hasEffects: Bool { !effects.zooms.zooms.isEmpty || !effects.blurs.blurs.isEmpty }
 
     var body: some View {
         // Takes no room until there's something to show.
-        if !effects.zooms.zooms.isEmpty || !effects.blurs.blurs.isEmpty {
-            lane
+        Group {
+            if hasEffects || !captionRuns.isEmpty {
+                lane
+            }
         }
+        .onAppear(perform: refreshCaptions)
+        .onChange(of: model.edits.keptSpans) { _, _ in refreshCaptions() }
+        .onChange(of: model.transcript?.words.count) { _, _ in refreshCaptions() }
+        .onReceive(NotificationCenter.default.publisher(for: .captionSettingsChanged).receive(on: RunLoop.main)) { _ in
+            refreshCaptions()
+        }
+    }
+
+    private func refreshCaptions() {
+        let settings = model.take.loadCaptionSettings()
+        guard settings.isOn, settings.burnIn, let transcript = model.transcript else {
+            captionRuns = []
+            return
+        }
+        let edits = model.edits
+        let cues = settings.builder.cues(for: transcript) { edits.outputTime(forSource: $0) != nil ? $0 : nil }
+        captionRuns = Self.runs(of: cues.map { TimeSpan(start: $0.start, end: $0.end) })
+    }
+
+    /// Joins spans less than a second apart.
+    static func runs(of spans: [TimeSpan]) -> [TimeSpan] {
+        var runs: [TimeSpan] = []
+        for span in spans.sorted(by: { $0.start < $1.start }) {
+            if let last = runs.last, span.start - last.end < 1 {
+                runs[runs.count - 1] = TimeSpan(start: last.start, end: max(last.end, span.end))
+            } else {
+                runs.append(span)
+            }
+        }
+        return runs
     }
 
     private var lane: some View {
@@ -450,10 +488,14 @@ struct EffectsLane: View {
             let duration = max(model.edits.sourceDuration, 0.001)
             let zooms = effects.zooms.zooms
             let blurs = effects.blurs.blurs
+            let captions = captionRuns
+            let both = hasEffects && !captions.isEmpty
             Canvas { context, size in
-                func draw(_ span: TimeSpan, _ state: ProposalState, title: String) {
-                    let rect = CGRect(x: CGFloat(span.start / duration) * size.width, y: 3,
-                                      width: max(3, CGFloat(span.duration / duration) * size.width), height: size.height - 6)
+                let effectsRow = both ? CGRect(x: 0, y: 0, width: size.width, height: size.height * 0.6) : CGRect(origin: .zero, size: size)
+                let captionRow = both ? CGRect(x: 0, y: size.height * 0.6, width: size.width, height: size.height * 0.4) : CGRect(origin: .zero, size: size)
+                func draw(_ span: TimeSpan, _ state: ProposalState, title: String, in row: CGRect) {
+                    let rect = CGRect(x: CGFloat(span.start / duration) * size.width, y: row.minY + 3,
+                                      width: max(3, CGFloat(span.duration / duration) * size.width), height: row.height - 6)
                     let path = Path(roundedRect: rect, cornerRadius: 5)
                     var ink = Theme.text
                     switch state {
@@ -467,22 +509,25 @@ struct EffectsLane: View {
                         context.stroke(path, with: .color(Theme.cutText), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
                         ink = Theme.cutText
                     }
-                    guard rect.width > 44 else { return }
+                    guard rect.width > 44, rect.height > 12 else { return }
                     var clipped = context
                     clipped.clip(to: path)
                     let label = clipped.resolve(Text(title).font(.custom(BundledFont.sansMedium, size: 11)).foregroundStyle(ink))
                     clipped.draw(label, at: CGPoint(x: rect.minX + 10, y: rect.midY), anchor: .leading)
                 }
-                for zoom in zooms { draw(zoom.span, zoom.state, title: "Zoom") }
-                for blur in blurs { draw(blur.span, blur.state, title: "Blur") }
+                if hasEffects {
+                    for zoom in zooms { draw(zoom.span, zoom.state, title: "Zoom", in: effectsRow) }
+                    for blur in blurs { draw(blur.span, blur.state, title: "Blur", in: effectsRow) }
+                }
+                for run in captions { draw(run, .accepted, title: "Captions", in: captionRow) }
             }
             .contentShape(Rectangle())
             .onTapGesture { location in
                 model.seek(toSource: Double(location.x / max(width, 1)) * duration)
             }
         }
-        .frame(height: 30)
+        .frame(height: hasEffects && !captionRuns.isEmpty ? 48 : 30)
         .accessibilityElement()
-        .accessibilityLabel("Zooms and blurs: \(effects.zooms.zooms.count) zooms, \(effects.blurs.blurs.count) blurs")
+        .accessibilityLabel("Zooms, blurs and captions: \(effects.zooms.zooms.count) zooms, \(effects.blurs.blurs.count) blurs, captions \(captionRuns.isEmpty ? "off" : "on")")
     }
 }

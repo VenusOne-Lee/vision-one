@@ -175,6 +175,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ReleaseWatcher.shared.start()
         // Finish any transcript a quit left undone.
         Task { @MainActor in Transcriber.shared.catchUp(in: ScreenRecorder.shared.library) }
+        // Carry on with exports a quit left unfinished.
+        Task { @MainActor in ExportQueue.shared.resumeUnfinished() }
         // Claude Code, Codex and other agents connect through here.
         MCPService.shared.start()
         AgentWatcher.shared.start()

@@ -6,8 +6,10 @@ import VisionOneKit
 /// move it or resize it from any of its eight handles, or pick a shape
 /// (16:9, 9:16, 1:1) and it keeps that shape. It's dashed while you're
 /// still choosing, the app's mark for "proposed". Return accepts, Esc
-/// cancels, arrow keys nudge (Shift for ten points). Vision One's own windows are never
-/// recorded, so the overlay stays out of the take.
+/// cancels, arrow keys nudge (Shift for ten points). Click a window to take
+/// its frame; while drawing or resizing, edges near a window's edge snap
+/// onto it. Vision One's own windows are never recorded, so the overlay
+/// stays out of the take.
 @MainActor
 final class AreaSelector {
     static let shared = AreaSelector()
@@ -23,6 +25,7 @@ final class AreaSelector {
         let start = screenID == displayID ? current : nil
 
         let model = AreaSelection(rect: start.map { CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) })
+        model.windows = Self.windows(on: screenID)
         let view = AreaSelectView(model: model, acceptTitle: acceptTitle) { [weak self] rect in
             self?.close()
             onAccept(screenID, CaptureRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height))
@@ -65,6 +68,28 @@ final class AreaSelector {
         panel.makeKeyAndOrderFront(nil)
     }
 
+    /// Other apps' normal windows on this display, front to back, in the
+    /// display's points from its top left. Only frames are read, which
+    /// needs no permission.
+    static func windows(on displayID: UInt32) -> [CaptureRect] {
+        let origin = CGDisplayBounds(displayID).origin
+        let size = CGDisplayBounds(displayID).size
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]] else { return [] }
+        let me = ProcessInfo.processInfo.processIdentifier
+        return list.compactMap { info in
+            guard (info[kCGWindowLayer as String] as? Int) == 0,
+                  (info[kCGWindowOwnerPID as String] as? Int32) != me,
+                  let bounds = info[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds),
+                  frame.width >= 40, frame.height >= 40 else { return nil }
+            let local = frame.offsetBy(dx: -origin.x, dy: -origin.y)
+                .intersection(CGRect(origin: .zero, size: size))
+            guard !local.isNull, local.width >= 40, local.height >= 40 else { return nil }
+            return CaptureRect(x: local.minX, y: local.minY, width: local.width, height: local.height)
+        }
+    }
+
     func close() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
@@ -83,6 +108,10 @@ private final class OverlayPanel: NSPanel {
 @MainActor
 private final class AreaSelection: ObservableObject {
     @Published var rect: CGRect?
+    /// Other apps' windows, front to back, for clicking and snapping.
+    var windows: [CaptureRect] = []
+    /// The window under the pointer before an area is chosen.
+    @Published var hovered: CGRect?
     /// Free, or a shape the area keeps while you draw and resize it.
     @Published private(set) var shape: AreaShape
     private static let shapeKey = "areaShape"
@@ -139,14 +168,16 @@ private final class AreaSelection: ObservableObject {
                 drawn = CaptureRect(x: dx < 0 ? start.x - width : start.x, y: dy < 0 ? start.y - height : start.y,
                                     width: width, height: height)
             }
-            rect = (drawn.clamped(to: bounds) ?? drawn).cgRect
+            let kept = drawn.clamped(to: bounds) ?? drawn
+            rect = snapped(kept, edges: [.left, .right, .top, .bottom]).cgRect
+            hovered = nil
         case let .move(from):
             rect = from.moved(dx: dx, dy: dy, within: bounds).cgRect
         case let .resize(edges, from):
             if let ratio = shape.ratio {
                 rect = from.resized(edges, dx: dx, dy: dy, within: bounds, keeping: ratio).cgRect
             } else {
-                rect = from.resized(edges, dx: dx, dy: dy, within: bounds).cgRect
+                rect = snapped(from.resized(edges, dx: dx, dy: dy, within: bounds), edges: edges).cgRect
             }
         case nil:
             break
@@ -155,6 +186,32 @@ private final class AreaSelection: ObservableObject {
 
     func dragEnded() {
         drag = nil
+    }
+
+    /// Before an area is chosen, the window under the pointer lights up.
+    func hover(at point: CGPoint?) {
+        guard rect == nil, let point else {
+            if hovered != nil { hovered = nil }
+            return
+        }
+        hovered = WindowSnap.window(at: (Double(point.x), Double(point.y)), in: windows)?.cgRect
+    }
+
+    /// A click with no area yet takes the window under it, kept to the
+    /// chosen shape.
+    func click(at point: CGPoint) {
+        guard rect == nil, let window = WindowSnap.window(at: (Double(point.x), Double(point.y)), in: windows) else { return }
+        var picked = window.clamped(to: bounds) ?? window
+        if let ratio = shape.ratio { picked = picked.fitted(ratio: ratio) }
+        rect = picked.cgRect
+        hovered = nil
+    }
+
+    /// Edges near a window's edge (or the screen's) jump onto it. Shapes
+    /// with a fixed ratio don't snap, so they keep their shape.
+    private func snapped(_ area: CaptureRect, edges: CaptureRect.Edges) -> CaptureRect {
+        guard shape.ratio == nil else { return area }
+        return WindowSnap.snap(area, edges: edges, to: windows + [bounds])
     }
 
     private func beginDrag(at point: CGPoint) -> Drag {
@@ -208,8 +265,24 @@ private struct AreaSelectView: View {
                         }
                         .onEnded { _ in model.dragEnded() }
                 )
+                .onTapGesture { location in model.click(at: location) }
+                .onContinuousHover { phase in
+                    switch phase {
+                    case let .active(location): model.hover(at: location)
+                    case .ended: model.hover(at: nil)
+                    }
+                }
                 .onAppear {
                     model.bounds = CaptureRect(x: 0, y: 0, width: geometry.size.width, height: geometry.size.height)
+                }
+
+                // The window a click would take, before an area is chosen.
+                if model.rect == nil, let window = model.hovered {
+                    Rectangle()
+                        .strokeBorder(Theme.paper, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                        .frame(width: window.width, height: window.height)
+                        .offset(x: window.minX, y: window.minY)
+                        .allowsHitTesting(false)
                 }
 
                 if let rect = model.rect {
@@ -265,7 +338,7 @@ private struct AreaSelectView: View {
 
     private var hint: some View {
         HStack(spacing: Theme.Space.sm) {
-            Text("Drag to choose the area to record. Move or resize it after.")
+            Text("Click a window, or drag to choose the area to record. Move or resize it after.")
             shapePicker
             Button("Cancel", action: cancel)
                 .buttonStyle(PillButtonStyle(kind: .secondary))

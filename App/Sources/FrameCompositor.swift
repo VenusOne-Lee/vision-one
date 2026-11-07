@@ -35,12 +35,17 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     /// phone.mov's track, drawn as a phone on the right, when the take
     /// recorded a plugged-in iPhone.
     let phone: PhoneLayer?
+    /// Rings where an agent clicked, for agent recordings.
+    let clicks: AgentClickRings?
+    /// Marks drawn on the screen while recording.
+    let ink: ScreenInk?
     let split: Bool
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], sourceTransform: CGAffineTransform = .identity, overlayTimeOffset: Double = 0,
          effects: FrameEffects? = nil,
          crop: (@Sendable (Double) -> NormalisedRect?)? = nil, background: CIColor = .black,
-         camera: CameraLayer? = nil, phone: PhoneLayer? = nil, split: Bool = false) {
+         camera: CameraLayer? = nil, phone: PhoneLayer? = nil, clicks: AgentClickRings? = nil, ink: ScreenInk? = nil,
+         split: Bool = false) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
@@ -51,6 +56,8 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         self.background = background
         self.camera = camera
         self.phone = phone
+        self.clicks = clicks
+        self.ink = ink
         self.split = split && camera != nil
         card = nil
         requiredSourceTrackIDs = [NSNumber(value: trackID)] + (camera.map { [NSNumber(value: $0.trackID)] } ?? [])
@@ -68,6 +75,8 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         background = .white
         camera = nil
         phone = nil
+        clicks = nil
+        ink = nil
         split = false
         self.card = card
         requiredSourceTrackIDs = []
@@ -123,6 +132,14 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         let oriented = CGAffineTransform(a: t.a, b: -t.b, c: -t.c, d: t.d, tx: t.tx, ty: -t.ty)
         var image = CIImage(cvPixelBuffer: source).transformed(by: oriented)
         image = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
+        // An agent's clicks, on the screen itself, before any zoom or crop.
+        if let clicks = instruction.clicks {
+            image = clicks.apply(to: image, atOutput: request.compositionTime.seconds - instruction.overlayTimeOffset)
+        }
+        // Drawn on the screen while recording, also before any zoom or crop.
+        if let ink = instruction.ink {
+            image = ink.apply(to: image, atOutput: request.compositionTime.seconds - instruction.overlayTimeOffset)
+        }
         if let effects = instruction.effects, !effects.isEmpty {
             // Effects run on the edited video's clock, like overlays.
             image = FrameEffectRenderer.apply(effects, to: image,

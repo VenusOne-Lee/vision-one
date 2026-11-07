@@ -49,13 +49,16 @@ Kinds: `click`, `doubleClick`, `rightClick`, `drag`, `scroll` (text is the direc
 
 After transcribing, Vision One looks for gaps over 4 s with no action and no speech. It proposes a dashed cut for each one, reason `agentWaiting`. Each cut keeps 1.5 s after the last action, so its result shows, and 0.8 s before the next one. A take with no marked actions gets no cuts. Running it again never repeats a cut or brings back one you turned down. Over MCP, `stop_recording` reports these cuts on its task, so `keep_changes` with that `task_id` keeps them, after you say yes.
 
+## In the export
+
+Every export of an agent recording draws two things. Each note the agent sent (`log_step`) shows as an ink pill at the top left, from when it was sent until the next note, for 1.5 to 5 seconds (`AgentMarks.steps`, `AgentStepsOverlay`). Each click gets a short ring where it landed, ink with a white edge, fading over 0.6 s (`AgentMarks.rings`, `AgentClickRings`). The rings are drawn on the recorded screen before zooms and crops, so they stay on what was clicked. Clicks are placed using the recorded size in events.json.
+
 ## Code
 
-- Kit: `Sources/VisionOneKit/AgentRecording/` (`AgentAction`, `AgentActionLog`, `InputOrigin`, `AgentApps`, `AgentTakeoverDetector`, `AgentActionRecorder`, `AgentWaiting`). Tests are in `AgentRecordingTests.swift` and `MCPTests.swift`.
+- Kit: `Sources/VisionOneKit/AgentRecording/` (`AgentAction`, `AgentActionLog`, `InputOrigin`, `AgentApps`, `AgentTakeoverDetector`, `AgentActionRecorder`, `AgentWaiting`, `AgentMarks`). Tests are in `AgentRecordingTests.swift`, `AgentMarksTests.swift` and `MCPTests.swift`.
 - App: `App/Sources/AgentRecording/AgentSession.swift` (the event monitor, `AgentProcess`, `PersonInput`) and `AgentWatcher.swift` (the offer). `ScreenRecorder.start(choosing:)` records an app's window without changing your saved choice.
 
 ## Not yet
 
 - A step list beside the editor's timeline. The data is `AgentActionLog.sorted` and `.chapters`.
-- Step captions burned into exports, and click rings drawn from the agent's clicks.
 - Cloud agents running on another computer. Vision One records this Mac only.

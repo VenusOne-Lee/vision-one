@@ -205,6 +205,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
                 Task { @MainActor in
                     cursor?.setOrigin(firstFrame.seconds)
                     AgentSession.shared.setOrigin(firstFrame.seconds)
+                    ScreenPen.shared.setOrigin(firstFrame.seconds)
                     CameraBubble.shared.screenStarted(at: firstFrame.seconds)
                 }
             }
@@ -226,6 +227,8 @@ final class ScreenRecorder: NSObject, ObservableObject {
             cursor.start()
             // Recording an agent: mark its clicks and typing too.
             AgentSession.shared.begin(captureFrame: target.captureFrame)
+            // The pen on the REC bar draws over what's being recorded.
+            ScreenPen.shared.begin(captureFrame: target.captureFrame)
             let deviceNotes = await deviceTracks.start(for: take, devices: .shared)
             trackNotes = notes + deviceNotes
             if let cameraNote { trackNotes.append(cameraNote) }
@@ -483,6 +486,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
         await CameraBubble.shared.stopRecording()
         cursor?.stop(writingTo: take.eventsURL)
         AgentSession.shared.end(writingTo: take)
+        ScreenPen.shared.end(writingTo: take)
         MicMonitor.shared.end()
         Teleprompter.shared.hide()
         let result: (saved: Bool, firstFrame: Double?, error: Error?)
@@ -531,6 +535,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
     private func fail(_ error: Error) {
         if let take { cursor?.stop(writingTo: take.eventsURL) }
         AgentSession.shared.cancel()
+        ScreenPen.shared.cancel()
         MicMonitor.shared.end()
         Teleprompter.shared.hide()
         pauses = PauseLog()

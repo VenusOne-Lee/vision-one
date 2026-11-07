@@ -297,6 +297,7 @@ private func sectionLabel(_ text: String) -> some View {
 struct MixLanes: View {
     @ObservedObject var model: EditorModel
     @AppStorage("sound.lane.voice") private var voiceHeight = 64.0
+    @AppStorage("sound.lane.system") private var systemHeight = 40.0
     @AppStorage("sound.lane.music") private var musicHeight = 64.0
     @AppStorage("sound.lane.effects") private var effectsHeight = 40.0
 
@@ -306,6 +307,11 @@ struct MixLanes: View {
         VStack(spacing: 0) {
             lane(.voice, height: $voiceHeight, detail: voiceDetail) {
                 VoiceWave(model: model)
+            }
+            if model.hasSystemAudio {
+                lane(.system, height: $systemHeight, detail: systemDetail) {
+                    SystemBand(model: model)
+                }
             }
             lane(.music, height: $musicHeight, detail: musicDetail) {
                 SoundLane(model: model, parts: .music, height: musicHeight, showsDuckLine: true)
@@ -321,6 +327,11 @@ struct MixLanes: View {
 
     private var voiceDetail: String {
         model.levels == nil ? "Mic" : "Mic · \(model.edits.cuts.filter { $0.state == .accepted }.count) cuts"
+    }
+
+    private var systemDetail: String {
+        let db = Int(model.recordedMix.systemDB.rounded())
+        return db == 0 ? "Recorded sound · 0 dB" : "Recorded sound · \(db) dB"
     }
 
     private var musicDetail: String {
@@ -378,6 +389,7 @@ struct MixLanes: View {
     private func icon(_ lane: MixLane) -> String {
         switch lane {
         case .voice: return "mic"
+        case .system: return "speaker.wave.2"
         case .music: return "music.note"
         case .effects: return "sparkle"
         }
@@ -456,6 +468,35 @@ private struct VoiceWave: View {
         .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.line))
         .accessibilityLabel("Voice")
+    }
+}
+
+/// Where the Mac's own sound plays on the take's clock: solid where it's
+/// kept, faint where it's cut. Its level is set under Mix.
+private struct SystemBand: View {
+    @ObservedObject var model: EditorModel
+
+    var body: some View {
+        GeometryReader { geometry in
+            let duration = max(model.edits.sourceDuration, 0.001)
+            Canvas { context, size in
+                let band = CGRect(x: 0, y: size.height * 0.3, width: size.width, height: size.height * 0.4)
+                context.fill(Path(roundedRect: band, cornerRadius: 3), with: .color(Theme.cutText.opacity(0.35)))
+                for span in model.edits.keptSpans {
+                    let x0 = CGFloat(span.start / duration) * size.width
+                    let x1 = CGFloat(span.end / duration) * size.width
+                    let kept = CGRect(x: x0, y: band.minY, width: max(1, x1 - x0), height: band.height)
+                    context.fill(Path(kept), with: .color(Theme.text.opacity(0.6)))
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { location in
+                model.seek(toSource: Double(location.x / max(geometry.size.width, 1)) * duration)
+            }
+        }
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: Theme.Radius.md))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.md).strokeBorder(Theme.line))
+        .accessibilityLabel("System audio")
     }
 }
 
