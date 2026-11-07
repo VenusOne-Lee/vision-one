@@ -49,7 +49,8 @@ struct MenuContent: View {
                 }
                 // The panel closes so it isn't sitting over what you record,
                 // and so the editor that opens after a take comes up in front.
-                RecordBar(phase: recorder.phase, title: idleTitle, action: MenuPanel.closing {
+                RecordBar(phase: recorder.phase, title: idleTitle,
+                          recordedTime: { recorder.recordedTime(at: $0) }, action: MenuPanel.closing {
                     Task { await recorder.toggle() }
                 })
                 .help(hotKey.isRegistered ? "" : "⌘⇧R is taken by another app")
@@ -226,6 +227,8 @@ private struct PanelSection<Content: View>: View {
 struct RecordBar: View {
     let phase: RecordingPhase
     let title: String
+    /// Seconds recorded so far, leaving out pauses, like the REC bar.
+    let recordedTime: (Date) -> TimeInterval
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -239,7 +242,7 @@ struct RecordBar: View {
                                 .fill(Theme.tally)
                                 .frame(width: 12, height: 12)
                                 .opacity(blinkOn(at: context.date) ? 1 : 0.25)
-                            Text(Timecode.string(from: phase.elapsed(at: context.date) ?? 0))
+                            Text(Timecode.string(from: recordedTime(context.date)))
                                 .font(.system(size: 13, weight: .medium, design: .monospaced).monospacedDigit())
                         }
                     }
