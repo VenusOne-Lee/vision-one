@@ -151,7 +151,7 @@ struct TranscriptTextView: NSViewRepresentable {
                 }
             }
             storage.endEditing()
-            if let first { textView?.scrollRangeToVisible(first) }
+            if let first { scrollWhenSafe(to: first) }
         }
 
         /// Tells the pane which words are picked and where they sit, so
@@ -199,10 +199,27 @@ struct TranscriptTextView: NSViewRepresentable {
                     .underlineStyle: NSUnderlineStyle.thick.rawValue,
                     .underlineColor: NSColor(Theme.text),
                 ], range: wordRanges[new])
-                if model.isPlaying { textView?.scrollRangeToVisible(wordRanges[new]) }
             }
             storage.endEditing()
             underlined = playing
+            // Scroll only after the edit is finished, and on the next turn of
+            // the run loop: scrolling inside beginEditing/endEditing, or in
+            // the middle of SwiftUI's layout pass, makes NSLayoutManager lay
+            // out half-edited text and AppKit throws (crash, 7 Nov 2026).
+            if model.isPlaying, let new = playing, new < wordRanges.count {
+                scrollWhenSafe(to: wordRanges[new])
+            }
+        }
+
+        /// Scrolls to `range` once the current layout pass is over, and only
+        /// if the range still fits the text by then.
+        private func scrollWhenSafe(to range: NSRange) {
+            DispatchQueue.main.async { [weak self] in
+                guard let textView = self?.textView,
+                      let length = textView.textStorage?.length,
+                      NSMaxRange(range) <= length else { return }
+                textView.scrollRangeToVisible(range)
+            }
         }
 
         /// Word positions covered by the selection, or nil when it holds
