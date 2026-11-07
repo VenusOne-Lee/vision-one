@@ -36,6 +36,11 @@ public struct ScreenDrawing: Codable, Equatable, Sendable {
     public struct Visible: Equatable, Sendable {
         public var points: [Point]
         public var opacity: Double
+
+        public init(points: [Point], opacity: Double) {
+            self.points = points
+            self.opacity = opacity
+        }
     }
 
     public var version: Int
