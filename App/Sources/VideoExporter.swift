@@ -236,6 +236,46 @@ struct VideoExporter {
         return (asset, track, range, info)
     }
 
+    /// The take's phone.mov and phone.json, or nil when it has none or
+    /// either can't be read (the export then shows the screen alone).
+    static func phone(for take: Take) async -> PhoneSource? {
+        guard let info = try? PhoneTrack.read(from: take.phoneInfoURL) else { return nil }
+        let asset = AVURLAsset(url: take.phoneURL)
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let range = try? await track.load(.timeRange), range.duration > .zero,
+              let encoded = try? await track.load(.naturalSize),
+              let transform = try? await track.load(.preferredTransform) else { return nil }
+        let upright = CGRect(origin: .zero, size: encoded).applying(transform)
+        guard upright.height != 0 else { return nil }
+        let audio = (try? await asset.loadTracks(withMediaType: .audio))?.first
+        var audioRange: CMTimeRange?
+        if let audio { audioRange = try? await audio.load(.timeRange) }
+        return PhoneSource(asset: asset, video: track, range: range, transform: transform,
+                           aspect: abs(upright.width / upright.height), audio: audio, audioRange: audioRange, info: info)
+    }
+
+    /// phone.mov's tracks and how they line up with screen.mov.
+    struct PhoneSource {
+        let asset: AVAsset
+        let video: AVAssetTrack
+        let range: CMTimeRange
+        let transform: CGAffineTransform
+        let aspect: Double
+        let audio: AVAssetTrack?
+        let audioRange: CMTimeRange?
+        let info: PhoneTrack
+
+        /// The part of phone.mov matching `source` (seconds of screen.mov),
+        /// where it lands relative to the segment's start, or nil.
+        func slice(of source: Range<Double>, in available: CMTimeRange) -> (range: CMTimeRange, offset: CMTime)? {
+            let wanted = CMTimeRange(start: VideoExporter.time(info.phoneTime(forScreen: source.lowerBound)),
+                                     end: VideoExporter.time(info.phoneTime(forScreen: source.upperBound)))
+            let part = wanted.intersection(available)
+            guard part.duration > .zero else { return nil }
+            return (part, part.start - wanted.start)
+        }
+    }
+
     static func cgColor(_ ring: RingColour) -> CGColor {
         CGColor(srgbRed: CGFloat((ring.hex >> 16) & 0xFF) / 255, green: CGFloat((ring.hex >> 8) & 0xFF) / 255,
                 blue: CGFloat(ring.hex & 0xFF) / 255, alpha: 1)
@@ -271,6 +311,18 @@ struct VideoExporter {
         if camera != nil {
             cameraTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
         }
+        // A plugged-in iPhone: its screen beside the Mac's, and its sound.
+        trace?("load phone")
+        let phone = await Self.phone(for: take)
+        defer { withExtendedLifetime(phone?.asset) {} }
+        var phoneTrack: AVMutableCompositionTrack?
+        var phoneAudio: AVMutableCompositionTrack?
+        if let phone {
+            phoneTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
+            if phone.audio != nil {
+                phoneAudio = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+            }
+        }
 
         for segment in timeline.segments {
             let range = CMTimeRange(start: Self.time(segment.source.lowerBound),
@@ -286,6 +338,14 @@ struct VideoExporter {
                     trace?("insert camera \(available.start.seconds)..<\(available.end.seconds)")
                     try cameraTrack.insertTimeRange(available, of: camera.track, at: at + (available.start - wanted.start))
                 }
+            }
+            if let phone, let phoneTrack, let slice = phone.slice(of: segment.source, in: phone.range) {
+                trace?("insert phone \(slice.range.start.seconds)..<\(slice.range.end.seconds)")
+                try phoneTrack.insertTimeRange(slice.range, of: phone.video, at: at + slice.offset)
+            }
+            if let phone, let phoneAudio, let source = phone.audio, let sourceRange = phone.audioRange,
+               let slice = phone.slice(of: segment.source, in: sourceRange) {
+                try phoneAudio.insertTimeRange(slice.range, of: source, at: at + slice.offset)
             }
             for (index, track) in audio.enumerated() {
                 // A track can be shorter than the video (the mic starts a
@@ -346,6 +406,10 @@ struct VideoExporter {
                                                                           timeline: timeline, ringColour: Self.cgColor(ring),
                                                                           background: BackgroundRenderer(
                                                                               background: CameraBackground.read(from: take.backgroundURL))) }
+                                             },
+                                             phone: phoneTrack.flatMap { track in
+                                                 phone.map { PhoneLayer(trackID: track.trackID, transform: $0.transform,
+                                                                        aspect: $0.aspect) }
                                              }, split: split))
         if let outro = cards.outro, let range = plan.outro {
             // Cover the composition to its very end, whatever rounding did.
@@ -403,11 +467,24 @@ struct VideoExporter {
             }
             return parameters
         }
-        audioMix.inputParameters = recorded + soundTracks.parameters + redone.parameters + voiceFixes.parameters
+        // The phone's sound, faded at each join like the recorded sound.
+        let phoneParameters: [AVMutableAudioMixInputParameters] = phoneAudio.map { track in
+            let parameters = AVMutableAudioMixInputParameters(track: track)
+            parameters.setVolume(1, at: .zero)
+            for join in timeline.joins.map({ $0 + joinOffset }) {
+                let fade = Self.time(Self.joinFade)
+                let t = Self.time(join)
+                parameters.setVolumeRamp(fromStartVolume: 1, toEndVolume: 0, timeRange: CMTimeRange(start: t - fade, duration: fade))
+                parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: 1, timeRange: CMTimeRange(start: t, duration: fade))
+            }
+            return [parameters]
+        } ?? []
+        audioMix.inputParameters = recorded + phoneParameters + soundTracks.parameters + redone.parameters + voiceFixes.parameters
 
         trace?("encode composed video and audio")
-        return try await encode(composition: composition, videoTracks: [video] + (cameraTrack.map { [$0] } ?? []),
-                                audio: audio + soundTracks.tracks + redone.tracks + voiceFixes.tracks,
+        return try await encode(composition: composition,
+                                videoTracks: [video] + (cameraTrack.map { [$0] } ?? []) + (phoneTrack.map { [$0] } ?? []),
+                                audio: audio + (phoneAudio.map { [$0] } ?? []) + soundTracks.tracks + redone.tracks + voiceFixes.tracks,
                                 videoComposition: videoComposition, audioMix: audioMix,
                                 duration: duration.seconds, settings: settings, to: url, progress: progress)
     }

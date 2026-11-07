@@ -478,7 +478,7 @@ final class ScreenRecorder: NSObject, ObservableObject {
                 // Keep going: whatever was written is still worth finishing.
             }
         }
-        await deviceTracks.stop()
+        await deviceTracks.stop(screenStart: sink?.firstFrameSeconds)
         CameraBubble.shared.setPaused(false)
         await CameraBubble.shared.stopRecording()
         cursor?.stop(writingTo: take.eventsURL)

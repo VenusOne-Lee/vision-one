@@ -20,6 +20,7 @@ import Foundation
 ///       camera.json   how camera.mov lines up, and where the bubble sat
 ///       background.json  what was drawn behind the person (camera.mov stays clean)
 ///       phone.mov     iPhone screen + sound over USB, when one was recorded
+///       phone.json    how phone.mov lines up with screen.mov
 ///       plan.json     what it's for (Home's pick, saved when recording stops)
 ///       Vision One 2026-10-27 at 10.53.12 (WhatsApp).mp4   exports
 public struct Take: Equatable, Sendable {
@@ -36,6 +37,8 @@ public struct Take: Equatable, Sendable {
     /// How camera.mov lines up with the screen, and where the bubble sat.
     public var cameraInfoURL: URL { folder.appendingPathComponent("camera.json") }
     public var phoneURL: URL { folder.appendingPathComponent("phone.mov") }
+    /// How phone.mov lines up with screen.mov.
+    public var phoneInfoURL: URL { folder.appendingPathComponent("phone.json") }
     public var transcriptURL: URL { folder.appendingPathComponent("transcript.json") }
     /// Written by TakeWriter: the audio tracks in screen.mov, in order.
     public var audioTracksURL: URL { folder.appendingPathComponent("audio-tracks.json") }
