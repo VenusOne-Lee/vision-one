@@ -37,12 +37,15 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     let phone: PhoneLayer?
     /// Rings where an agent clicked, for agent recordings.
     let clicks: AgentClickRings?
+    /// Marks drawn on the screen while recording.
+    let ink: ScreenInk?
     let split: Bool
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], sourceTransform: CGAffineTransform = .identity, overlayTimeOffset: Double = 0,
          effects: FrameEffects? = nil,
          crop: (@Sendable (Double) -> NormalisedRect?)? = nil, background: CIColor = .black,
-         camera: CameraLayer? = nil, phone: PhoneLayer? = nil, clicks: AgentClickRings? = nil, split: Bool = false) {
+         camera: CameraLayer? = nil, phone: PhoneLayer? = nil, clicks: AgentClickRings? = nil, ink: ScreenInk? = nil,
+         split: Bool = false) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
@@ -54,6 +57,7 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         self.camera = camera
         self.phone = phone
         self.clicks = clicks
+        self.ink = ink
         self.split = split && camera != nil
         card = nil
         requiredSourceTrackIDs = [NSNumber(value: trackID)] + (camera.map { [NSNumber(value: $0.trackID)] } ?? [])
@@ -72,6 +76,7 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         camera = nil
         phone = nil
         clicks = nil
+        ink = nil
         split = false
         self.card = card
         requiredSourceTrackIDs = []
@@ -130,6 +135,10 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
         // An agent's clicks, on the screen itself, before any zoom or crop.
         if let clicks = instruction.clicks {
             image = clicks.apply(to: image, atOutput: request.compositionTime.seconds - instruction.overlayTimeOffset)
+        }
+        // Drawn on the screen while recording, also before any zoom or crop.
+        if let ink = instruction.ink {
+            image = ink.apply(to: image, atOutput: request.compositionTime.seconds - instruction.overlayTimeOffset)
         }
         if let effects = instruction.effects, !effects.isEmpty {
             // Effects run on the edited video's clock, like overlays.

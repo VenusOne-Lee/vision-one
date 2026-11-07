@@ -695,7 +695,9 @@ extension EditorModel {
     fileprivate func previewVideoComposition() -> AVVideoComposition? {
         guard let preview, preview.renderSize.width > 0 else { return nil }
         let effects = effects.previewEffects(edits: edits)
-        guard effects != nil || previewCamera != nil || previewPhone != nil || previewTransform != .identity else { return nil }
+        let ink = ScreenInk.make(for: take, timeline: outputTimeline)
+        guard effects != nil || previewCamera != nil || previewPhone != nil || ink != nil
+                || previewTransform != .identity else { return nil }
         let composition = AVMutableVideoComposition()
         composition.customVideoCompositorClass = FrameCompositor.self
         composition.renderSize = preview.renderSize
@@ -708,7 +710,8 @@ extension EditorModel {
                                              ringColour: VideoExporter.cgColor(BrandStore.shared.kit.ring),
                                              background: BackgroundRenderer(background: CameraBackground.read(from: take.backgroundURL)))
                              },
-                             phone: previewPhone),
+                             phone: previewPhone,
+                             ink: ink),
         ]
         return composition
     }

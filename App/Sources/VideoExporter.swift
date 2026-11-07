@@ -414,6 +414,7 @@ struct VideoExporter {
                                                                         aspect: $0.aspect) }
                                              },
                                              clicks: AgentClickRings.make(for: take, timeline: timeline),
+                                             ink: ScreenInk.make(for: take, timeline: timeline),
                                              split: split))
         if let outro = cards.outro, let range = plan.outro {
             // Cover the composition to its very end, whatever rounding did.

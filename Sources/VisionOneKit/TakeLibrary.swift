@@ -39,6 +39,8 @@ public struct Take: Equatable, Sendable {
     public var phoneURL: URL { folder.appendingPathComponent("phone.mov") }
     /// How phone.mov lines up with screen.mov.
     public var phoneInfoURL: URL { folder.appendingPathComponent("phone.json") }
+    /// Marks drawn on the screen while recording (`ScreenDrawing`).
+    public var drawingsURL: URL { folder.appendingPathComponent("drawings.json") }
     public var transcriptURL: URL { folder.appendingPathComponent("transcript.json") }
     /// Written by TakeWriter: the audio tracks in screen.mov, in order.
     public var audioTracksURL: URL { folder.appendingPathComponent("audio-tracks.json") }

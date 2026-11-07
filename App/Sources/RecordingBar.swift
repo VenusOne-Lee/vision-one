@@ -135,6 +135,7 @@ private struct RecordingBarView: View {
     @ObservedObject var recorder: ScreenRecorder
     @ObservedObject var mic: MicMonitor
     @ObservedObject private var agent = AgentSession.shared
+    @ObservedObject private var pen = ScreenPen.shared
     /// Called while the pill is dragged, and once more with `done` on release.
     let onDrag: (CGSize, Bool) -> Void
     let onSize: (CGSize) -> Void
@@ -220,6 +221,12 @@ private struct RecordingBarView: View {
                        systemImage: recorder.isPaused ? "play.fill" : "pause.fill",
                        shortcut: ShortcutMap.pauseRecording.display) {
                 recorder.togglePause()
+            }
+            if pen.isAvailable {
+                IconButton(pen.isDrawing ? "Stop drawing" : "Draw on the screen", systemImage: "pencil.tip",
+                           isOn: pen.isDrawing) {
+                    pen.toggle()
+                }
             }
             IconButton("Start over (this take goes to the Bin)", systemImage: "arrow.counterclockwise") {
                 ask(.restart)
