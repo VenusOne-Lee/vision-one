@@ -177,7 +177,9 @@ struct VideoExporter {
             CaptionExport.overlays(for: take, timeline: timeline, ringHex: $0, language: captionLanguage)
         } ?? []
         let allowedOverlays = appliedLook?.watermark == false ? overlays.filter { !($0 is WatermarkOverlay) } : overlays
-        let allOverlays = captions + allowedOverlays
+        // An agent recording's notes, as captions at the top left.
+        let agentSteps: [ExportOverlay] = AgentStepsOverlay.make(for: take, timeline: timeline).map { [$0] } ?? []
+        let allOverlays = captions + agentSteps + allowedOverlays
         let url = outputURL ?? take.exportURL(for: preset)
 
         // A single-pass encoder only roughly meets its average bitrate. If
@@ -410,7 +412,9 @@ struct VideoExporter {
                                              phone: phoneTrack.flatMap { track in
                                                  phone.map { PhoneLayer(trackID: track.trackID, transform: $0.transform,
                                                                         aspect: $0.aspect) }
-                                             }, split: split))
+                                             },
+                                             clicks: AgentClickRings.make(for: take, timeline: timeline),
+                                             split: split))
         if let outro = cards.outro, let range = plan.outro {
             // Cover the composition to its very end, whatever rounding did.
             let end = CMTimeMaximum(videoEnd + Self.time(range.upperBound - range.lowerBound), composition.duration)
