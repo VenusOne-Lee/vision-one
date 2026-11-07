@@ -6,15 +6,18 @@ import AVFoundation
 /// work; export draws them later.
 final class DeviceTrackRecorder: NSObject, AVCaptureFileOutputRecordingDelegate, @unchecked Sendable {
     let url: URL
+    let deviceName: String
     private let session = AVCaptureSession()
     private let output = AVCaptureMovieFileOutput()
     private let sessionQueue = DispatchQueue(label: "za.co.versionone.visionone.device-track")
     private let lock = NSLock()
     private var started: CheckedContinuation<Error?, Never>?
     private var finished: CheckedContinuation<Error?, Never>?
+    private var startTime: Double?
 
     init(device: AVCaptureDevice, url: URL) throws {
         self.url = url
+        deviceName = device.localizedName
         super.init()
         session.beginConfiguration()
         defer { session.commitConfiguration() }
@@ -59,8 +62,17 @@ final class DeviceTrackRecorder: NSObject, AVCaptureFileOutputRecordingDelegate,
         return error
     }
 
+    /// When the file's first moment was recorded, on the host clock that
+    /// screen.mov uses. Close enough to line the two up by eye; nil until
+    /// recording has begun.
+    var startedAt: Double? { lock.withLock { startTime } }
+
     func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        lock.withLock { started.take() }?.resume(returning: nil)
+        let now = HostClock.now
+        lock.withLock { () -> CheckedContinuation<Error?, Never>? in
+            startTime = now
+            return started.take()
+        }?.resume(returning: nil)
     }
 
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL,

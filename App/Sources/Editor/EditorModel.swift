@@ -77,6 +77,8 @@ final class EditorModel: ObservableObject {
     @Published private(set) var videoSize: CGSize = .zero
     private var previewTransform = CGAffineTransform.identity
     private var previewCamera: (id: CMPersistentTrackID, info: CameraTrack)?
+    /// phone.mov in the preview, drawn on the right as in export.
+    private var previewPhone: PhoneLayer?
     /// Mic loudness every 10 ms, for the waveform and finding silence.
     /// Nil until levels.json is read or measured.
     @Published private(set) var levels: LoudnessEnvelope? {
@@ -578,6 +580,9 @@ final class EditorModel: ObservableObject {
             let composition = try await PreviewComposition.make(from: asset, keeping: edits.keptSpans, take: take)
             previewCamera = try await PreviewComposition.addCamera(for: take, keeping: edits.keptSpans, to: composition)
             let recordedAudio = composition.tracks(withMediaType: .audio)
+            // After the recorded sound is listed, so the phone's sound
+            // isn't taken for the mic or system sound.
+            previewPhone = try await PreviewComposition.addPhone(for: take, keeping: edits.keptSpans, to: composition)
             let voiceTracks = recordedAudio.map(\.trackID)
             let micIndex = await MicTrack.micIndex(of: recordedAudio, take: take)
             microphoneTrackID = micIndex.map { recordedAudio[$0].trackID }
@@ -680,7 +685,7 @@ extension EditorModel {
     fileprivate func previewVideoComposition() -> AVVideoComposition? {
         guard let preview, preview.renderSize.width > 0 else { return nil }
         let effects = effects.previewEffects(edits: edits)
-        guard effects != nil || previewCamera != nil || previewTransform != .identity else { return nil }
+        guard effects != nil || previewCamera != nil || previewPhone != nil || previewTransform != .identity else { return nil }
         let composition = AVMutableVideoComposition()
         composition.customVideoCompositorClass = FrameCompositor.self
         composition.renderSize = preview.renderSize
@@ -692,7 +697,8 @@ extension EditorModel {
                                  CameraLayer(trackID: camera.id, track: camera.info, timeline: outputTimeline,
                                              ringColour: VideoExporter.cgColor(BrandStore.shared.kit.ring),
                                              background: BackgroundRenderer(background: CameraBackground.read(from: take.backgroundURL)))
-                             }),
+                             },
+                             phone: previewPhone),
         ]
         return composition
     }
@@ -718,6 +724,30 @@ enum PreviewComposition {
             outputStart += span.duration
         }
         return (track.trackID, camera.info)
+    }
+
+    /// phone.mov's picture and sound, cut like the screen, when the take
+    /// recorded a plugged-in iPhone.
+    static func addPhone(for take: Take, keeping spans: [TimeSpan], to composition: AVMutableComposition) async throws
+        -> PhoneLayer? {
+        guard let phone = await VideoExporter.phone(for: take),
+              let track = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else { return nil }
+        let sound = phone.audio == nil ? nil
+            : composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+        var outputStart = 0.0
+        for span in spans {
+            let at = VideoExporter.time(outputStart)
+            if let slice = phone.slice(of: span.start..<span.end, in: phone.range) {
+                try track.insertTimeRange(slice.range, of: phone.video, at: at + slice.offset)
+            }
+            if let sound, let source = phone.audio, let range = phone.audioRange,
+               let slice = phone.slice(of: span.start..<span.end, in: range) {
+                try sound.insertTimeRange(slice.range, of: source, at: at + slice.offset)
+            }
+            outputStart += span.duration
+        }
+        withExtendedLifetime(phone.asset) {}
+        return PhoneLayer(trackID: track.trackID, transform: phone.transform, aspect: phone.aspect)
     }
 
     /// With `take`, a kept cleaned voice plays in place of the mic, as

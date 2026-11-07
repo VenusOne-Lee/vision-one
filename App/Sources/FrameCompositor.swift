@@ -32,12 +32,15 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
     let background: CIColor
     /// camera.mov's track and where to draw it, when the take has one.
     let camera: CameraLayer?
+    /// phone.mov's track, drawn as a phone on the right, when the take
+    /// recorded a plugged-in iPhone.
+    let phone: PhoneLayer?
     let split: Bool
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, overlays: [ExportOverlay], sourceTransform: CGAffineTransform = .identity, overlayTimeOffset: Double = 0,
          effects: FrameEffects? = nil,
          crop: (@Sendable (Double) -> NormalisedRect?)? = nil, background: CIColor = .black,
-         camera: CameraLayer? = nil, split: Bool = false) {
+         camera: CameraLayer? = nil, phone: PhoneLayer? = nil, split: Bool = false) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.overlays = overlays
@@ -47,9 +50,11 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         self.crop = crop
         self.background = background
         self.camera = camera
+        self.phone = phone
         self.split = split && camera != nil
         card = nil
         requiredSourceTrackIDs = [NSNumber(value: trackID)] + (camera.map { [NSNumber(value: $0.trackID)] } ?? [])
+            + (phone.map { [NSNumber(value: $0.trackID)] } ?? [])
     }
 
     init(timeRange: CMTimeRange, card: any CardSource) {
@@ -62,6 +67,7 @@ final class FrameInstruction: NSObject, AVVideoCompositionInstructionProtocol, @
         crop = nil
         background = .white
         camera = nil
+        phone = nil
         split = false
         self.card = card
         requiredSourceTrackIDs = []
@@ -137,6 +143,15 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
             .transformed(by: CGAffineTransform(translationX: x, y: y))
             .composited(over: CIImage(color: instruction.background).cropped(to: CGRect(origin: .zero, size: size)))
 
+        // The iPhone, on the right, over the screen and under the camera
+        // bubble. A moment with no phone frame (it started a little late)
+        // shows the empty phone, so the picture doesn't jump.
+        if let phone = instruction.phone {
+            let frame = request.sourceFrame(byTrackID: phone.trackID)
+            placed = Self.phone(frame.map { Self.oriented(CIImage(cvPixelBuffer: $0), by: phone.transform) },
+                                aspect: phone.aspect, on: size).composited(over: placed)
+        }
+
         // The camera bubble, where it sat over the recording. A frame with
         // no camera (it started late, or a gap) just shows the screen.
         let outputTime = request.compositionTime.seconds - instruction.overlayTimeOffset
@@ -164,6 +179,51 @@ final class FrameCompositor: NSObject, AVVideoCompositing, @unchecked Sendable {
             draw(instruction.overlays, ring: ring, on: output, size: size, at: outputTime)
         }
         request.finish(withComposedVideoFrame: output)
+    }
+
+    /// A source frame turned upright using its track's preferred
+    /// transform, moved to the origin.
+    static func oriented(_ image: CIImage, by t: CGAffineTransform) -> CIImage {
+        let flipped = CGAffineTransform(a: t.a, b: -t.b, c: -t.c, d: t.d, tx: t.tx, ty: -t.ty)
+        let turned = image.transformed(by: flipped)
+        return turned.transformed(by: CGAffineTransform(translationX: -turned.extent.minX, y: -turned.extent.minY))
+    }
+
+    /// The phone's screen in a plain ink phone body, on the right of a
+    /// frame of `size` (see `PhoneTrack.frame`). With no picture, the
+    /// body is drawn with a dark screen.
+    static func phone(_ screen: CIImage?, aspect: Double, on size: CGSize) -> CIImage {
+        let r = PhoneTrack.frame(aspect: aspect, in: CaptureRect(x: 0, y: 0, width: size.width, height: size.height))
+        let body = CGRect(x: r.x, y: r.y, width: r.width, height: r.height)
+        guard body.width > 8, body.height > 8 else { return CIImage.empty() }
+        let ink = CIColor(red: 0x12 / 255.0, green: 0x12 / 255.0, blue: 0x12 / 255.0)
+        let bezel = max(3, min(body.width, body.height) * 0.035)
+        let glass = body.insetBy(dx: bezel, dy: bezel)
+        func rounded(_ rect: CGRect, radius: CGFloat, colour: CIColor) -> CIImage {
+            CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
+                "inputExtent": CIVector(cgRect: rect),
+                "inputRadius": radius,
+                "inputColor": colour,
+            ])?.outputImage?.cropped(to: rect) ?? CIImage(color: colour).cropped(to: rect)
+        }
+        let shorter = min(body.width, body.height)
+        var phone = rounded(body, radius: shorter * 0.14, colour: ink)
+        guard let screen, screen.extent.width > 0, screen.extent.height > 0 else { return phone }
+        let e = screen.extent
+        let scale = min(glass.width / e.width, glass.height / e.height)
+        let fitted = screen
+            .transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY))
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            .transformed(by: CGAffineTransform(translationX: glass.midX - e.width * scale / 2,
+                                               y: glass.midY - e.height * scale / 2))
+            .cropped(to: glass)
+        let mask = rounded(glass, radius: min(glass.width, glass.height) * 0.12, colour: .white)
+        let shaped = fitted.applyingFilter("CIBlendWithAlphaMask", parameters: [
+            kCIInputBackgroundImageKey: CIImage.empty(),
+            kCIInputMaskImageKey: mask,
+        ])
+        phone = shaped.composited(over: phone)
+        return phone
     }
 
     /// The middle square of a camera frame, filling `rect`, cut to a circle.
@@ -259,6 +319,15 @@ struct CameraLayer: @unchecked Sendable {
     let ringColour: CGColor
     /// Draws background.json's room behind the person; nil for none.
     var background: BackgroundRenderer?
+}
+
+/// phone.mov in the export or preview: its track in the composition, the
+/// track's orientation and the phone picture's shape (width over height,
+/// upright).
+struct PhoneLayer: @unchecked Sendable {
+    let trackID: CMPersistentTrackID
+    let transform: CGAffineTransform
+    let aspect: Double
 }
 
 /// Draws nothing; the compositor's paper shows.

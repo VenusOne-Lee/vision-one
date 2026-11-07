@@ -8,7 +8,9 @@ Plug in your iPhone, unlock it, and pick it under **iPhone screen** in the menu 
 
 How: `CaptureDevices` sets CoreMediaIO's `kCMIOHardwarePropertyAllowScreenCaptureDevices`, after which a plugged-in iPhone appears a moment later as a `.muxed` `AVCaptureDevice`. `DeviceTrackRecorder` records it with `AVCaptureMovieFileOutput` (2 second fragments, so a crash loses little). If the phone is unplugged or Camera access is off, the screen recording carries on and the panel says why. macOS asks for Camera access the first time, because it treats a phone's screen as a camera.
 
-Not yet: lining `phone.mov` up with `screen.mov` to the frame (it starts a moment after the screen), and drawing the phone frame at export.
+In the editor and export: when recording stops, `phone.json` saves when `phone.mov` began relative to `screen.mov`'s first frame (both on the host clock; neither stops for a pause, whose stretch is cut in `edits.json`). The preview and every export then show the phone on the right, centred and 72% of the frame's height, in a plain ink phone body (`PhoneTrack.frame`, `FrameCompositor.phone`), under the camera bubble, cut the same way as the screen. The phone's sound is mixed in, faded at each join. Takes recorded before this have no `phone.json` and show the screen alone.
+
+Not yet: frame-exact alignment (the start time comes from the movie file output's start callback, which is close but not to the frame), and a switch to hide the phone or move it.
 
 ## The iPhone as your camera
 
